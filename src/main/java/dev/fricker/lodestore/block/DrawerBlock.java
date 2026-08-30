@@ -1,5 +1,8 @@
 package dev.fricker.lodestore.block;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.jspecify.annotations.Nullable;
 
 import net.minecraft.core.BlockPos;
@@ -19,6 +22,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.BlockHitResult;
 
 import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
@@ -61,6 +66,43 @@ public class DrawerBlock extends Block implements EntityBlock {
 	@Override
 	public @Nullable BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
 		return new DrawerBlockEntity(pos, state);
+	}
+
+	/**
+	 * Include the drawer's contents in its drops.
+	 *
+	 * <p>Without this the loot table returns only the drawer itself and everything inside is
+	 * silently destroyed. A drawer can hold thousands of items, so that is far more damaging than
+	 * losing a chest.
+	 *
+	 * <p>Hooked here rather than in {@code affectNeighborsAfterRemoval}, which runs after the block
+	 * entity is already gone, and unlike a player-break hook this covers explosions and every other
+	 * destruction path too.
+	 */
+	@Override
+	protected List<ItemStack> getDrops(BlockState state, LootParams.Builder params) {
+		List<ItemStack> drops = new ArrayList<>(super.getDrops(state, params));
+
+		if (params.getOptionalParameter(LootContextParams.BLOCK_ENTITY) instanceof DrawerBlockEntity drawer) {
+			for (DrawerSlot slot : drawer.slots()) {
+				if (slot.isResourceBlank()) {
+					continue;
+				}
+
+				ItemVariant variant = slot.getResource();
+				int perStack = variant.getItem().getDefaultMaxStackSize();
+				long remaining = slot.getAmount();
+
+				// A long count becomes however many whole stacks it takes.
+				while (remaining > 0) {
+					int count = (int) Math.min(remaining, perStack);
+					drops.add(variant.toStack(count));
+					remaining -= count;
+				}
+			}
+		}
+
+		return drops;
 	}
 
 	@Override
@@ -120,6 +162,9 @@ public class DrawerBlock extends Block implements EntityBlock {
 			return InteractionResult.PASS;
 		}
 
+		// A drawer takes its type from whatever goes in first, so it is easy to
+		// assign one by accident while trying to place a block against it. Say so.
+		boolean wasEmpty = drawer.slots().stream().allMatch(DrawerSlot::isResourceBlank);
 		long inserted;
 
 		try (Transaction tx = Transaction.openOuter()) {
@@ -135,6 +180,12 @@ public class DrawerBlock extends Block implements EntityBlock {
 
 		if (!player.getAbilities().instabuild) {
 			stack.shrink((int) inserted);
+		}
+
+		if (wasEmpty) {
+			player.sendSystemMessage(Component.literal("Drawer now stores ")
+					.append(stack.getHoverName())
+					.append(" — sneak + right-click to inspect, right-click empty-handed to take it back."));
 		}
 
 		return InteractionResult.SUCCESS;
@@ -186,7 +237,10 @@ public class DrawerBlock extends Block implements EntityBlock {
 			}
 		}
 
-		return "Drawer already holds a different item.";
+		// Name what is actually in there. "Holds a different item" leaves the player
+		// guessing, which is exactly the situation this message exists to resolve.
+		String held = drawer.slots().getFirst().getResource().toStack().getHoverName().getString();
+		return "Drawer holds " + held + ", not " + variant.toStack().getHoverName().getString() + ".";
 	}
 
 	/**

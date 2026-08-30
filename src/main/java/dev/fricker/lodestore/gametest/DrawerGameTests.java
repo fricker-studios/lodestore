@@ -3,9 +3,11 @@ package dev.fricker.lodestore.gametest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.block.HopperBlock;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
@@ -188,6 +190,53 @@ public class DrawerGameTests {
 		BlockPos abs = helper.absolutePos(relativePos);
 		return helper.getLevel().getBlockState(abs)
 				.getAnalogOutputSignal(helper.getLevel(), abs, net.minecraft.core.Direction.NORTH);
+	}
+
+	/**
+	 * Breaking a drawer must not destroy what is inside it. A drawer can hold thousands of items,
+	 * so silently voiding them on a mis-click is far more damaging than any normal container.
+	 */
+	@GameTest(maxTicks = 100)
+	public void breakingDrawerDropsItsContents(GameTestHelper helper) {
+		BlockPos drawerPos = new BlockPos(1, 1, 1);
+		helper.setBlock(drawerPos, LodestoreBlocks.BASIC_DRAWER.defaultBlockState());
+
+		DrawerBlockEntity drawer = helper.getBlockEntity(drawerPos, DrawerBlockEntity.class);
+		seed(drawer, 200);
+
+		// helper.destroyBlock does not drop loot; destroy with dropBlock = true so the
+		// normal loot pipeline runs, which is what a player breaking it would do.
+		BlockPos absDrawer = helper.absolutePos(drawerPos);
+		helper.getLevel().destroyBlock(absDrawer, true, null, 512);
+
+		helper.runAtTickTime(5, () -> {
+			BlockPos abs = helper.absolutePos(drawerPos);
+			long dropped = helper.getLevel()
+					.getEntitiesOfClass(ItemEntity.class, new AABB(abs).inflate(6.0)).stream()
+					.map(ItemEntity::getItem)
+					.filter(stack -> stack.is(Items.COBBLESTONE))
+					.mapToLong(ItemStack::getCount)
+					.sum();
+
+			long drawersDropped = helper.getLevel()
+					.getEntitiesOfClass(ItemEntity.class, new AABB(abs).inflate(6.0)).stream()
+					.map(ItemEntity::getItem)
+					.filter(stack -> stack.is(LodestoreBlocks.BASIC_DRAWER.asItem()))
+					.mapToLong(ItemStack::getCount)
+					.sum();
+
+			// Sanity: if the block itself did not drop, the test is broken, not the code.
+			if (drawersDropped == 0) {
+				throw helper.assertionException("the drawer block itself did not drop; test setup is wrong");
+			}
+
+			if (dropped != 200) {
+				throw helper.assertionException(
+						"drawer held 200 cobblestone but dropped " + dropped + " on break");
+			}
+
+			helper.succeed();
+		});
 	}
 
 	private static void seed(DrawerBlockEntity drawer, long amount) {
