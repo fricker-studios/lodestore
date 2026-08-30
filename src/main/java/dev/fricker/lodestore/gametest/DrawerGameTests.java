@@ -150,6 +150,46 @@ public class DrawerGameTests {
 		});
 	}
 
+	/**
+	 * A hopper filling a drawer must move the comparator reading off zero. This is the check a
+	 * player can reproduce in their own world without any rendering.
+	 */
+	@GameTest(maxTicks = 200)
+	public void hopperFillingDrawerRaisesComparatorOutput(GameTestHelper helper) {
+		BlockPos drawerPos = new BlockPos(1, 1, 1);
+		BlockPos hopperPos = drawerPos.above();
+
+		helper.setBlock(drawerPos, LodestoreBlocks.BASIC_DRAWER.defaultBlockState());
+		helper.setBlock(hopperPos, Blocks.HOPPER.defaultBlockState());
+
+		DrawerBlockEntity drawer = helper.getBlockEntity(drawerPos, DrawerBlockEntity.class);
+
+		if (signal(helper, drawerPos) != 0) {
+			throw helper.assertionException("empty drawer should read 0 on a comparator");
+		}
+
+		HopperBlockEntity hopper = helper.getBlockEntity(hopperPos, HopperBlockEntity.class);
+		hopper.setItem(0, new ItemStack(Items.COBBLESTONE, 64));
+
+		helper.runAtTickTime(180, () -> {
+			if (drawer.slots().getFirst().getAmount() == 0) {
+				throw helper.assertionException("hopper moved nothing");
+			}
+
+			if (signal(helper, drawerPos) <= 0) {
+				throw helper.assertionException("drawer holds items but comparator still reads 0");
+			}
+
+			helper.succeed();
+		});
+	}
+
+	private static int signal(GameTestHelper helper, BlockPos relativePos) {
+		BlockPos abs = helper.absolutePos(relativePos);
+		return helper.getLevel().getBlockState(abs)
+				.getAnalogOutputSignal(helper.getLevel(), abs, net.minecraft.core.Direction.NORTH);
+	}
+
 	private static void seed(DrawerBlockEntity drawer, long amount) {
 		try (var tx = net.fabricmc.fabric.api.transfer.v1.transaction.Transaction.openOuter()) {
 			drawer.slots().getFirst().insert(

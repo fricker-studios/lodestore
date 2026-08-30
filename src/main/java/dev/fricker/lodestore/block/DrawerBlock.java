@@ -63,6 +63,41 @@ public class DrawerBlock extends Block implements EntityBlock {
 		return new DrawerBlockEntity(pos, state);
 	}
 
+	@Override
+	protected boolean hasAnalogOutputSignal(BlockState state) {
+		return true;
+	}
+
+	/**
+	 * Comparator output scaled by fullness, 0-15.
+	 *
+	 * <p>Until the front-face overlay exists this is the only way to observe a drawer's contents
+	 * without clicking it, which makes it the practical way to confirm that a hopper or pipe is
+	 * actually feeding one.
+	 */
+	@Override
+	protected int getAnalogOutputSignal(BlockState state, Level level, BlockPos pos, Direction direction) {
+		if (!(level.getBlockEntity(pos) instanceof DrawerBlockEntity drawer)) {
+			return 0;
+		}
+
+		long stored = 0;
+		long capacity = 0;
+
+		for (DrawerSlot slot : drawer.slots()) {
+			stored += slot.getAmount();
+			capacity += slot.getCapacity();
+		}
+
+		if (stored == 0 || capacity == 0) {
+			return 0;
+		}
+
+		// Any non-zero amount must read as at least 1, or a nearly-empty drawer is
+		// indistinguishable from an empty one.
+		return (int) Math.max(1, (stored * 15L) / capacity);
+	}
+
 	/** Right-click holding an item: deposit as much of the held stack as fits. */
 	@Override
 	protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,

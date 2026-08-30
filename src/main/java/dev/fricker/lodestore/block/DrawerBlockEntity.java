@@ -7,7 +7,13 @@ import org.jspecify.annotations.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
@@ -92,6 +98,27 @@ public class DrawerBlockEntity extends BlockEntity implements SidedStorageBlockE
 
 	public void onContentsChanged() {
 		setChanged();
+
+		// Push the new contents to watching clients. Without this the drawer is
+		// invisible from the player's seat: a working drawer and a broken one look
+		// identical, which is exactly how a silent success reads as a bug.
+		if (level != null && !level.isClientSide()) {
+			level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
+		}
+	}
+
+	// --- client sync -------------------------------------------------------
+	// Drawers render their contents on the front face, so unlike a chest the
+	// client genuinely needs to know what is inside.
+
+	@Override
+	public @Nullable Packet<ClientGamePacketListener> getUpdatePacket() {
+		return ClientboundBlockEntityDataPacket.create(this);
+	}
+
+	@Override
+	public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+		return saveWithoutMetadata(registries);
 	}
 
 	@Override
