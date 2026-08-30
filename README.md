@@ -43,6 +43,21 @@ JDK 25 is required. Only JDK 17/8 were present on this machine:
 brew install --cask temurin@25
 ```
 
+## Getting a build
+
+Every pull request and every push to `main` builds the mod and attaches the jar to the workflow
+run. Open the run from the Actions tab or the PR's checks, download the `lodestore-<sha>` artifact,
+and drop the jar into `.minecraft/mods` next to Fabric API.
+
+Tagged commits publish a GitHub Release with the jar attached:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+The tag is the single source of truth for the version — it is passed through as `-Pversion`, so the
+jar filename and the version inside `fabric.mod.json` cannot drift apart.
+
 ## Build & run
 
 ```bash
