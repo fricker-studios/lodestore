@@ -19,6 +19,9 @@
 		],
 		"client": [
 			"dev.fricker.lodestore.client.LodestoreClient"
+		],
+		"fabric-gametest": [
+			"dev.fricker.lodestore.gametest.DrawerGameTests"
 		]
 	},
 	"mixins": [

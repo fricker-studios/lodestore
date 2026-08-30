@@ -19,6 +19,18 @@ repositories {
 loom {
 	splitEnvironmentSourceSets()
 
+	runs {
+		gametest {
+			server()
+			name = "Game Test"
+			// Gametests run in a real ticking world, which a plain dedicated
+			// server does not give us: it never block-ticks hoppers.
+			vmArg "-Dfabric-api.gametest"
+			vmArg "-Dfabric-api.gametest.report-file=${project.layout.buildDirectory.file("junit.xml").get().getAsFile()}"
+			runDir "build/gametest"
+		}
+	}
+
 	mods {
 		"lodestore" {
 			sourceSet sourceSets.main
