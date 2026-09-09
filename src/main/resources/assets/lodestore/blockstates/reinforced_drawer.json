@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "lodestore:block/reinforced_drawer"
+    },
+    "facing=east": {
+      "model": "lodestore:block/reinforced_drawer",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "lodestore:block/reinforced_drawer",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "lodestore:block/reinforced_drawer",
+      "y": 270
+    }
+  }
+}

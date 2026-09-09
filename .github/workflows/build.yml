@@ -1,0 +1,94 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  # Needed to post the download link back onto the pull request.
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # gradle-wrapper.jar is a committed binary that executes on every runner
+      # and contributor machine. This fails the build if it is not a known-good
+      # official Gradle wrapper.
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+      # Minecraft 26.x requires JDK 25.
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          java-version: '25'
+          distribution: temurin
+          cache: gradle
+
+      # On a pull_request event github.sha is the ephemeral merge commit, which
+      # matches nothing visible in the PR. Use the real head commit so the
+      # artifact name can actually be correlated with what was pushed.
+      - name: Resolve build metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "short=${SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and test
+        run: ./gradlew build --stacktrace
+
+      - name: Upload mod jar
+        id: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: lodestore-${{ steps.meta.outputs.short }}
+          path: |
+            build/libs/*.jar
+            !build/libs/*-sources.jar
+          if-no-files-found: error
+          retention-days: 30
+
+      # Artifacts are otherwise buried at the bottom of the run summary, with
+      # no link from the PR at all.
+      - name: Write job summary
+        run: |
+          {
+            echo "## Mod jar"
+            echo
+            echo "**[Download lodestore-${{ steps.meta.outputs.short }}](${{ steps.upload.outputs.artifact-url }})**"
+            echo
+            echo "Commit \`${{ steps.meta.outputs.short }}\`. Unzip and drop the jar into \`.minecraft/mods\` next to Fabric API."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Skipped for fork pull requests, whose tokens are read-only.
+      - name: Post download link on the PR
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.upload.outputs.artifact-url }}
+          SHORT: ${{ steps.meta.outputs.short }}
+        run: |
+          set -euo pipefail
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --edit-last --create-if-none \
+            --body "🧱 **Test build ready** — [lodestore-${SHORT}](${URL})
+
+          Built from \`${SHORT}\`. Unzip and drop the jar into \`.minecraft/mods\` alongside Fabric API (Minecraft 26.2, Fabric Loader 0.19.3+).
+
+          <sub>Updated automatically on each push.</sub>"

@@ -1,0 +1,40 @@
+{
+	"schemaVersion": 1,
+	"id": "lodestore",
+	"version": "${version}",
+	"name": "Lodestore",
+	"description": "Unified storage: backpacks, drawers, and networked storage built on Fabric's Storage<ItemVariant> transfer API.",
+	"authors": [
+		"alexfricker"
+	],
+	"contact": {
+		"sources": "https://github.com/alexfricker/lodestore"
+	},
+	"license": "MIT",
+	"icon": "assets/lodestore/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"dev.fricker.lodestore.Lodestore"
+		],
+		"client": [
+			"dev.fricker.lodestore.client.LodestoreClient"
+		],
+		"fabric-gametest": [
+			"dev.fricker.lodestore.gametest.DrawerGameTests"
+		]
+	},
+	"mixins": [
+		"lodestore.mixins.json",
+		{
+			"config": "lodestore.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

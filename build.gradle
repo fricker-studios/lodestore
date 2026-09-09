@@ -1,0 +1,101 @@
+plugins {
+	// NOTE: 'net.fabricmc.fabric-loom' is the NEW non-remapping plugin required from MC 26.1 onward.
+	// The legacy 'fabric-loom' plugin remaps against yarn/intermediary and must NOT be used here.
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	// Loom adds the Minecraft/Fabric repositories automatically.
+	// Add third-party mod repositories here as the project grows.
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	runs {
+		gametest {
+			server()
+			name = "Game Test"
+			// Gametests run in a real ticking world, which a plain dedicated
+			// server does not give us: it never block-ticks hoppers.
+			vmArg "-Dfabric-api.gametest"
+			vmArg "-Dfabric-api.gametest.report-file=${project.layout.buildDirectory.file("junit.xml").get().getAsFile()}"
+			runDir "build/gametest"
+		}
+	}
+
+	mods {
+		"lodestore" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+dependencies {
+	// Minecraft 26.x ships unobfuscated, so there is deliberately NO `mappings` line.
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+
+	// Not `modImplementation` — the new Loom plugin does not remap.
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	testImplementation platform("org.junit:junit-bom:5.11.4")
+	testImplementation "org.junit.jupiter:junit-jupiter"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+	useJUnitPlatform()
+	testLogging {
+		events "passed", "failed", "skipped"
+		showStandardStreams = true
+	}
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+}
+
+java {
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
+}
+
+jar {
+	// Not `remapJar` — the new Loom plugin produces the final jar directly.
+	def projectName = project.name
+	inputs.property "projectName", projectName
+
+	from("LICENSE") {
+		rename { "${it}_$projectName" }
+	}
+}
+
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			from components.java
+		}
+	}
+	repositories {
+	}
+}

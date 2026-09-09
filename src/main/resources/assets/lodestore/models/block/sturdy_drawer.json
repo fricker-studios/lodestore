@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "front": "lodestore:block/sturdy_drawer_front",
+    "side": "lodestore:block/drawer_side",
+    "top": "lodestore:block/drawer_side"
+  }
+}

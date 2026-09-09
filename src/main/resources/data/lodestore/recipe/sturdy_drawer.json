@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "D": "lodestore:basic_drawer"
+  },
+  "pattern": [
+    " I ",
+    "IDI",
+    " I "
+  ],
+  "result": {
+    "id": "lodestore:sturdy_drawer"
+  }
+}
