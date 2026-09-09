@@ -1,4 +1,4 @@
-package dev.fricker.lodestore.gametest;
+package dev.fricker.lodestore.testmod;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

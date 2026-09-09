@@ -1,4 +1,4 @@
-package dev.fricker.lodestore;
+package dev.fricker.lodestore.testmod;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 
@@ -18,8 +18,8 @@ import net.fabricmc.fabric.api.transfer.v1.storage.StorageView;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
 /**
- * Development-only diagnostic, registered only when
- * {@code FabricLoader.isDevelopmentEnvironment()}.
+ * Development-only diagnostic. Lives in the test mod source set, so it is not present in the
+ * published jar at all.
  *
  * <p>Exercises a drawer through {@link ItemStorage#SIDED} — the exact lookup a hopper, pipe, or
  * third-party mod uses — so interop can be checked without relying on hoppers actually ticking.
