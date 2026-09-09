@@ -91,6 +91,17 @@ component onto the dropped item, exactly as a shulker box does, and suppress the
 Nesting is blocked through `Container#canPlaceItem`, which covers hoppers as well as the GUI — a
 rule enforced only in the UI would be bypassed by piping one in.
 
+### Recipes
+
+| Drawer | Recipe |
+|---|---|
+| Basic | planks around an iron nugget, **or** a chest plus an iron nugget |
+| Sturdy | a basic drawer surrounded by planks |
+| Reinforced | a sturdy drawer surrounded by iron ingots |
+
+Recipes are covered by a gametest that actually crafts them. A malformed recipe does not fail the
+build or throw — it is logged and skipped, so the recipe simply stops existing.
+
 ### Not yet
 
 Single-item-type behaviour, grouping, sorting, limits and the upgrade system. Those are what will

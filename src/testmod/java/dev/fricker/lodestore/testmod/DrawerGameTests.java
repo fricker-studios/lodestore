@@ -5,11 +5,16 @@ import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.resources.Identifier;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemContainerContents;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.HopperBlock;
@@ -142,6 +147,47 @@ public class DrawerGameTests {
 		expect(helper, sturdy.canPlaceItem(0, new ItemStack(Items.DIAMOND)), true, "sturdy rejected a plain item");
 
 		helper.succeed();
+	}
+
+	// --- recipes ------------------------------------------------------------
+
+	/**
+	 * A malformed recipe does not fail the build or throw: it is logged and skipped, and the
+	 * recipe simply does not exist. Crafting the inputs is the only way to know it works.
+	 */
+	@GameTest
+	public void bothBasicDrawerRecipesCraft(GameTestHelper helper) {
+		// Shaped: planks around an iron nugget.
+		ItemStack planks = new ItemStack(Items.OAK_PLANKS);
+		ItemStack nugget = new ItemStack(Items.IRON_NUGGET);
+		assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				planks, planks, planks,
+				planks, nugget, planks,
+				planks, planks, planks)), "basic_drawer");
+
+		// Shapeless: a chest plus an iron nugget.
+		assertCrafts(helper, CraftingInput.of(2, 1, List.of(
+				new ItemStack(Items.CHEST), nugget)), "basic_drawer_from_chest");
+
+		helper.succeed();
+	}
+
+	private static void assertCrafts(GameTestHelper helper, CraftingInput input, String expectedRecipe) {
+		RecipeHolder<CraftingRecipe> match = helper.getLevel().getServer().getRecipeManager()
+				.getRecipeFor(RecipeType.CRAFTING, input, helper.getLevel())
+				.orElseThrow(() -> helper.assertionException("no recipe matched for " + expectedRecipe));
+
+		Identifier id = match.id().identifier();
+
+		if (!id.equals(Identifier.fromNamespaceAndPath("lodestore", expectedRecipe))) {
+			throw helper.assertionException("expected recipe lodestore:" + expectedRecipe + ", matched " + id);
+		}
+
+		ItemStack result = match.value().assemble(input);
+
+		if (!result.is(LodestoreBlocks.BASIC_DRAWER.asItem())) {
+			throw helper.assertionException(expectedRecipe + " produced " + result.getHoverName().getString());
+		}
 	}
 
 	// --- front face preview -------------------------------------------------
