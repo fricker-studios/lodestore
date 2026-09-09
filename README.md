@@ -80,6 +80,9 @@ Drawers are working containers with a GUI.
 | Sturdy | shulker box | 27 | contents stay inside | no drawers |
 | Reinforced | shulker box | 54 | contents stay inside | sturdy drawers only |
 
+Drawers are wood, so an axe is the efficient tool, as it is for a chest or barrel. They still break
+without one, just slowly — no tool is required for them to drop.
+
 Right-click opens the vanilla chest screen — the block entity extends `BaseContainerBlockEntity`
 and hands back a `ChestMenu`, so there is no custom menu or screen to maintain, and hoppers, pipes
 and the transfer API all interoperate with no extra work.

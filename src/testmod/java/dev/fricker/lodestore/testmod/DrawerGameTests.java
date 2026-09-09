@@ -10,6 +10,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -22,6 +23,7 @@ import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.HopperBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.phys.AABB;
@@ -150,6 +152,42 @@ public class DrawerGameTests {
 		// A basic drawer spills when broken, so nesting into it compounds nothing.
 		expect(helper, basic.canPlaceItem(0, reinforcedItem), true, "basic rejected a drawer");
 		expect(helper, sturdy.canPlaceItem(0, new ItemStack(Items.DIAMOND)), true, "sturdy rejected a plain item");
+
+		helper.succeed();
+	}
+
+	// --- tools ---------------------------------------------------------------
+
+	/**
+	 * Drawers are wood, so an axe should be the efficient tool, as it is for a chest or barrel.
+	 *
+	 * <p>A tag file in the wrong place is another silent failure: nothing errors, the block is
+	 * simply absent from the tag and quietly slow to break.
+	 */
+	@GameTest
+	public void drawersAreMineableWithAnAxe(GameTestHelper helper) {
+		for (Block block : List.of(LodestoreBlocks.BASIC_DRAWER, LodestoreBlocks.STURDY_DRAWER,
+				LodestoreBlocks.REINFORCED_DRAWER)) {
+			BlockState state = block.defaultBlockState();
+
+			if (!state.is(BlockTags.MINEABLE_WITH_AXE)) {
+				throw helper.assertionException(block.getName().getString() + " is not in minecraft:mineable/axe");
+			}
+
+			// An axe must actually be faster than a bare hand, which is the point of the tag.
+			float byHand = state.getDestroySpeed(helper.getLevel(), helper.absolutePos(new BlockPos(1, 1, 1)));
+			float axeSpeed = new ItemStack(Items.IRON_AXE).getDestroySpeed(state);
+			float handSpeed = ItemStack.EMPTY.getDestroySpeed(state);
+
+			if (byHand <= 0) {
+				throw helper.assertionException(block.getName().getString() + " is unbreakable");
+			}
+
+			if (axeSpeed <= handSpeed) {
+				throw helper.assertionException(block.getName().getString()
+						+ " is no faster with an axe (" + axeSpeed + " vs " + handSpeed + " by hand)");
+			}
+		}
 
 		helper.succeed();
 	}
