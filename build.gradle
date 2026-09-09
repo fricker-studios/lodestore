@@ -20,6 +20,14 @@ loom {
 	splitEnvironmentSourceSets()
 
 	runs {
+		clientGametest {
+			client()
+			name = "Client Game Test"
+			// Drives a real client so the front-face renderer can be screenshotted
+			// and actually looked at, rather than assumed correct.
+			vmArg "-Dfabric.client.gametest"
+			runDir "build/clientGametest"
+		}
 		gametest {
 			server()
 			name = "Game Test"
