@@ -5,7 +5,10 @@ import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
@@ -13,6 +16,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.Block;
@@ -188,6 +192,32 @@ public class DrawerGameTests {
 		if (!result.is(LodestoreBlocks.BASIC_DRAWER.asItem())) {
 			throw helper.assertionException(expectedRecipe + " produced " + result.getHoverName().getString());
 		}
+	}
+
+	/**
+	 * Every recipe ships an advancement that reveals it in the recipe book, and each advancement
+	 * grants the recipe it is named for. A malformed advancement is skipped just as quietly as a
+	 * malformed recipe, leaving a recipe that works but can never be discovered.
+	 */
+	@GameTest
+	public void everyRecipeHasAnUnlockAdvancement(GameTestHelper helper) {
+		for (String recipe : List.of("basic_drawer", "basic_drawer_from_chest", "sturdy_drawer", "reinforced_drawer")) {
+			Identifier advancementId = Identifier.fromNamespaceAndPath("lodestore", "recipes/decorations/" + recipe);
+			AdvancementHolder holder = helper.getLevel().getServer().getAdvancements().get(advancementId);
+
+			if (holder == null) {
+				throw helper.assertionException("no advancement loaded at " + advancementId);
+			}
+
+			ResourceKey<Recipe<?>> expected = ResourceKey.create(Registries.RECIPE,
+					Identifier.fromNamespaceAndPath("lodestore", recipe));
+
+			if (!holder.value().rewards().recipes().contains(expected)) {
+				throw helper.assertionException(advancementId + " does not grant " + expected.identifier());
+			}
+		}
+
+		helper.succeed();
 	}
 
 	// --- front face preview -------------------------------------------------

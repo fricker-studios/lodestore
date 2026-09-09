@@ -99,8 +99,15 @@ rule enforced only in the UI would be bypassed by piping one in.
 | Sturdy | a basic drawer surrounded by planks |
 | Reinforced | a sturdy drawer surrounded by iron ingots |
 
-Recipes are covered by a gametest that actually crafts them. A malformed recipe does not fail the
-build or throw — it is logged and skipped, so the recipe simply stops existing.
+Each recipe ships an advancement that reveals it in the recipe book once you are holding any of its
+ingredients — planks or an iron nugget for a basic drawer, an iron ingot or a sturdy drawer for a
+reinforced one, and so on. The two basic drawer recipes share a group, so they collapse into a
+single recipe book entry rather than appearing twice.
+
+Both are covered by gametests: one crafts each recipe and checks which matched, the other checks
+every advancement loads and grants the recipe it is named for. Neither a malformed recipe nor a
+malformed advancement fails the build or throws — each is logged and skipped, leaving either a
+missing recipe or one that works but can never be discovered.
 
 ### Not yet
 
