@@ -48,16 +48,36 @@ class DrawerTierCodecTest {
 					() -> "failed to decode " + file.getFileName() + ": " + result.error().map(Object::toString).orElse("?"));
 
 			DrawerTier tier = result.getOrThrow();
-			assertTrue(tier.slots() >= 1, () -> file.getFileName() + " has non-positive slots");
-			assertTrue(tier.stackCapacity() >= 1, () -> file.getFileName() + " has non-positive stack_capacity");
+			assertTrue(tier.nestingRank() >= 0, () -> file.getFileName() + " has a negative nesting_rank");
 		}
 	}
 
 	@Test
 	void tiersDecodeToTheirIntendedValues() throws IOException {
-		assertEquals(new DrawerTier(1, 8), decode("basic"));
-		assertEquals(new DrawerTier(1, 32), decode("sturdy"));
-		assertEquals(new DrawerTier(1, 128), decode("reinforced"));
+		assertEquals(new DrawerTier(false, 1), decode("basic"));
+		assertEquals(new DrawerTier(true, 2), decode("sturdy"));
+		assertEquals(new DrawerTier(true, 3), decode("reinforced"));
+	}
+
+	/**
+	 * The nesting rule is ordering-based, so it is only correct if the shipped ranks are ordered.
+	 * A pack that flattened them would silently allow a drawer inside itself.
+	 */
+	@Test
+	void nestingRanksAreOrderedAndEnforced() throws IOException {
+		DrawerTier basic = decode("basic");
+		DrawerTier sturdy = decode("sturdy");
+		DrawerTier reinforced = decode("reinforced");
+
+		assertTrue(sturdy.nestingRank() < reinforced.nestingRank(), "sturdy must outrank below reinforced");
+
+		assertFalse(sturdy.canContain(sturdy), "sturdy must refuse a sturdy drawer");
+		assertFalse(sturdy.canContain(reinforced), "sturdy must refuse a reinforced drawer");
+		assertTrue(reinforced.canContain(sturdy), "reinforced must accept a sturdy drawer");
+		assertFalse(reinforced.canContain(reinforced), "reinforced must refuse a reinforced drawer");
+
+		// A basic drawer spills when broken, so nesting into it compounds nothing.
+		assertTrue(basic.canContain(reinforced), "basic should accept any drawer");
 	}
 
 	@Test
@@ -73,11 +93,11 @@ class DrawerTierCodecTest {
 	@Test
 	void rejectsInvalidValues() {
 		assertTrue(DrawerTier.CODEC.parse(JsonOps.INSTANCE,
-				JsonParser.parseString("{\"slots\":0,\"stack_capacity\":8}")).isError(),
-				"slots=0 should be rejected by the codec's range");
+				JsonParser.parseString("{\"keeps_contents\":true,\"nesting_rank\":-1}")).isError(),
+				"a negative nesting_rank should be rejected by the codec's range");
 		assertTrue(DrawerTier.CODEC.parse(JsonOps.INSTANCE,
-				JsonParser.parseString("{\"slots\":1}")).isError(),
-				"missing stack_capacity should be rejected");
+				JsonParser.parseString("{\"keeps_contents\":true}")).isError(),
+				"missing nesting_rank should be rejected");
 	}
 
 	private static DrawerTier decode(String name) throws IOException {

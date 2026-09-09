@@ -2,15 +2,14 @@
   "type": "minecraft:crafting_shaped",
   "key": {
     "P": "#minecraft:planks",
-    "C": "minecraft:chest"
+    "N": "minecraft:iron_nugget"
   },
   "pattern": [
     "PPP",
-    "PCP",
+    "PNP",
     "PPP"
   ],
   "result": {
-    "id": "lodestore:basic_drawer",
-    "count": 2
+    "id": "lodestore:basic_drawer"
   }
 }

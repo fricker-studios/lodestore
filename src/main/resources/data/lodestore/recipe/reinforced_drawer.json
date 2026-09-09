@@ -1,13 +1,13 @@
 {
   "type": "minecraft:crafting_shaped",
   "key": {
-    "G": "minecraft:diamond",
+    "I": "minecraft:iron_ingot",
     "D": "lodestore:sturdy_drawer"
   },
   "pattern": [
-    " G ",
-    "GDG",
-    " G "
+    "III",
+    "IDI",
+    "III"
   ],
   "result": {
     "id": "lodestore:reinforced_drawer"

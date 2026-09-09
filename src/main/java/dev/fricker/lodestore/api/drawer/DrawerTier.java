@@ -3,35 +3,34 @@ package dev.fricker.lodestore.api.drawer;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
-import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
-
 /**
- * A datapack-defined drawer tier.
+ * Datapack-defined drawer behaviour.
  *
- * <p>Capacity is expressed as a <em>stack multiplier</em> rather than an absolute count, so a tier
- * behaves consistently across items with different stack sizes: a 32-stack drawer holds 2048 cobble
- * or 512 ender pearls. The resulting capacity is a {@code long} and is free to exceed
- * {@link Integer#MAX_VALUE}.
+ * <p>Container <em>size</em> is deliberately not here. It decides which menu type the block opens
+ * and how many slots are deserialised, and the block entity has to know it before the level's
+ * registries are reachable — a datapack-driven size would silently truncate a loaded inventory.
+ * Size is therefore structural and lives on the block; this record carries what can safely change
+ * at runtime.
  *
- * @param slots         number of independent item variants this drawer holds
- * @param stackCapacity capacity of each slot, in stacks of the stored item
+ * @param keepsContents whether contents survive being broken, shulker-style, rather than spilling
+ * @param nestingRank   ordering used to stop drawers nesting inside themselves. A drawer that keeps
+ *                      its contents refuses any drawer of equal or higher rank, which would
+ *                      otherwise let storage compound without limit.
  */
-public record DrawerTier(int slots, int stackCapacity) {
+public record DrawerTier(boolean keepsContents, int nestingRank) {
 	public static final Codec<DrawerTier> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-			Codec.intRange(1, 16).fieldOf("slots").forGetter(DrawerTier::slots),
-			Codec.intRange(1, 1 << 24).fieldOf("stack_capacity").forGetter(DrawerTier::stackCapacity)
+			Codec.BOOL.fieldOf("keeps_contents").forGetter(DrawerTier::keepsContents),
+			Codec.intRange(0, 1024).fieldOf("nesting_rank").forGetter(DrawerTier::nestingRank)
 	).apply(instance, DrawerTier::new));
 
 	/**
-	 * Used when a tier cannot be resolved — a datapack removed it, or the level's registries are not
-	 * available yet. Deliberately conservative rather than zero, so an unresolvable tier degrades to
-	 * a working vanilla-sized drawer instead of a black hole that voids items.
+	 * Used when a tier cannot be resolved. Spills its contents rather than keeping them, because
+	 * pretending an unresolved drawer is safe to break would lose items silently.
 	 */
-	public static final DrawerTier FALLBACK = new DrawerTier(1, 1);
+	public static final DrawerTier FALLBACK = new DrawerTier(false, 0);
 
-	/** Capacity for {@code variant}, in items. A blank variant yields a nominal estimate. */
-	public long capacityFor(ItemVariant variant) {
-		int perStack = variant.isBlank() ? 64 : variant.getItem().getDefaultMaxStackSize();
-		return (long) stackCapacity * perStack;
+	/** Whether this drawer may hold {@code other}. */
+	public boolean canContain(DrawerTier other) {
+		return !keepsContents || other.nestingRank() < nestingRank();
 	}
 }

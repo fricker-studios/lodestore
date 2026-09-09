@@ -15,17 +15,17 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemDisplayContext;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
 import dev.fricker.lodestore.block.DrawerBlock;
 import dev.fricker.lodestore.block.DrawerBlockEntity;
-import dev.fricker.lodestore.storage.DrawerSlot;
 
 /**
  * Draws the stored item on the drawer's front face.
  *
- * <p>Without this a drawer gives the player no feedback at all: a full drawer and an empty one look
- * identical, and an item put in by mistake is invisible until something else is rejected.
+ * <p>Shows whichever item the drawer holds most of. Without this a drawer gives the player no
+ * feedback at all: a full drawer and an empty one look identical from the outside.
  */
 public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, DrawerRenderState> {
 	/** Half a block, plus a sliver, to sit just proud of the face without z-fighting. */
@@ -82,6 +82,16 @@ public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, Dr
 
 		state.facing = drawer.getBlockState().getValue(DrawerBlock.FACING);
 
+		// The preview is synced on its own, so the client never holds the inventory.
+		ItemStack preview = drawer.previewItem();
+		state.blank = preview.isEmpty();
+		state.amount = drawer.previewCount();
+
+		if (state.blank) {
+			state.item.clear();
+			return;
+		}
+
 		// extractBase does not fill lightCoords, and an unlit item renders as a solid
 		// black silhouette. Sample the open block the icon sits in, as item frames do,
 		// rather than the drawer itself, which is opaque and therefore dark.
@@ -90,18 +100,10 @@ public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, Dr
 					drawer.getLevel(), drawer.getBlockPos().relative(state.facing));
 		}
 
-		DrawerSlot slot = drawer.slots().getFirst();
-		state.blank = slot.isResourceBlank();
-		state.amount = slot.getAmount();
-
-		if (state.blank) {
-			state.item.clear();
-		} else {
-			// FIXED is the in-world context (what item frames use). GUI assumes the
-			// inventory's own projection and lighting, and renders black out here.
-			itemModelResolver.updateForTopItem(state.item, slot.getResource().toStack(),
-					ItemDisplayContext.FIXED, drawer.getLevel(), null, 0);
-		}
+		// FIXED is the in-world context. GUI assumes the inventory's own projection and
+		// renders black out here.
+		itemModelResolver.updateForTopItem(state.item, preview,
+				ItemDisplayContext.FIXED, drawer.getLevel(), null, 0);
 	}
 
 	@Override

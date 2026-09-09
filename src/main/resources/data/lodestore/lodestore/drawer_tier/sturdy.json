@@ -1,4 +1,4 @@
 {
-  "slots": 1,
-  "stack_capacity": 32
+  "keeps_contents": true,
+  "nesting_rank": 2
 }

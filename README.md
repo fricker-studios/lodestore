@@ -72,49 +72,36 @@ Then, in-game: `/give @s lodestore:storage_core`
 
 ## Status
 
-**Phase 1 — storage core + drawers.** Complete and building; not yet verified in a running game.
+Drawers are working containers with a GUI.
 
-Three datapack-defined tiers (`basic` 8 stacks/slot, `sturdy` 32, `reinforced` 128), each a
-`DrawerBlock` whose capacity resolves from `lodestore:drawer_tier` at runtime. Contents are
-`ItemVariant + long`, never `ItemStack.count`. Drawers expose `Storage<ItemVariant>` on every side
-via `SidedStorageBlockEntity`, so hoppers and any transfer-API mod interoperate for free. No block
-entity ticks.
+| Tier | Behaves like | Size | On break | May contain |
+|---|---|---|---|---|
+| Basic | chest | 27 | contents spill | anything |
+| Sturdy | shulker box | 27 | contents stay inside | no drawers |
+| Reinforced | shulker box | 54 | contents stay inside | sturdy drawers only |
 
-Interaction: right-click with an item deposits; right-click empty-handed withdraws a stack;
-sneak + right-click prints contents (a stand-in until the front-face overlay lands).
+Right-click opens the vanilla chest screen — the block entity extends `BaseContainerBlockEntity`
+and hands back a `ChestMenu`, so there is no custom menu or screen to maintain, and hoppers, pipes
+and the transfer API all interoperate with no extra work.
 
-### Verified in a running server
+"Keeps contents" is loot-table driven: those tiers copy the implicit `minecraft:container`
+component onto the dropped item, exactly as a shulker box does, and suppress the default spill in
+`preRemoveSideEffects` so contents cannot be duplicated by doing both.
 
-Checked on a headless dedicated server (26.2, Fabric 0.19.3). `Mappings not present!` in the log is
-the expected signature of the unobfuscated setup.
+Nesting is blocked through `Container#canPlaceItem`, which covers hoppers as well as the GUI — a
+rule enforced only in the UI would be bypassed by piping one in.
 
-| Check | Result |
-|---|---|
-| Mod loads, registries populate | `lodestore 0.1.0`, init clean, no errors |
-| `ItemStorage.SIDED` lookup | resolves to `CombinedSlottedStorage` — the same path hoppers and other mods use |
-| Insert / extract | 300 in, 50 out, correct every time |
-| Capacity from datapack | basic **512** (8x64), reinforced **8192** (128x64) — proves the dynamic registry loaded, since the fallback would cap at 64 |
-| Capacity clamping | at 250/512, asked for 1000, accepted exactly 262 |
-| Transaction rollback | aborted transactions leave the total untouched (512 to 512); no leak |
-| `long` counts | persisted as `amount: 4950L`, far past any stack-based model |
-| Save / reload | 462 and 4950 both survived a full server restart, and capacity re-resolved correctly |
+### Not yet
 
-Verification used `/lodestore_debug <x> <y> <z> <count>`, a dev-only command registered solely when
-`FabricLoader.isDevelopmentEnvironment()` is true.
+Single-item-type behaviour, grouping, sorting, limits and the upgrade system. Those are what will
+make a drawer more than a chest.
 
-> **Note on hopper testing.** A playerless dedicated server does not block-tick hoppers, even in
-> force-loaded chunks — a vanilla chest-to-chest control moved zero items in 70 seconds. Any
-> hopper-based verification there passes vacuously. Interop is therefore checked through the
-> `ItemStorage.SIDED` lookup directly, which is what the hopper itself calls.
+The front face shows whichever item the drawer holds most of, counted across every slot holding it.
+Which item is displayed will become customisable later.
 
-### Known gaps, carried into P1b
-
-- **No client sync.** `getUpdateTag`/`getUpdatePacket` are not implemented, so clients do not see
-  drawer contents. Harmless today because nothing renders them; required before the count overlay.
-- **No front-face count rendering.** The block entity renderer is the whole of P1b.
-- **Recipes do not auto-unlock.** No advancement JSONs ship, so the recipes work but will not appear
-  in the recipe book until crafted once.
-- **Lock / void / capacity upgrades** are deliberately deferred to P2 with the upgrade framework.
+That preview is synced on its own — one stack and a count — rather than by broadcasting the
+inventory, so the payload is the same whether the drawer holds one item or fifty-four stacks, and a
+packet only goes out when the face would actually look different.
 
 ## Tests
 
