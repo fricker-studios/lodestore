@@ -16,6 +16,7 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
@@ -26,6 +27,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BaseContainerBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.level.storage.ValueInput;
 
 import dev.fricker.lodestore.api.LodestoreRegistries;
@@ -184,11 +186,28 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 		this.items = replacement;
 	}
 
+	/**
+	 * Writes the contents.
+	 *
+	 * <p>{@link BaseContainerBlockEntity} saves only the custom name and lock — every vanilla
+	 * container writes its own items, and so must this one. Without it a drawer's contents live
+	 * only in memory and vanish the moment the world is reloaded.
+	 */
+	@Override
+	protected void saveAdditional(ValueOutput data) {
+		super.saveAdditional(data);
+		ContainerHelper.saveAllItems(data, items);
+	}
+
 	@Override
 	protected void loadAdditional(ValueInput data) {
 		super.loadAdditional(data);
 
-		// Present only in the sync tag; a saved drawer recomputes from its contents instead.
+		items = NonNullList.withSize(getContainerSize(), ItemStack.EMPTY);
+		ContainerHelper.loadAllItems(data, items);
+
+		// Present only in the sync tag, which deliberately carries no items; a drawer loaded
+		// from disk has the real contents and recomputes from them instead.
 		previewItem = data.read("preview_item", ItemStack.CODEC).orElse(ItemStack.EMPTY);
 		previewCount = data.getLongOr("preview_count", 0L);
 

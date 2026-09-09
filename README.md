@@ -139,10 +139,14 @@ this is checked in CI rather than discovered in a world.
 ticking world: a plain dedicated server never block-ticks hoppers even in force-loaded chunks, so a
 hopper assertion there passes whether or not the code works.
 
-**Client gametests.** Builds a row of filled drawers, points the camera at them and screenshots the
-result into `build/clientGametest/screenshots/`. Icon placement, orientation and "renders at all"
-are exactly the failure modes no assertion catches. Not in CI: it drives a real client and would
-need a virtual display on the runner.
+**Client gametests.** Two of them. One builds a row of filled drawers, points the camera at them and
+screenshots the result into `build/clientGametest/screenshots/` — icon placement, orientation and
+"renders at all" are failure modes no assertion catches. The other quits to the title screen and
+reopens the same save, which is the only way to exercise a real disconnect: server gametests never
+round-trip a block entity through a save file, so anything that only breaks across a save and load
+is invisible to them.
+
+Not in CI: they drive a real client and would need a virtual display on the runner.
 
 ## Source sets
 

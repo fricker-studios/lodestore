@@ -14,7 +14,8 @@
 			"dev.fricker.lodestore.testmod.DrawerGameTests"
 		],
 		"fabric-client-gametest": [
-			"dev.fricker.lodestore.testmod.client.DrawerRenderClientTest"
+			"dev.fricker.lodestore.testmod.client.DrawerRenderClientTest",
+			"dev.fricker.lodestore.testmod.client.DrawerPersistenceClientTest"
 		]
 	},
 	"depends": {
