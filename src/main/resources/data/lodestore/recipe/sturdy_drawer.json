@@ -1,13 +1,13 @@
 {
   "type": "minecraft:crafting_shaped",
   "key": {
-    "I": "minecraft:iron_ingot",
+    "P": "#minecraft:planks",
     "D": "lodestore:basic_drawer"
   },
   "pattern": [
-    " I ",
-    "IDI",
-    " I "
+    "PPP",
+    "PDP",
+    "PPP"
   ],
   "result": {
     "id": "lodestore:sturdy_drawer"

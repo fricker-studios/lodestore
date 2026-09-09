@@ -22,13 +22,16 @@ import dev.fricker.lodestore.block.DrawerBlock;
  */
 public final class LodestoreBlocks {
 	public static final ResourceKey<Block> BASIC_DRAWER_KEY = blockKey("basic_drawer");
-	public static final DrawerBlock BASIC_DRAWER = drawer(BASIC_DRAWER_KEY, LodestoreDrawerTiers.BASIC);
+	/** Single chest. */
+	public static final DrawerBlock BASIC_DRAWER = drawer(BASIC_DRAWER_KEY, 3, LodestoreDrawerTiers.BASIC);
 
 	public static final ResourceKey<Block> STURDY_DRAWER_KEY = blockKey("sturdy_drawer");
-	public static final DrawerBlock STURDY_DRAWER = drawer(STURDY_DRAWER_KEY, LodestoreDrawerTiers.STURDY);
+	/** Single chest, shulker-style: keeps its contents when broken. */
+	public static final DrawerBlock STURDY_DRAWER = drawer(STURDY_DRAWER_KEY, 3, LodestoreDrawerTiers.STURDY);
 
 	public static final ResourceKey<Block> REINFORCED_DRAWER_KEY = blockKey("reinforced_drawer");
-	public static final DrawerBlock REINFORCED_DRAWER = drawer(REINFORCED_DRAWER_KEY, LodestoreDrawerTiers.REINFORCED);
+	/** Double chest, shulker-style, and the only tier that may hold another drawer. */
+	public static final DrawerBlock REINFORCED_DRAWER = drawer(REINFORCED_DRAWER_KEY, 6, LodestoreDrawerTiers.REINFORCED);
 
 	private LodestoreBlocks() {
 	}
@@ -40,12 +43,13 @@ public final class LodestoreBlocks {
 		register(REINFORCED_DRAWER_KEY, REINFORCED_DRAWER);
 	}
 
-	private static DrawerBlock drawer(ResourceKey<Block> key, ResourceKey<DrawerTier> tier) {
+	private static DrawerBlock drawer(ResourceKey<Block> key, int rows, ResourceKey<DrawerTier> tier) {
 		return new DrawerBlock(
 				BlockBehaviour.Properties.of()
 						.setId(key)
 						.strength(2.5f)
 						.sound(SoundType.WOOD),
+				rows,
 				tier
 		);
 	}
