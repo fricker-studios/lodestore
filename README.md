@@ -135,7 +135,7 @@ Three layers, in increasing cost and decreasing frequency.
 value does not throw at runtime — the registry entry is silently dropped and drawers fall back — so
 this is checked in CI rather than discovered in a world.
 
-**Server gametests.** Hopper interop, comparator output, and drop-on-break. These need a real
+**Server gametests.** Persistence, hopper interop, comparator output, and drop-on-break. These need a real
 ticking world: a plain dedicated server never block-ticks hoppers even in force-loaded chunks, so a
 hopper assertion there passes whether or not the code works.
 
@@ -147,6 +147,23 @@ round-trip a block entity through a save file, so anything that only breaks acro
 is invisible to them.
 
 Not in CI: they drive a real client and would need a virtual display on the runner.
+
+## Guardrails
+
+A container that never writes its contents is silent: nothing throws, nothing looks wrong, and the
+items are simply gone after a reload. Drawer contents were lost that way once, past sixteen passing
+tests, because none of them round-tripped a block entity through a save.
+
+`PersistenceSelfCheck` fills every registered Lodestore container, writes it, reads it back, and
+compares. It runs in two places from one implementation:
+
+- as a gametest, so a regression fails CI;
+- once per server start — dedicated or singleplayer — logging an error naming each container that
+  would lose items. Silent when healthy.
+
+It iterates whatever is registered, so a backpack or network cell added later is covered without
+anyone remembering to extend it. Both paths were verified by reintroducing the original bug and
+confirming each one fires.
 
 ## Source sets
 

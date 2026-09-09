@@ -30,6 +30,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 
 import dev.fricker.lodestore.block.DrawerBlockEntity;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
+import dev.fricker.lodestore.util.PersistenceSelfCheck;
 
 /**
  * Gametests run inside a real ticking world, which is the only way to exercise hoppers: a plain
@@ -149,6 +150,34 @@ public class DrawerGameTests {
 		// A basic drawer spills when broken, so nesting into it compounds nothing.
 		expect(helper, basic.canPlaceItem(0, reinforcedItem), true, "basic rejected a drawer");
 		expect(helper, sturdy.canPlaceItem(0, new ItemStack(Items.DIAMOND)), true, "sturdy rejected a plain item");
+
+		helper.succeed();
+	}
+
+	// --- persistence --------------------------------------------------------
+
+	/**
+	 * Every Lodestore container must survive being written and read back.
+	 *
+	 * <p>Drawer contents were once lost exactly this way, past sixteen passing tests: none of them
+	 * round-tripped a block entity through a save, and a container that writes nothing is
+	 * indistinguishable from an empty one at runtime. Runs against whatever is registered, so a
+	 * backpack or network cell added later is covered without extending this test.
+	 */
+	@GameTest
+	public void everyContainerSurvivesASaveAndLoad(GameTestHelper helper) {
+		List<String> failures = PersistenceSelfCheck.run(helper.getLevel().registryAccess());
+
+		if (!failures.isEmpty()) {
+			throw helper.assertionException(String.join("; ", failures));
+		}
+
+		// Guard against the check silently covering nothing, which would make it useless.
+		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+
+		if (drawer.getContainerSize() == 0) {
+			throw helper.assertionException("no containers were exercised; the self-check is vacuous");
+		}
 
 		helper.succeed();
 	}
