@@ -6,7 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.event.registry.DynamicRegistries;
 
 import dev.fricker.lodestore.api.LodestoreRegistries;
@@ -33,11 +32,6 @@ public class Lodestore implements ModInitializer {
 		LodestoreBlocks.initialize();
 		LodestoreBlockEntities.initialize();
 		LodestoreCreativeTab.initialize();
-
-		// Dev-only diagnostic. Never registered in a shipped jar.
-		if (FabricLoader.getInstance().isDevelopmentEnvironment()) {
-			DebugCommand.register();
-		}
 
 		LOGGER.info("[lodestore] common init complete");
 	}

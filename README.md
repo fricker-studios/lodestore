@@ -118,10 +118,36 @@ Verification used `/lodestore_debug <x> <y> <z> <count>`, a dev-only command reg
 
 ## Tests
 
+Three layers, in increasing cost and decreasing frequency.
+
 ```bash
-./gradlew test
+./gradlew test              # unit — no Minecraft bootstrap
+./gradlew runGametest       # server gametests in a real ticking world
+./gradlew runClientGametest # drives a real client, writes screenshots
 ```
 
-`DrawerTierCodecTest` guards the datapack↔codec contract. A renamed field or out-of-range value
-does not throw at runtime — the registry entry is silently dropped and drawers fall back — so this
-is checked in CI rather than discovered in a world.
+**Unit.** `DrawerTierCodecTest` guards the datapack↔codec contract. A renamed field or out-of-range
+value does not throw at runtime — the registry entry is silently dropped and drawers fall back — so
+this is checked in CI rather than discovered in a world.
+
+**Server gametests.** Hopper interop, comparator output, and drop-on-break. These need a real
+ticking world: a plain dedicated server never block-ticks hoppers even in force-loaded chunks, so a
+hopper assertion there passes whether or not the code works.
+
+**Client gametests.** Builds a row of filled drawers, points the camera at them and screenshots the
+result into `build/clientGametest/screenshots/`. Icon placement, orientation and "renders at all"
+are exactly the failure modes no assertion catches. Not in CI: it drives a real client and would
+need a virtual display on the runner.
+
+## Source sets
+
+| Set | Ships in the jar | Holds |
+|---|---|---|
+| `main` | yes | the mod, common to both sides |
+| `client` | yes | client-only code, including the drawer renderer |
+| `testmod` | **no** | server gametests, `/lodestore_debug` |
+| `testmodClient` | **no** | client gametests |
+
+`testmod` and `testmodClient` build a separate `lodestore-testmod` mod that is loaded only by the
+gametest run configurations. Keeping them out of `main` is what keeps test classes and the debug
+command out of the published artifact — a runtime environment check would still have shipped them.

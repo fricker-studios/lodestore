@@ -1,0 +1,23 @@
+{
+	"schemaVersion": 1,
+	"id": "lodestore-testmod",
+	"version": "1.0.0",
+	"name": "Lodestore Test Mod",
+	"description": "Gametests and development diagnostics for Lodestore. Never published.",
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"dev.fricker.lodestore.testmod.LodestoreTestmod"
+		],
+		"fabric-gametest": [
+			"dev.fricker.lodestore.testmod.DrawerGameTests"
+		],
+		"fabric-client-gametest": [
+			"dev.fricker.lodestore.testmod.client.DrawerRenderClientTest"
+		]
+	},
+	"depends": {
+		"lodestore": "*"
+	}
+}

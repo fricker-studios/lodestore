@@ -18,11 +18,43 @@ repositories {
 
 loom {
 	splitEnvironmentSourceSets()
+}
+
+// Gametests and dev diagnostics live outside the published mod. They were previously in
+// src/main and shipped in the release jar; a runtime isDevelopmentEnvironment() check kept
+// them from running but did not keep them out of the artifact.
+// Declared after splitEnvironmentSourceSets() so sourceSets.client exists, and before the
+// loom block below that references these source sets by name.
+sourceSets {
+	testmod {
+		compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+		runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+	}
+	testmodClient {
+		compileClasspath += sourceSets.client.compileClasspath + sourceSets.client.output +
+				sourceSets.main.output + sourceSets.testmod.output
+		runtimeClasspath += sourceSets.client.runtimeClasspath + sourceSets.client.output +
+				sourceSets.main.output + sourceSets.testmod.output
+	}
+}
+
+loom {
+	mods {
+		"lodestore" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+		"lodestore-testmod" {
+			sourceSet sourceSets.testmod
+			sourceSet sourceSets.testmodClient
+		}
+	}
 
 	runs {
 		clientGametest {
 			client()
 			name = "Client Game Test"
+			source sourceSets.testmodClient
 			// Drives a real client so the front-face renderer can be screenshotted
 			// and actually looked at, rather than assumed correct.
 			vmArg "-Dfabric.client.gametest"
@@ -31,18 +63,12 @@ loom {
 		gametest {
 			server()
 			name = "Game Test"
+			source sourceSets.testmod
 			// Gametests run in a real ticking world, which a plain dedicated
 			// server does not give us: it never block-ticks hoppers.
 			vmArg "-Dfabric-api.gametest"
 			vmArg "-Dfabric-api.gametest.report-file=${project.layout.buildDirectory.file("junit.xml").get().getAsFile()}"
 			runDir "build/gametest"
-		}
-	}
-
-	mods {
-		"lodestore" {
-			sourceSet sourceSets.main
-			sourceSet sourceSets.client
 		}
 	}
 }

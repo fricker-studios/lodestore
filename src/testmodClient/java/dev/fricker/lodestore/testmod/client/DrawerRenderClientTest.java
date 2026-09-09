@@ -1,4 +1,4 @@
-package dev.fricker.lodestore.client.gametest;
+package dev.fricker.lodestore.testmod.client;
 
 import java.nio.file.Path;
 
