@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.registry.DynamicRegistries;
 
 import dev.fricker.lodestore.api.LodestoreRegistries;
@@ -13,6 +14,7 @@ import dev.fricker.lodestore.api.drawer.DrawerTier;
 import dev.fricker.lodestore.registry.LodestoreBlockEntities;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
 import dev.fricker.lodestore.registry.LodestoreCreativeTab;
+import dev.fricker.lodestore.util.PersistenceSelfCheck;
 
 /**
  * Common (both-sides) entrypoint.
@@ -32,6 +34,12 @@ public class Lodestore implements ModInitializer {
 		LodestoreBlocks.initialize();
 		LodestoreBlockEntities.initialize();
 		LodestoreCreativeTab.initialize();
+
+		// A container that never writes its contents fails silently — nothing throws and
+		// nothing looks wrong until a reload. Check once per server start, on both a
+		// dedicated server and singleplayer's integrated one.
+		ServerLifecycleEvents.SERVER_STARTED.register(server ->
+				PersistenceSelfCheck.runAndReport(server.registryAccess()));
 
 		LOGGER.info("[lodestore] common init complete");
 	}

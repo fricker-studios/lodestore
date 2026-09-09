@@ -72,49 +72,57 @@ Then, in-game: `/give @s lodestore:storage_core`
 
 ## Status
 
-**Phase 1 — storage core + drawers.** Complete and building; not yet verified in a running game.
+Drawers are working containers with a GUI.
 
-Three datapack-defined tiers (`basic` 8 stacks/slot, `sturdy` 32, `reinforced` 128), each a
-`DrawerBlock` whose capacity resolves from `lodestore:drawer_tier` at runtime. Contents are
-`ItemVariant + long`, never `ItemStack.count`. Drawers expose `Storage<ItemVariant>` on every side
-via `SidedStorageBlockEntity`, so hoppers and any transfer-API mod interoperate for free. No block
-entity ticks.
+| Tier | Behaves like | Size | On break | May contain |
+|---|---|---|---|---|
+| Basic | chest | 27 | contents spill | anything |
+| Sturdy | shulker box | 27 | contents stay inside | no drawers |
+| Reinforced | shulker box | 54 | contents stay inside | sturdy drawers only |
 
-Interaction: right-click with an item deposits; right-click empty-handed withdraws a stack;
-sneak + right-click prints contents (a stand-in until the front-face overlay lands).
+Drawers are wood, so an axe is the efficient tool, as it is for a chest or barrel. They still break
+without one, just slowly — no tool is required for them to drop.
 
-### Verified in a running server
+Right-click opens the vanilla chest screen — the block entity extends `BaseContainerBlockEntity`
+and hands back a `ChestMenu`, so there is no custom menu or screen to maintain, and hoppers, pipes
+and the transfer API all interoperate with no extra work.
 
-Checked on a headless dedicated server (26.2, Fabric 0.19.3). `Mappings not present!` in the log is
-the expected signature of the unobfuscated setup.
+"Keeps contents" is loot-table driven: those tiers copy the implicit `minecraft:container`
+component onto the dropped item, exactly as a shulker box does, and suppress the default spill in
+`preRemoveSideEffects` so contents cannot be duplicated by doing both.
 
-| Check | Result |
+Nesting is blocked through `Container#canPlaceItem`, which covers hoppers as well as the GUI — a
+rule enforced only in the UI would be bypassed by piping one in.
+
+### Recipes
+
+| Drawer | Recipe |
 |---|---|
-| Mod loads, registries populate | `lodestore 0.1.0`, init clean, no errors |
-| `ItemStorage.SIDED` lookup | resolves to `CombinedSlottedStorage` — the same path hoppers and other mods use |
-| Insert / extract | 300 in, 50 out, correct every time |
-| Capacity from datapack | basic **512** (8x64), reinforced **8192** (128x64) — proves the dynamic registry loaded, since the fallback would cap at 64 |
-| Capacity clamping | at 250/512, asked for 1000, accepted exactly 262 |
-| Transaction rollback | aborted transactions leave the total untouched (512 to 512); no leak |
-| `long` counts | persisted as `amount: 4950L`, far past any stack-based model |
-| Save / reload | 462 and 4950 both survived a full server restart, and capacity re-resolved correctly |
+| Basic | planks around an iron nugget, **or** a chest plus an iron nugget |
+| Sturdy | a basic drawer surrounded by planks |
+| Reinforced | a sturdy drawer surrounded by iron ingots |
 
-Verification used `/lodestore_debug <x> <y> <z> <count>`, a dev-only command registered solely when
-`FabricLoader.isDevelopmentEnvironment()` is true.
+Each recipe ships an advancement that reveals it in the recipe book once you are holding any of its
+ingredients — planks or an iron nugget for a basic drawer, an iron ingot or a sturdy drawer for a
+reinforced one, and so on. The two basic drawer recipes share a group, so they collapse into a
+single recipe book entry rather than appearing twice.
 
-> **Note on hopper testing.** A playerless dedicated server does not block-tick hoppers, even in
-> force-loaded chunks — a vanilla chest-to-chest control moved zero items in 70 seconds. Any
-> hopper-based verification there passes vacuously. Interop is therefore checked through the
-> `ItemStorage.SIDED` lookup directly, which is what the hopper itself calls.
+Both are covered by gametests: one crafts each recipe and checks which matched, the other checks
+every advancement loads and grants the recipe it is named for. Neither a malformed recipe nor a
+malformed advancement fails the build or throws — each is logged and skipped, leaving either a
+missing recipe or one that works but can never be discovered.
 
-### Known gaps, carried into P1b
+### Not yet
 
-- **No client sync.** `getUpdateTag`/`getUpdatePacket` are not implemented, so clients do not see
-  drawer contents. Harmless today because nothing renders them; required before the count overlay.
-- **No front-face count rendering.** The block entity renderer is the whole of P1b.
-- **Recipes do not auto-unlock.** No advancement JSONs ship, so the recipes work but will not appear
-  in the recipe book until crafted once.
-- **Lock / void / capacity upgrades** are deliberately deferred to P2 with the upgrade framework.
+Single-item-type behaviour, grouping, sorting, limits and the upgrade system. Those are what will
+make a drawer more than a chest.
+
+The front face shows whichever item the drawer holds most of, counted across every slot holding it.
+Which item is displayed will become customisable later.
+
+That preview is synced on its own — one stack and a count — rather than by broadcasting the
+inventory, so the payload is the same whether the drawer holds one item or fifty-four stacks, and a
+packet only goes out when the face would actually look different.
 
 ## Tests
 
@@ -130,14 +138,35 @@ Three layers, in increasing cost and decreasing frequency.
 value does not throw at runtime — the registry entry is silently dropped and drawers fall back — so
 this is checked in CI rather than discovered in a world.
 
-**Server gametests.** Hopper interop, comparator output, and drop-on-break. These need a real
+**Server gametests.** Persistence, hopper interop, comparator output, and drop-on-break. These need a real
 ticking world: a plain dedicated server never block-ticks hoppers even in force-loaded chunks, so a
 hopper assertion there passes whether or not the code works.
 
-**Client gametests.** Builds a row of filled drawers, points the camera at them and screenshots the
-result into `build/clientGametest/screenshots/`. Icon placement, orientation and "renders at all"
-are exactly the failure modes no assertion catches. Not in CI: it drives a real client and would
-need a virtual display on the runner.
+**Client gametests.** Two of them. One builds a row of filled drawers, points the camera at them and
+screenshots the result into `build/clientGametest/screenshots/` — icon placement, orientation and
+"renders at all" are failure modes no assertion catches. The other quits to the title screen and
+reopens the same save, which is the only way to exercise a real disconnect: server gametests never
+round-trip a block entity through a save file, so anything that only breaks across a save and load
+is invisible to them.
+
+Not in CI: they drive a real client and would need a virtual display on the runner.
+
+## Guardrails
+
+A container that never writes its contents is silent: nothing throws, nothing looks wrong, and the
+items are simply gone after a reload. Drawer contents were lost that way once, past sixteen passing
+tests, because none of them round-tripped a block entity through a save.
+
+`PersistenceSelfCheck` fills every registered Lodestore container, writes it, reads it back, and
+compares. It runs in two places from one implementation:
+
+- as a gametest, so a regression fails CI;
+- once per server start — dedicated or singleplayer — logging an error naming each container that
+  would lose items. Silent when healthy.
+
+It iterates whatever is registered, so a backpack or network cell added later is covered without
+anyone remembering to extend it. Both paths were verified by reintroducing the original bug and
+confirming each one fires.
 
 ## Source sets
 
