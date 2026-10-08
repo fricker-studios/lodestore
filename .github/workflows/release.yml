@@ -13,7 +13,7 @@ permissions:
 jobs:
   release:
     name: Build and publish
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-fricker-amd64
 
     steps:
       - name: Checkout
