@@ -55,8 +55,12 @@ Tagged commits publish a GitHub Release with the jar attached:
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-The tag is the single source of truth for the version — it is passed through as `-Pversion`, so the
-jar filename and the version inside `fabric.mod.json` cannot drift apart.
+The tag is the single source of truth for the version. A release passes it through as `-Pversion`,
+so the jar filename and the version inside `fabric.mod.json` cannot drift apart; every other build
+derives it from the nearest tag with `git describe`, so a test jar three commits past `v0.2.0-rc.1`
+is `lodestore-0.2.0-rc.1-3-g<sha>.jar`. There is deliberately no fallback number in
+`gradle.properties`: there used to be, it stayed at `0.1.0` after the first release candidate was
+tagged, and the test builds quietly shipped under it.
 
 ## Build & run
 
