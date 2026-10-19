@@ -91,16 +91,45 @@ and the transfer API all interoperate with no extra work.
 component onto the dropped item, exactly as a shulker box does, and suppress the default spill in
 `preRemoveSideEffects` so contents cannot be duplicated by doing both.
 
+That copy is unconditional — `BaseContainerBlockEntity` writes the component whether or not the
+drawer held anything — so the drawer **item** declares an empty `minecraft:container` of its own.
+Without it, a sturdy or reinforced drawer that had been placed once came back carrying a component a
+never-placed one did not, and the two would not stack: two piles of identical drawers in the
+inventory, for no visible reason. Declaring it makes the copied value equal the item's prototype,
+which `PatchedDataComponentMap` drops rather than records. Vanilla gives shulker boxes the same
+component for the same reason. A gametest per tier breaks a drawer that was never filled and checks
+the drop against a fresh item.
+
 Nesting is blocked through `Container#canPlaceItem`, which covers hoppers as well as the GUI — a
 rule enforced only in the UI would be bypassed by piping one in.
 
+### Sprites
+
+Every tier has its own front, side and top texture. They are one family of oak separated by the
+hardware bolted to it, which is what the recipes describe: basic is plain, sturdy is a shade darker
+with black L-brackets over each corner, and reinforced is iron-banded with rivets. Tone alone would
+not survive being seen across a dark room, and hardware alone would not read at a glance.
+
+The middle of each front is a flat recessed panel on purpose. The renderer floats the stored item
+across roughly the middle half of the face and draws the count just below it, so anything busy there
+competes with the icon and anything light there swallows the count.
+
+| Where | What |
+|---|---|
+| `src/main/resources/assets/lodestore/textures/` | the 16×16 PNGs, which are the source of truth |
+| `tools/sprites/` | the script the originals were generated from |
+
+The script is an authoring aid, not a build step — nothing runs it. Re-running it overwrites the
+PNGs, so anything edited by hand afterwards has to go back into the script or it is lost.
+
 ### Recipes
 
-| Drawer | Recipe |
+| Item | Recipe |
 |---|---|
-| Basic | planks around an iron nugget, **or** a chest plus an iron nugget |
-| Sturdy | a basic drawer surrounded by planks |
-| Reinforced | a sturdy drawer surrounded by iron ingots |
+| Basic drawer | planks around an iron nugget, **or** a chest plus an iron nugget |
+| Sturdy drawer | a basic drawer surrounded by planks |
+| Reinforced drawer | a sturdy drawer surrounded by iron ingots |
+| Lock upgrade | gold nuggets around an iron ingot, over a second ingot |
 
 Each recipe ships an advancement that reveals it in the recipe book once you are holding any of its
 ingredients — planks or an iron nugget for a basic drawer, an iron ingot or a sturdy drawer for a
@@ -112,10 +141,50 @@ every advancement loads and grants the recipe it is named for. Neither a malform
 malformed advancement fails the build or throws — each is logged and skipped, leaving either a
 missing recipe or one that works but can never be discovered.
 
+### Upgrades
+
+Upgrades are datapack-driven, the same way tiers are. An entry at
+`data/<pack>/lodestore/drawer_upgrade/<name>.json` is a set of behaviour flags, and an item carries
+the key of the entry it installs. A pack adds an upgrade by pairing a new item with a new entry; it
+never names an implementation, so the mod ships no branch per upgrade.
+
+A drawer holds up to three upgrades, one of each kind. Right-clicking a drawer while holding one
+installs it — the single exception to "right-clicking opens the drawer whatever is in hand", because
+an upgrade does nothing else anywhere, whereas that rule exists to stop a drawer reacting to the
+building blocks a player happens to be carrying. A drawer that is already upgraded falls through and
+opens rather than eating the click.
+
+Upgrades are kept outside the drawer's inventory. In it, they would show up in the chest screen, a
+hopper could pull one out, and for the tiers whose contents ride inside the dropped item they would
+duplicate along with everything else. They drop as items when the drawer is broken, for every tier —
+the `minecraft:container` component only carries the inventory, so nothing else would carry them.
+
+| Upgrade | Does |
+|---|---|
+| Lock | restricts the drawer to one kind of item |
+
+The lock locks to whatever the drawer already holds most of. On an empty drawer it has nothing to
+claim yet, so it takes the first item in — locking to "nothing" would make the drawer refuse
+everything, including the item it was installed for. The filter outlives the upgrade being removed,
+so re-locking a drawer restores the filter it had rather than silently re-claiming whatever happens
+to be inside at the time.
+
+It is enforced in `Container#canPlaceItem`, next to the nesting rule and for the same reason: a
+filter applied only by the chest screen would be bypassed by piping items in.
+
+A locked drawer reads differently on the face. Its count is drawn in the lock's own gold rather than
+white, and once emptied it keeps showing its filter — drawn smaller, over a count of zero — because
+an empty locked drawer is exactly the one that most needs labelling. That is the whole point of
+locking a drawer before the items arrive.
+
 ### Not yet
 
-Single-item-type behaviour, grouping, sorting, limits and the upgrade system. Those are what will
-make a drawer more than a chest.
+Voiding overflow, capacity limits, grouping and sorting. Capacity is the awkward one: size is
+structural, decided before the level's registries are reachable, so a capacity upgrade cannot just
+be another flag in the registry.
+
+Single-item-type behaviour is partly here — a locked drawer is one — but choosing the displayed item
+independently of the filter is not.
 
 The front face shows whichever item the drawer holds most of, counted across every slot holding it.
 Which item is displayed will become customisable later.
@@ -134,17 +203,24 @@ Three layers, in increasing cost and decreasing frequency.
 ./gradlew runClientGametest # drives a real client, writes screenshots
 ```
 
-**Unit.** `DrawerTierCodecTest` guards the datapack↔codec contract. A renamed field or out-of-range
-value does not throw at runtime — the registry entry is silently dropped and drawers fall back — so
-this is checked in CI rather than discovered in a world.
+**Unit.** `DrawerTierCodecTest` and `DrawerUpgradeCodecTest` guard the datapack↔codec contract. A
+renamed field or out-of-range value does not throw at runtime — the registry entry is silently
+dropped and drawers fall back — so this is checked in CI rather than discovered in a world. For the
+lock the fallback is inert by design, which means a dropped entry turns a drawer the player believes
+is filtered into one that quietly accepts anything.
 
-**Server gametests.** Persistence, hopper interop, comparator output, and drop-on-break. These need a real
-ticking world: a plain dedicated server never block-ticks hoppers even in force-loaded chunks, so a
-hopper assertion there passes whether or not the code works.
+**Server gametests.** Persistence, hopper interop, comparator output, drop-on-break, that a broken
+drawer still stacks with a fresh one, and the lock:
+that it claims the right item, refuses everything else, cannot be bypassed by a hopper, and does not
+swallow what it refuses. These need a real ticking world: a plain dedicated server never block-ticks
+hoppers even in force-loaded chunks, so a hopper assertion there passes whether or not the code
+works.
 
-**Client gametests.** Two of them. One builds a row of filled drawers, points the camera at them and
-screenshots the result into `build/clientGametest/screenshots/` — icon placement, orientation and
-"renders at all" are failure modes no assertion catches. The other quits to the title screen and
+**Client gametests.** Two of them. One builds a row of drawers — one of each tier, plus a locked
+drawer with stock and a locked drawer that has been emptied — and screenshots it three times into
+`build/clientGametest/screenshots/`: the row, a close-up of the tier sprites, and a close-up of the
+two lock states. Icon placement, orientation, which sprite ended up on which face and "renders at
+all" are failure modes no assertion catches. The other quits to the title screen and
 reopens the same save, which is the only way to exercise a real disconnect: server gametests never
 round-trip a block entity through a save file, so anything that only breaks across a save and load
 is invisible to them.
@@ -167,6 +243,12 @@ compares. It runs in two places from one implementation:
 It iterates whatever is registered, so a backpack or network cell added later is covered without
 anyone remembering to extend it. Both paths were verified by reintroducing the original bug and
 confirming each one fires.
+
+It covers `Container` contents and nothing else, because filling a container is the only thing it
+can do generically. State that lives outside the inventory is invisible to it — a drawer's upgrades
+and its lock filter are exactly that, and would be lost on reload just as silently. They have their
+own save-and-load round trip in `upgradeStateSurvivesASaveAndLoad` instead. Anything else added
+outside the inventory needs the same treatment, or it is not covered at all.
 
 ## Source sets
 

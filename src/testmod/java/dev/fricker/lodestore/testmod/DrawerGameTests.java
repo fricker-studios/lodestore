@@ -1,10 +1,14 @@
 package dev.fricker.lodestore.testmod;
 
 import java.util.List;
+import java.util.Map;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
@@ -32,6 +36,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 
 import dev.fricker.lodestore.block.DrawerBlockEntity;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
+import dev.fricker.lodestore.registry.LodestoreItems;
 import dev.fricker.lodestore.util.PersistenceSelfCheck;
 
 /**
@@ -234,16 +239,26 @@ public class DrawerGameTests {
 		assertCrafts(helper, CraftingInput.of(3, 3, List.of(
 				planks, planks, planks,
 				planks, nugget, planks,
-				planks, planks, planks)), "basic_drawer");
+				planks, planks, planks)), "basic_drawer", LodestoreBlocks.BASIC_DRAWER.asItem());
 
 		// Shapeless: a chest plus an iron nugget.
 		assertCrafts(helper, CraftingInput.of(2, 1, List.of(
-				new ItemStack(Items.CHEST), nugget)), "basic_drawer_from_chest");
+				new ItemStack(Items.CHEST), nugget)), "basic_drawer_from_chest",
+				LodestoreBlocks.BASIC_DRAWER.asItem());
+
+		// The lock upgrade: gold nuggets around an iron ingot, over a second ingot.
+		ItemStack gold = new ItemStack(Items.GOLD_NUGGET);
+		ItemStack iron = new ItemStack(Items.IRON_INGOT);
+		assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				ItemStack.EMPTY, gold, ItemStack.EMPTY,
+				gold, iron, gold,
+				ItemStack.EMPTY, iron, ItemStack.EMPTY)), "lock_upgrade", LodestoreItems.LOCK_UPGRADE);
 
 		helper.succeed();
 	}
 
-	private static void assertCrafts(GameTestHelper helper, CraftingInput input, String expectedRecipe) {
+	private static void assertCrafts(GameTestHelper helper, CraftingInput input, String expectedRecipe,
+			net.minecraft.world.item.Item expectedResult) {
 		RecipeHolder<CraftingRecipe> match = helper.getLevel().getServer().getRecipeManager()
 				.getRecipeFor(RecipeType.CRAFTING, input, helper.getLevel())
 				.orElseThrow(() -> helper.assertionException("no recipe matched for " + expectedRecipe));
@@ -256,7 +271,7 @@ public class DrawerGameTests {
 
 		ItemStack result = match.value().assemble(input);
 
-		if (!result.is(LodestoreBlocks.BASIC_DRAWER.asItem())) {
+		if (!result.is(expectedResult)) {
 			throw helper.assertionException(expectedRecipe + " produced " + result.getHoverName().getString());
 		}
 	}
@@ -268,8 +283,18 @@ public class DrawerGameTests {
 	 */
 	@GameTest
 	public void everyRecipeHasAnUnlockAdvancement(GameTestHelper helper) {
-		for (String recipe : List.of("basic_drawer", "basic_drawer_from_chest", "sturdy_drawer", "reinforced_drawer")) {
-			Identifier advancementId = Identifier.fromNamespaceAndPath("lodestore", "recipes/decorations/" + recipe);
+		// Folder per recipe: the drawers are decorations, the upgrade is not.
+		Map<String, String> recipes = Map.of(
+				"basic_drawer", "decorations",
+				"basic_drawer_from_chest", "decorations",
+				"sturdy_drawer", "decorations",
+				"reinforced_drawer", "decorations",
+				"lock_upgrade", "misc");
+
+		for (Map.Entry<String, String> entry : recipes.entrySet()) {
+			String recipe = entry.getKey();
+			Identifier advancementId = Identifier.fromNamespaceAndPath(
+					"lodestore", "recipes/" + entry.getValue() + "/" + recipe);
 			AdvancementHolder holder = helper.getLevel().getServer().getAdvancements().get(advancementId);
 
 			if (holder == null) {
@@ -444,7 +469,233 @@ public class DrawerGameTests {
 		helper.succeed();
 	}
 
+	// --- stacking ----------------------------------------------------------
+
+	/**
+	 * A drawer that has been placed and broken must stack with one straight from the creative
+	 * menu.
+	 *
+	 * <p>Breaking a container copies its implicit components onto the dropped item, and
+	 * {@code BaseContainerBlockEntity} writes {@code minecraft:container} unconditionally — an
+	 * empty drawer still produces an empty container component. An item carrying that does not
+	 * match one that has never had it, so the two sit in separate inventory slots and will not
+	 * merge. Vanilla avoids this by giving shulker boxes the same component by default.
+	 */
+	@GameTest(maxTicks = 100)
+	public void brokenBasicDrawerStacksWithAFreshOne(GameTestHelper helper) {
+		assertStacksWithFresh(helper, LodestoreBlocks.BASIC_DRAWER);
+	}
+
+	@GameTest(maxTicks = 100)
+	public void brokenSturdyDrawerStacksWithAFreshOne(GameTestHelper helper) {
+		assertStacksWithFresh(helper, LodestoreBlocks.STURDY_DRAWER);
+	}
+
+	@GameTest(maxTicks = 100)
+	public void brokenReinforcedDrawerStacksWithAFreshOne(GameTestHelper helper) {
+		assertStacksWithFresh(helper, LodestoreBlocks.REINFORCED_DRAWER);
+	}
+
+	private static void assertStacksWithFresh(GameTestHelper helper, Block block) {
+		BlockPos pos = new BlockPos(1, 1, 1);
+		place(helper, pos, block);  // placed and broken, never filled
+		destroy(helper, pos);
+
+		helper.runAtTickTime(5, () -> {
+			ItemStack dropped = drops(helper, pos).stream()
+					.filter(stack -> stack.is(block.asItem()))
+					.findFirst()
+					.orElseThrow(() -> helper.assertionException("the drawer did not drop at all"));
+
+			ItemStack fresh = new ItemStack(block);
+
+			if (!ItemStack.isSameItemSameComponents(dropped, fresh)) {
+				throw helper.assertionException("a broken " + block.getName().getString()
+						+ " will not stack with a fresh one: dropped carries " + dropped.getComponentsPatch()
+						+ ", fresh carries " + fresh.getComponentsPatch());
+			}
+
+			helper.succeed();
+		});
+	}
+
+	// --- upgrades ----------------------------------------------------------
+
+	/** A lock dropped onto a drawer that already holds something locks to what is inside. */
+	@GameTest
+	public void lockClaimsWhatTheDrawerAlreadyHolds(GameTestHelper helper) {
+		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 12));
+		drawer.setChanged();
+
+		if (!drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE))) {
+			throw helper.assertionException("the lock upgrade would not install");
+		}
+
+		if (!drawer.lockedItem().is(Items.COBBLESTONE)) {
+			throw helper.assertionException("lock should have claimed cobblestone, claimed "
+					+ describe(drawer.lockedItem()));
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * A lock on an empty drawer has nothing to claim yet, so it takes the first item in. Locking
+	 * to "nothing" would make the drawer refuse everything, the one item included.
+	 */
+	@GameTest
+	public void lockOnAnEmptyDrawerClaimsTheFirstItemIn(GameTestHelper helper) {
+		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+
+		if (!drawer.lockedItem().isEmpty()) {
+			throw helper.assertionException("a lock on an empty drawer claimed "
+					+ describe(drawer.lockedItem()) + " out of nowhere");
+		}
+
+		drawer.setItem(0, new ItemStack(Items.REDSTONE, 4));
+		drawer.setChanged();
+
+		if (!drawer.lockedItem().is(Items.REDSTONE)) {
+			throw helper.assertionException("lock should have claimed redstone, claimed "
+					+ describe(drawer.lockedItem()));
+		}
+
+		helper.succeed();
+	}
+
+	@GameTest
+	public void aLockedDrawerRefusesEverythingElse(GameTestHelper helper) {
+		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 12));
+		drawer.setChanged();
+
+		expect(helper, drawer.canPlaceItem(1, new ItemStack(Items.DIRT)), true,
+				"an unlocked drawer should take anything; the test proves nothing otherwise");
+
+		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+
+		expect(helper, drawer.canPlaceItem(1, new ItemStack(Items.COBBLESTONE)), true,
+				"a locked drawer must still accept the item it is locked to");
+		expect(helper, drawer.canPlaceItem(1, new ItemStack(Items.DIRT)), false,
+				"a locked drawer must refuse anything but the item it is locked to");
+
+		helper.succeed();
+	}
+
+	/**
+	 * The lock is enforced in {@code canPlaceItem} for the same reason the nesting rule is: a
+	 * filter the chest screen applied alone would be bypassed by piping items in.
+	 */
+	@GameTest(maxTicks = 200)
+	public void aHopperCannotInsertPastALock(GameTestHelper helper) {
+		BlockPos drawerPos = new BlockPos(1, 1, 1);
+		DrawerBlockEntity drawer = place(helper, drawerPos, LodestoreBlocks.BASIC_DRAWER);
+		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 1));
+		drawer.setChanged();
+		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+
+		helper.setBlock(drawerPos.above(), Blocks.HOPPER.defaultBlockState());
+		HopperBlockEntity hopper = helper.getBlockEntity(drawerPos.above(), HopperBlockEntity.class);
+		hopper.setItem(0, new ItemStack(Items.DIRT, 64));
+
+		helper.runAtTickTime(180, () -> {
+			for (int slot = 0; slot < drawer.getContainerSize(); slot++) {
+				if (drawer.getItem(slot).is(Items.DIRT)) {
+					throw helper.assertionException("a hopper pushed dirt into a drawer locked to cobblestone");
+				}
+			}
+
+			// The other half: refusing must not eat the items it refused.
+			if (hopper.getItem(0).getCount() != 64) {
+				throw helper.assertionException("the hopper lost dirt it was never allowed to insert, "
+						+ hopper.getItem(0).getCount() + " left");
+			}
+
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * Upgrades are not inventory, so {@code PersistenceSelfCheck} — which only knows how to fill a
+	 * {@code Container} — does not cover them. They get their own round trip here.
+	 */
+	@GameTest
+	public void upgradeStateSurvivesASaveAndLoad(GameTestHelper helper) {
+		BlockPos pos = new BlockPos(1, 1, 1);
+		DrawerBlockEntity drawer = place(helper, pos, LodestoreBlocks.BASIC_DRAWER);
+		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 12));
+		drawer.setChanged();
+		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+
+		CompoundTag written = drawer.saveCustomOnly(helper.getLevel().registryAccess());
+
+		DrawerBlockEntity reloaded = new DrawerBlockEntity(
+				helper.absolutePos(pos), LodestoreBlocks.BASIC_DRAWER.defaultBlockState());
+		reloaded.loadWithComponents(TagValueInput.create(
+				ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), written));
+
+		if (reloaded.upgrades().size() != 1 || !reloaded.upgrades().getFirst().is(LodestoreItems.LOCK_UPGRADE)) {
+			throw helper.assertionException("the installed upgrade did not survive a save and load, got "
+					+ reloaded.upgrades().size() + " upgrade(s)");
+		}
+
+		if (!reloaded.lockedItem().is(Items.COBBLESTONE)) {
+			throw helper.assertionException("the lock's filter did not survive a save and load, got "
+					+ describe(reloaded.lockedItem()));
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * Upgrades drop for every tier. The shulker-style tiers carry their contents inside the
+	 * dropped item, but upgrades deliberately ride outside the inventory, so that component never
+	 * carries them and nothing else would.
+	 */
+	@GameTest(maxTicks = 100)
+	public void upgradesDropWhenTheDrawerIsBroken(GameTestHelper helper) {
+		BlockPos pos = new BlockPos(1, 1, 1);
+		DrawerBlockEntity drawer = place(helper, pos, LodestoreBlocks.STURDY_DRAWER);
+		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+
+		destroy(helper, pos);
+
+		helper.runAtTickTime(5, () -> {
+			long dropped = count(drops(helper, pos), LodestoreItems.LOCK_UPGRADE);
+
+			if (dropped != 1) {
+				throw helper.assertionException("breaking a sturdy drawer should drop its 1 lock upgrade, dropped "
+						+ dropped);
+			}
+
+			helper.succeed();
+		});
+	}
+
+	/** One of each: a second lock is refused rather than silently swallowed. */
+	@GameTest
+	public void aDrawerRefusesADuplicateUpgrade(GameTestHelper helper) {
+		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+
+		expect(helper, drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE)), true,
+				"the first lock upgrade should install");
+		expect(helper, drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE)), false,
+				"a second lock upgrade should be refused");
+
+		if (drawer.upgrades().size() != 1) {
+			throw helper.assertionException("drawer ended up with " + drawer.upgrades().size() + " upgrades");
+		}
+
+		helper.succeed();
+	}
+
 	// --- helpers -----------------------------------------------------------
+
+	private static String describe(ItemStack stack) {
+		return stack.isEmpty() ? "nothing" : stack.getHoverName().getString();
+	}
 
 	private static DrawerBlockEntity place(GameTestHelper helper, BlockPos pos, Block block) {
 		helper.setBlock(pos, block.defaultBlockState());

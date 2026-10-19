@@ -14,5 +14,9 @@ public class DrawerRenderState extends BlockEntityRenderState {
 	public Direction facing = Direction.NORTH;
 	public boolean blank = true;
 	public long amount;
+	/** Whether the drawer is locked to one item, which tints the count. */
+	public boolean locked;
+	/** Whether what is drawn is the lock's filter rather than real contents. */
+	public boolean ghost;
 	public final ItemStackRenderState item = new ItemStackRenderState();
 }

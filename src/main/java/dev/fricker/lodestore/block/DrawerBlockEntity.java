@@ -32,6 +32,8 @@ import net.minecraft.world.level.storage.ValueInput;
 
 import dev.fricker.lodestore.api.LodestoreRegistries;
 import dev.fricker.lodestore.api.drawer.DrawerTier;
+import dev.fricker.lodestore.api.drawer.DrawerUpgrade;
+import dev.fricker.lodestore.item.DrawerUpgradeItem;
 import dev.fricker.lodestore.registry.LodestoreBlockEntities;
 
 /**
@@ -57,6 +59,24 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 	 */
 	private ItemStack previewItem = ItemStack.EMPTY;
 	private long previewCount;
+
+	/**
+	 * Installed upgrades, one stack each.
+	 *
+	 * <p>Kept outside {@link #getItems()} on purpose: upgrades are hardware bolted to the drawer,
+	 * not stored goods. Putting them in the inventory would expose them in the chest screen, let a
+	 * hopper pull one out, and — for the tiers whose contents ride inside the dropped item — make
+	 * them duplicate along with everything else.
+	 */
+	private final List<ItemStack> upgrades = new ArrayList<>();
+
+	/**
+	 * The single item a locked drawer accepts, or empty.
+	 *
+	 * <p>Survives the lock upgrade being removed, so re-locking a drawer restores the filter it
+	 * had rather than silently re-claiming whatever happens to be inside at the time.
+	 */
+	private ItemStack lockedItem = ItemStack.EMPTY;
 
 	public DrawerBlockEntity(BlockPos pos, BlockState state) {
 		super(LodestoreBlockEntities.DRAWER, pos, state);
@@ -86,6 +106,63 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 
 	public ItemStack previewItem() {
 		return previewItem;
+	}
+
+	/** Installed upgrades, for the drop-on-break path and for tests. */
+	public List<ItemStack> upgrades() {
+		return List.copyOf(upgrades);
+	}
+
+	public ItemStack lockedItem() {
+		return lockedItem;
+	}
+
+	/** How many upgrades one drawer may hold, whatever they are. */
+	public static final int UPGRADE_SLOTS = 3;
+
+	/**
+	 * Installs an upgrade, taking a copy of a single item from {@code stack}.
+	 *
+	 * @return {@code false} if the drawer is full or already has this upgrade, in which case
+	 *         nothing is consumed and the caller should fall back to opening the drawer
+	 */
+	public boolean installUpgrade(ItemStack stack) {
+		if (!(stack.getItem() instanceof DrawerUpgradeItem item) || upgrades.size() >= UPGRADE_SLOTS) {
+			return false;
+		}
+
+		for (ItemStack installed : upgrades) {
+			if (installed.getItem() == item) {
+				return false;
+			}
+		}
+
+		upgrades.add(stack.copyWithCount(1));
+		setChanged();
+		return true;
+	}
+
+	/** Whether any installed upgrade locks this drawer to one kind of item. */
+	private boolean locks() {
+		for (ItemStack installed : upgrades) {
+			if (installed.getItem() instanceof DrawerUpgradeItem item
+					&& resolveUpgrade(item.upgradeKey()).locksContents()) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private DrawerUpgrade resolveUpgrade(ResourceKey<DrawerUpgrade> key) {
+		if (level == null) {
+			return DrawerUpgrade.FALLBACK;
+		}
+
+		return level.registryAccess()
+				.lookup(LodestoreRegistries.DRAWER_UPGRADE)
+				.flatMap(registry -> registry.getOptional(key))
+				.orElse(DrawerUpgrade.FALLBACK);
 	}
 
 	public long previewCount() {
@@ -145,10 +222,19 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 
 		ItemStack previousItem = previewItem;
 		long previousCount = previewCount;
+		ItemStack previousLock = lockedItem;
 		recomputePreview();
 
+		// A lock installed on an empty drawer has nothing to lock to yet, so it claims the
+		// first item that arrives. Locking to "nothing" instead would make the drawer refuse
+		// everything, including the item the player installed it for.
+		if (lockedItem.isEmpty() && !previewItem.isEmpty() && locks()) {
+			lockedItem = previewItem.copyWithCount(1);
+		}
+
 		// Only tell clients when the face would actually look different.
-		if (!ItemStack.isSameItemSameComponents(previousItem, previewItem) || previousCount != previewCount) {
+		if (!ItemStack.isSameItemSameComponents(previousItem, previewItem) || previousCount != previewCount
+				|| !ItemStack.isSameItemSameComponents(previousLock, lockedItem)) {
 			level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
 		}
 	}
@@ -166,6 +252,12 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 		if (!previewItem.isEmpty()) {
 			out.store("preview_item", ItemStack.CODEC, previewItem);
 			out.putLong("preview_count", previewCount);
+		}
+
+		// A locked drawer draws its filter on the face even while empty, so this has to reach
+		// the client separately — an empty drawer has no preview to carry it.
+		if (!lockedItem.isEmpty()) {
+			out.store("locked_item", ItemStack.CODEC, lockedItem);
 		}
 
 		return out.buildResult();
@@ -197,6 +289,14 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 	protected void saveAdditional(ValueOutput data) {
 		super.saveAdditional(data);
 		ContainerHelper.saveAllItems(data, items);
+
+		if (!upgrades.isEmpty()) {
+			data.store("upgrades", ItemStack.CODEC.listOf(), upgrades);
+		}
+
+		if (!lockedItem.isEmpty()) {
+			data.store("locked_item", ItemStack.CODEC, lockedItem);
+		}
 	}
 
 	@Override
@@ -208,6 +308,10 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 
 		// Present only in the sync tag, which deliberately carries no items; a drawer loaded
 		// from disk has the real contents and recomputes from them instead.
+		upgrades.clear();
+		upgrades.addAll(data.read("upgrades", ItemStack.CODEC.listOf()).orElse(List.of()));
+		lockedItem = data.read("locked_item", ItemStack.CODEC).orElse(ItemStack.EMPTY);
+
 		previewItem = data.read("preview_item", ItemStack.CODEC).orElse(ItemStack.EMPTY);
 		previewCount = data.getLongOr("preview_count", 0L);
 
@@ -236,6 +340,12 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 	 */
 	@Override
 	public boolean canPlaceItem(int slot, ItemStack stack) {
+		// Checked ahead of the nesting rule, and here rather than in the menu, for the same
+		// reason: a filter the GUI enforced alone would be bypassed by piping items in.
+		if (locks() && !lockedItem.isEmpty() && !ItemStack.isSameItemSameComponents(lockedItem, stack)) {
+			return false;
+		}
+
 		DrawerTier self = tier();
 
 		if (!self.keepsContents()) {
@@ -258,6 +368,17 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 	 */
 	@Override
 	public void preRemoveSideEffects(BlockPos pos, BlockState state) {
+		// Upgrades drop for every tier, including the ones that keep their contents: they ride
+		// outside the inventory, so the `minecraft:container` component never carries them and
+		// leaving them here would destroy them with the block.
+		if (level != null && !level.isClientSide()) {
+			for (ItemStack upgrade : upgrades) {
+				Block.popResource(level, pos, upgrade.copy());
+			}
+		}
+
+		upgrades.clear();
+
 		if (tier().keepsContents()) {
 			return;
 		}

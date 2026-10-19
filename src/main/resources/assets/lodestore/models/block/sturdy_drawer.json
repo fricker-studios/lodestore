@@ -2,7 +2,7 @@
   "parent": "minecraft:block/orientable",
   "textures": {
     "front": "lodestore:block/sturdy_drawer_front",
-    "side": "lodestore:block/drawer_side",
-    "top": "lodestore:block/drawer_side"
+    "side": "lodestore:block/sturdy_drawer_side",
+    "top": "lodestore:block/sturdy_drawer_top"
   }
 }

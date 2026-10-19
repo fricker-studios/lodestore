@@ -11,9 +11,11 @@ import net.fabricmc.fabric.api.event.registry.DynamicRegistries;
 
 import dev.fricker.lodestore.api.LodestoreRegistries;
 import dev.fricker.lodestore.api.drawer.DrawerTier;
+import dev.fricker.lodestore.api.drawer.DrawerUpgrade;
 import dev.fricker.lodestore.registry.LodestoreBlockEntities;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
 import dev.fricker.lodestore.registry.LodestoreCreativeTab;
+import dev.fricker.lodestore.registry.LodestoreItems;
 import dev.fricker.lodestore.util.PersistenceSelfCheck;
 
 /**
@@ -30,8 +32,10 @@ public class Lodestore implements ModInitializer {
 	public void onInitialize() {
 		// Synced, because the client needs capacities for the upcoming front-face count overlay.
 		DynamicRegistries.registerSynced(LodestoreRegistries.DRAWER_TIER, DrawerTier.CODEC);
+		DynamicRegistries.registerSynced(LodestoreRegistries.DRAWER_UPGRADE, DrawerUpgrade.CODEC);
 
 		LodestoreBlocks.initialize();
+		LodestoreItems.initialize();
 		LodestoreBlockEntities.initialize();
 		LodestoreCreativeTab.initialize();
 
