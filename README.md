@@ -195,9 +195,10 @@ per upgrade.
 | Void | a covered slot discards what it has no room for | 9 slots |
 
 Both shipped upgrades change *what a covered slot accepts*. Neither changes *how much* it holds, and
-that is not an omission waiting to be filled in — see
-[Why there is no stack upgrade](#why-there-is-no-stack-upgrade). A behaviour flag can only ever be
-as good as the vanilla hook it is enforced through, and the per-slot capacity hook does not exist.
+that is not a gap anyone can close by adding another flag: a behaviour flag is only ever as good as
+the vanilla hook it is enforced through, and there is no per-slot capacity hook to enforce it
+through. See [Why there is no stack upgrade](#why-there-is-no-stack-upgrade), which is also where
+the decision to build our own storage layer is recorded.
 
 **Levels are data, not code.** A level-two lock is a level-one lock with a larger number in its
 JSON. Capacity pools across everything installed, so two level-one locks reach exactly as far as one
@@ -285,10 +286,15 @@ The mechanism is a single overflow slot past the end of the storage, and it is w
 #### Why there is no stack upgrade
 
 A stack upgrade — covered slots holding more than a normal stack — was designed against the
-machinery above, measured, and abandoned. It is the one upgrade the slot-targeting design cannot
-carry, and the reasons are in Minecraft rather than in Lodestore. They are kept as assertions in
-`StackCeilingGameTests` rather than only as this section, so that a version which lifts one of them
-turns a test red instead of leaving a paragraph quietly wrong.
+machinery above, measured, and abandoned as an upgrade. It is the one upgrade the slot-targeting
+design cannot carry, and the reasons are in Minecraft rather than in Lodestore. They are kept as
+assertions in `StackCeilingGameTests` rather than only as this section, so that a version which
+lifts one of them turns a test red instead of leaving a paragraph quietly wrong.
+
+What the measurement settled is not only that a stack upgrade cannot be a flag in the upgrade
+registry, but what it would take instead. That is recorded as a decision below: Lodestore grows its
+own storage layer. This section is the evidence for it, so it is worth reading before touching
+drawer capacity for any reason.
 
 **What governs a slot's capacity depends entirely on who is asking.** Raising
 `Container#getMaxStackSize` and its per-stack overload is obeyed by some paths and ignored by
@@ -341,19 +347,54 @@ per-container, so pipes and the comparator would apply the raised ceiling to eve
 drawer while the screen applied it only to the covered ones. The targeting that the lock and the
 void upgrade are built on cannot be expressed through `Container` at all.
 
-Doing it properly therefore means one of two things, both of which are larger than an upgrade:
-giving drawers a real `Storage<ItemVariant>` and giving up being a plain `Container` — which is what
-makes the current interop free — or mixing into `HopperBlockEntity` and into vanilla's item-stack
-validation, which is reckless in the second case because that validation is shared with bundles and
-crossbows. Neither is worth a stack upgrade on its own; both are worth revisiting when networked
-storage arrives and the `Storage<ItemVariant>` question has to be answered anyway.
+#### The decision: Lodestore gets its own storage layer
+
+Doing it properly means one of two things, both larger than an upgrade. **The decision is the
+first:** drawers get a real `Storage<ItemVariant>` of their own and stop being a plain
+`Container`.
+
+The rejected alternative was mixing into `HopperBlockEntity` and into `ItemStack`'s validation.
+Patching the hopper is merely intrusive; patching the validation is not acceptable, because
+`validateStrict` and `validateContainedItemSizes` are shared with bundles, crossbows and every
+other container component. Widening them to let a drawer over-stack would widen them for a bundle
+too, and the blast radius of being wrong there is every stack in the game.
+
+So the cost of the decision is accepted deliberately, and it is a real cost. Being a vanilla
+`Container` is what makes today's interop free: hoppers, droppers, pipes, the comparator and the
+`minecraft:container` component all work with no code at all, and `BaseContainerBlockEntity` gives
+us the save format and the shulker-style drop for nothing. Giving that up means owning all of it.
+In exchange, capacity stops being vanilla's to dictate, and it is the only route on which a
+*per-slot* capacity can even be expressed — which the table above shows `Container` cannot do at
+any size.
+
+Two things about this are worth fixing in mind before the work starts, because both are reasons the
+answer cannot simply be "use the transfer API":
+
+- **99 is a serialization ceiling, not a `Container` one.** `ItemStack.MAP_CODEC`'s count is
+  `intRange(1, 99)` and `Item.ABSOLUTE_MAX_STACK_SIZE` is 99. No `Storage` implementation changes
+  that, so over-stacked contents cannot be persisted as `ItemStack`s at all, however they are
+  exposed at runtime. A storage layer that holds more than 99 of something has to store a count
+  separately from the stack and reconstitute legal stacks on the way out.
+- **The hopper reaches a `Container` before it reaches a `Storage`.** Fabric's
+  `HopperBlockEntityMixin` takes the transfer-API route only `if (container == null)`. So a drawer
+  cannot be both: offering a `Container` for compatibility *and* a `Storage` for capacity means the
+  hopper silently keeps using the `Container` and the two disagree again. Whatever a drawer still
+  exposes as a `Container` has to be a view that cannot lie about fullness.
+
+Planning and implementation are a separate piece of work, tracked in its own session. Until it
+lands, the five assertions in `StackCeilingGameTests` are what stop a stack upgrade being added
+through `Container` by mistake.
 
 ### Not yet
 
-Grouping, sorting, and stack upgrades — the last for the reasons set out above. Capacity is the
-awkward one in a second way too: container size is structural, decided before the level's registries
-are reachable, so even a plain *more slots* upgrade cannot just be another flag in the registry the
-way lock levels are.
+Grouping and sorting.
+
+Stack upgrades are **blocked rather than ruled out**: they wait on Lodestore's own storage layer,
+for the reasons and under the decision set out above. Capacity is awkward in a second way that the
+same work has to answer, since it is not about stack sizes at all: container size is structural,
+decided before the level's registries are reachable, so even a plain *more slots* upgrade cannot
+just be another flag in the registry the way lock levels are. Both are the same question — who
+decides how much a drawer holds — and neither has an answer while vanilla does.
 
 The front face shows whichever item the drawer holds most of, counted across every slot holding it.
 Choosing what a drawer displays, independently of what it is locked to, is not here.
