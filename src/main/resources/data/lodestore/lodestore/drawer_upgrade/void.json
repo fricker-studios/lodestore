@@ -1,4 +1,5 @@
 {
-  "locks_contents": true,
-  "voids_overflow": true
+  "locks_contents": false,
+  "voids_overflow": true,
+  "slot_capacity": 9
 }

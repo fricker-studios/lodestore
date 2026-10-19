@@ -48,8 +48,18 @@ jobs:
         run: |
           set -euo pipefail
           test -f "build/libs/lodestore-${VERSION}.jar"
+
+          # A semver pre-release tag carries a hyphen in its version (v0.2.0-rc.1 -> 0.2.0-rc.1).
+          # Without --prerelease, a release candidate publishes as the latest stable release and
+          # is what anyone landing on the releases page downloads.
+          prerelease=""
+          case "$VERSION" in
+            *-*) prerelease="--prerelease" ;;
+          esac
+
           gh release create "$GITHUB_REF_NAME" \
             --title "Lodestore ${VERSION}" \
             --generate-notes \
+            ${prerelease:+"$prerelease"} \
             "build/libs/lodestore-${VERSION}.jar" \
             "build/libs/lodestore-${VERSION}-sources.jar"

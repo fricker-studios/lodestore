@@ -1,3 +1,4 @@
 {
-  "locks_contents": true
+  "locks_contents": true,
+  "slot_capacity": 9
 }

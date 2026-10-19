@@ -20,12 +20,17 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  *                      locked: voiding is only ever applied to the one item a drawer was explicitly
  *                      told it is for, so it cannot destroy something that merely passed through.
  */
-public record DrawerUpgrade(boolean locksContents, boolean voidsOverflow) {
+public record DrawerUpgrade(boolean locksContents, boolean voidsOverflow, int slotCapacity) {
 	public static final Codec<DrawerUpgrade> CODEC = RecordCodecBuilder.create(instance -> instance.group(
 			Codec.BOOL.fieldOf("locks_contents").forGetter(DrawerUpgrade::locksContents),
 			// Optional so that upgrades written before voiding existed still decode. A missing
 			// flag means "does not void", which is the harmless reading of the two.
 			Codec.BOOL.optionalFieldOf("voids_overflow", false).forGetter(DrawerUpgrade::voidsOverflow)
+			,
+			// How far one of these reaches. Levels are data, not code: a level-two lock is a
+			// level-one lock with a larger number here, and capacities pool across what is
+			// installed, so two level-ones reach exactly as far as one level-two.
+			Codec.intRange(0, 1024).optionalFieldOf("slot_capacity", 0).forGetter(DrawerUpgrade::slotCapacity)
 	).apply(instance, DrawerUpgrade::new));
 
 	/**
@@ -33,5 +38,5 @@ public record DrawerUpgrade(boolean locksContents, boolean voidsOverflow) {
 	 * that silently locked a drawer would strand its contents behind a filter nobody set — and one
 	 * that silently voided would destroy them outright.
 	 */
-	public static final DrawerUpgrade FALLBACK = new DrawerUpgrade(false, false);
+	public static final DrawerUpgrade FALLBACK = new DrawerUpgrade(false, false, 0);
 }

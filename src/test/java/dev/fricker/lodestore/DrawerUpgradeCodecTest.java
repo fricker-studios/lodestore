@@ -52,19 +52,50 @@ class DrawerUpgradeCodecTest {
 
 	@Test
 	void theLockUpgradeActuallyLocks() throws IOException {
-		assertEquals(new DrawerUpgrade(true, false), decode("lock"),
+		assertEquals(new DrawerUpgrade(true, false, 9), decode("lock"),
 				"the shipped lock upgrade must set locks_contents, or it is an inert item");
 	}
 
 	/**
-	 * The void upgrade locks as well as voids. Voiding is only ever applied to the item a drawer
-	 * is locked to, so an entry that voided without locking would be inert — and an item that
-	 * destroys things being quietly inert is the worse half of that bargain to get wrong.
+	 * The void upgrade voids without locking.
+	 *
+	 * <p>It used to have to lock as well, because voiding was a drawer-wide switch and the filter
+	 * was the only thing keeping it from destroying whatever arrived. Voiding is now scoped by the
+	 * slots it targets, and only ever applies to what one of those slots already holds or has
+	 * claimed, so the lock flag is no longer what makes it safe.
 	 */
 	@Test
-	void theVoidUpgradeVoidsAndLocks() throws IOException {
-		assertEquals(new DrawerUpgrade(true, true), decode("void"),
-				"the shipped void upgrade must set both locks_contents and voids_overflow");
+	void theVoidUpgradeVoidsWithoutLocking() throws IOException {
+		assertEquals(new DrawerUpgrade(false, true, 9), decode("void"),
+				"the shipped void upgrade must void, and no longer needs to lock to be safe");
+	}
+
+	/** Levels are data: the same behaviour, reaching further. */
+	@Test
+	void lockLevelsReachFurtherThanOneAnother() throws IOException {
+		int one = decode("lock").slotCapacity();
+		int two = decode("lock_2").slotCapacity();
+		int three = decode("lock_3").slotCapacity();
+
+		assertTrue(one < two && two < three,
+				() -> "lock levels should reach further in turn, got " + one + ", " + two + ", " + three);
+
+		assertEquals(two, one * 2,
+				"two level-one locks must reach exactly as far as one level-two, or the arithmetic "
+						+ "a player does in their head is wrong");
+	}
+
+	/**
+	 * An upgrade that does not say how far it reaches reaches nothing. Defaulting to some
+	 * non-zero number would hand a pack's half-written entry control of slots nobody granted it.
+	 */
+	@Test
+	void anUpgradeWithoutACapacityReachesNothing() {
+		DrawerUpgrade parsed = DrawerUpgrade.CODEC
+				.parse(JsonOps.INSTANCE, JsonParser.parseString("{\"locks_contents\":true}"))
+				.getOrThrow();
+
+		assertEquals(0, parsed.slotCapacity());
 	}
 
 	/**
@@ -87,6 +118,8 @@ class DrawerUpgradeCodecTest {
 				"an unresolved upgrade must not lock a drawer the player never locked");
 		assertFalse(DrawerUpgrade.FALLBACK.voidsOverflow(),
 				"an unresolved upgrade must not destroy items the player never asked it to");
+		assertEquals(0, DrawerUpgrade.FALLBACK.slotCapacity(),
+				"an unresolved upgrade must not reach any slots");
 	}
 
 	@Test

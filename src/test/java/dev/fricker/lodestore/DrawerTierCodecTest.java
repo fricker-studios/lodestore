@@ -54,9 +54,9 @@ class DrawerTierCodecTest {
 
 	@Test
 	void tiersDecodeToTheirIntendedValues() throws IOException {
-		assertEquals(new DrawerTier(false, 1), decode("basic"));
-		assertEquals(new DrawerTier(true, 2), decode("sturdy"));
-		assertEquals(new DrawerTier(true, 3), decode("reinforced"));
+		assertEquals(new DrawerTier(false, 1, 1), decode("basic"));
+		assertEquals(new DrawerTier(true, 2, 2), decode("sturdy"));
+		assertEquals(new DrawerTier(true, 3, 3), decode("reinforced"));
 	}
 
 	/**
@@ -90,14 +90,50 @@ class DrawerTierCodecTest {
 		}
 	}
 
+	/**
+	 * Each case is complete except for the one thing under test. A JSON that is wrong in two ways
+	 * is rejected whichever check fires first, so it proves nothing about either.
+	 */
 	@Test
 	void rejectsInvalidValues() {
-		assertTrue(DrawerTier.CODEC.parse(JsonOps.INSTANCE,
-				JsonParser.parseString("{\"keeps_contents\":true,\"nesting_rank\":-1}")).isError(),
+		assertTrue(DrawerTier.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString(
+						"{\"keeps_contents\":true,\"nesting_rank\":-1,\"upgrade_slots\":1}")).isError(),
 				"a negative nesting_rank should be rejected by the codec's range");
-		assertTrue(DrawerTier.CODEC.parse(JsonOps.INSTANCE,
-				JsonParser.parseString("{\"keeps_contents\":true}")).isError(),
+		assertTrue(DrawerTier.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString(
+						"{\"keeps_contents\":true,\"upgrade_slots\":1}")).isError(),
 				"missing nesting_rank should be rejected");
+		assertTrue(DrawerTier.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString(
+						"{\"keeps_contents\":true,\"nesting_rank\":1}")).isError(),
+				"missing upgrade_slots should be rejected");
+		assertTrue(DrawerTier.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString(
+						"{\"keeps_contents\":true,\"nesting_rank\":1,\"upgrade_slots\":"
+								+ (DrawerTier.MAX_UPGRADE_SLOTS + 1) + "}")).isError(),
+				"upgrade_slots past the screen's capacity should be rejected by the codec's range");
+	}
+
+	/**
+	 * The upgrade row is laid out in code, so a pack cannot ask for more slots than the screen can
+	 * draw. A tier that exceeded the cap would be dropped outright and every drawer of it would
+	 * fall back to accepting no upgrades at all.
+	 */
+	@Test
+	void shippedTiersFitTheUpgradeRow() throws IOException {
+		for (Path file : tierFiles()) {
+			DrawerTier tier = DrawerTier.CODEC
+					.parse(JsonOps.INSTANCE, JsonParser.parseString(Files.readString(file))).getOrThrow();
+
+			assertTrue(tier.upgradeSlots() <= DrawerTier.MAX_UPGRADE_SLOTS,
+					() -> file.getFileName() + " asks for more upgrade slots than the screen has");
+		}
+
+		assertTrue(decode("basic").upgradeSlots() < decode("reinforced").upgradeSlots(),
+				"a reinforced drawer should take more upgrades than a basic one, or the tier buys nothing");
+	}
+
+	/** An unresolved tier must accept no upgrades rather than silently allowing some. */
+	@Test
+	void theFallbackAcceptsNoUpgrades() {
+		assertEquals(0, DrawerTier.FALLBACK.upgradeSlots());
 	}
 
 	private static DrawerTier decode(String name) throws IOException {

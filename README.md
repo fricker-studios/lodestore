@@ -74,18 +74,19 @@ Then, in-game: `/give @s lodestore:storage_core`
 
 Drawers are working containers with a GUI.
 
-| Tier | Behaves like | Size | On break | May contain |
-|---|---|---|---|---|
-| Basic | chest | 27 | contents spill | anything |
-| Sturdy | shulker box | 27 | contents stay inside | no drawers |
-| Reinforced | shulker box | 54 | contents stay inside | sturdy drawers only |
+| Tier | Behaves like | Size | Upgrade slots | On break | May contain |
+|---|---|---|---|---|---|
+| Basic | chest | 27 | 1 | contents spill | anything |
+| Sturdy | shulker box | 27 | 2 | contents stay inside | no drawers |
+| Reinforced | shulker box | 54 | 3 | contents stay inside | sturdy drawers only |
 
 Drawers are wood, so an axe is the efficient tool, as it is for a chest or barrel. They still break
 without one, just slowly — no tool is required for them to drop.
 
-Right-click opens the vanilla chest screen — the block entity extends `BaseContainerBlockEntity`
-and hands back a `ChestMenu`, so there is no custom menu or screen to maintain, and hoppers, pipes
-and the transfer API all interoperate with no extra work.
+Right-click opens Lodestore's own screen — the vanilla chest grid plus a column of upgrade slots.
+The block entity still extends `BaseContainerBlockEntity` and is still a plain `Container`, so
+hoppers, pipes and the transfer API interoperate with no extra work; see [The screen](#the-screen)
+for why the vanilla `ChestMenu` it used to hand back was given up.
 
 "Keeps contents" is loot-table driven: those tiers copy the implicit `minecraft:container`
 component onto the dropped item, exactly as a shulker box does, and suppress the default spill in
@@ -121,11 +122,21 @@ destroys things.
 
 | Where | What |
 |---|---|
-| `src/main/resources/assets/lodestore/textures/` | the 16×16 PNGs, which are the source of truth |
-| `tools/sprites/` | the script the originals were generated from |
+| `src/main/resources/assets/lodestore/textures/` | the PNGs, which are the source of truth |
+| `tools/sprites/make_textures.py` | blocks and items |
+| `tools/sprites/make_gui.py` | the screen's upgrade panel |
 
-The script is an authoring aid, not a build step — nothing runs it. Re-running it overwrites the
-PNGs, so anything edited by hand afterwards has to go back into the script or it is lost.
+The scripts are an authoring aid, not a build step — nothing runs them. Re-running one overwrites
+its PNGs, so anything edited by hand afterwards has to go back into the script or it is lost.
+
+Both share one palette, and a palette is a namespace: a Python dict literal keeps the **last** of
+any duplicated key without complaint, so when copper and the void upgrade both claimed `v` the void
+sprite was quietly repainted and nothing reported it. `pixels.py` now checks its own source for
+duplicate characters at import and fails loudly instead.
+
+The upgrade levels are told apart by the metal of their carrier plate — iron, copper, diamond —
+rather than by a numeral, which at sixteen pixels would be four pixels tall and unreadable in a
+hotbar.
 
 ### Recipes
 
@@ -135,6 +146,8 @@ PNGs, so anything edited by hand afterwards has to go back into the script or it
 | Sturdy drawer | a basic drawer surrounded by planks |
 | Reinforced drawer | a sturdy drawer surrounded by iron ingots |
 | Lock upgrade | gold nuggets around an iron ingot, over a second ingot |
+| Lock upgrade II | a lock upgrade ringed with copper ingots |
+| Lock upgrade III | a lock upgrade II ringed with diamonds |
 | Void upgrade | obsidian around an iron ingot, over a second ingot |
 
 Each recipe ships an advancement that reveals it in the recipe book once you are holding any of its
@@ -147,118 +160,136 @@ every advancement loads and grants the recipe it is named for. Neither a malform
 malformed advancement fails the build or throws — each is logged and skipped, leaving either a
 missing recipe or one that works but can never be discovered.
 
+### The screen
+
+Right-clicking a drawer opens Lodestore's own screen: the vanilla chest grid, with a column of
+upgrade slots beside it.
+
+This is a trade the project made reluctantly. Until upgrades needed managing after they were
+installed, drawers handed back a vanilla `ChestMenu` and there was no menu or screen to maintain at
+all. There is no way to show upgrade slots without a custom menu, so there is now one — but the body
+is still vanilla's own texture, blitted the way vanilla blits it (the grid from the top of the file,
+the player-inventory section from a fixed offset), so one texture serves any row count. Only the
+upgrade column is ours.
+
+Hoppers, pipes and the transfer API are untouched by this: they talk to the block entity's
+`Container`, not to the menu.
+
+The menu adds exactly `rows * 9` storage slots. A voiding drawer's container is one larger than its
+storage, and that overflow slot must never appear on screen — it always reads empty and discards
+what is put in it.
+
 ### Upgrades
 
 Upgrades are datapack-driven, the same way tiers are. An entry at
-`data/<pack>/lodestore/drawer_upgrade/<name>.json` is a set of behaviour flags, and an item carries
-the key of the entry it installs. A pack adds an upgrade by pairing a new item with a new entry; it
-never names an implementation, so the mod ships no branch per upgrade.
+`data/<pack>/lodestore/drawer_upgrade/<name>.json` is a set of behaviour flags plus a
+`slot_capacity`, and an item carries the key of the entry it installs. A pack adds an upgrade by
+pairing a new item with a new entry; it never names an implementation, so the mod ships no branch
+per upgrade.
 
-A drawer holds up to three upgrades, one of each kind. Right-clicking a drawer while holding one
-installs it — the single exception to "right-clicking opens the drawer whatever is in hand", because
+| Upgrade | Does | Reaches |
+|---|---|---|
+| Lock | a covered slot takes one kind of item and nothing else | 9 slots |
+| Lock II | the same, further | 18 slots |
+| Lock III | the same, further again | 27 slots |
+| Void | a covered slot discards what it has no room for | 9 slots |
+
+**Levels are data, not code.** A level-two lock is a level-one lock with a larger number in its
+JSON. Capacity pools across everything installed, so two level-one locks reach exactly as far as one
+level-two, and two level-ones plus a level-two reach four rows. That arithmetic is the point: a
+player can work out what they have without consulting a table.
+
+Duplicates are therefore allowed, which is a reversal — a drawer used to refuse a second upgrade of
+the same kind. Refusing one now would make the pooling impossible to express.
+
+How many upgrades a drawer holds at once is its tier's business, not the upgrade's: one for basic,
+two for sturdy, three for reinforced.
+
+Install by dragging an upgrade into the column, or by right-clicking the drawer while holding one —
+the latter is the single exception to "right-clicking opens the drawer whatever is in hand", because
 an upgrade does nothing else anywhere, whereas that rule exists to stop a drawer reacting to the
-building blocks a player happens to be carrying. A drawer that is already upgraded falls through and
-opens rather than eating the click.
+building blocks a player happens to be carrying.
 
-Upgrades are kept outside the drawer's inventory. In it, they would show up in the chest screen, a
-hopper could pull one out, and for the tiers whose contents ride inside the dropped item they would
-duplicate along with everything else. They drop as items when the drawer is broken, for every tier —
-the `minecraft:container` component only carries the inventory, so nothing else would carry them.
+Upgrades are kept outside the drawer's inventory. In it, they would be visible to hoppers, and for
+the tiers whose contents ride inside the dropped item they would duplicate along with everything
+else. They drop as items when the drawer is broken, for every tier.
 
-| Upgrade | Does |
-|---|---|
-| Lock | restricts the drawer to one kind of item |
-| Void | restricts the drawer to one kind of item, then destroys what will not fit |
+#### Choosing which slots an upgrade covers
 
-The lock locks to whatever the drawer already holds most of. On an empty drawer it has nothing to
-claim yet, so it takes the first item in — locking to "nothing" would make the drawer refuse
-everything, including the item it was installed for. The filter outlives the upgrade being removed,
-so re-locking a drawer restores the filter it had rather than silently re-claiming whatever happens
-to be inside at the time.
+Right-click an installed upgrade to start choosing. Covered slots are tinted — the lock's gold, the
+void's purple — and the upgrade being edited outlines its own. Click a storage slot to add or remove
+it; shift-click to act on everything between the last slot clicked and this one. The upgrade's
+tooltip says so, because the gesture is not one anything else in the game teaches.
+
+**Choosing nothing covers the first rows, not none of them.** An upgrade that did nothing until its
+owner had clicked nine slots would simply look broken, so an empty selection means "as far as this
+upgrade reaches, from the start" — one row for a level-one lock, two for a level-two, and so on.
+There is no error state for having chosen nothing, because nothing is a valid answer.
+
+Capacity caps the selection rather than growing it: a level-one lock covers nine slots, so taking a
+tenth means giving one up first.
+
+The gesture rides vanilla's container-button packet rather than a payload of our own, because that
+path is already validated against the container the player actually has open — exactly the check a
+bespoke packet would have to reimplement.
+
+Targeting is sent to the client **resolved**. The client deliberately never receives the installed
+upgrades, so it cannot work out how far they reach; it is sent the answer instead. The disk keeps
+what was actually chosen, so "nothing chosen" stays a default and follows the upgrades if they
+change.
+
+#### Locking
+
+A covered slot claims the item it holds, or the first one put into it, and refuses anything else
+afterwards. The claim is stored rather than read back from the contents, so it survives the slot
+being emptied: an empty locked slot still says what belongs in it, which is the whole reason to lock
+a drawer before the items arrive.
 
 It is enforced in `Container#canPlaceItem`, next to the nesting rule and for the same reason: a
-filter applied only by the chest screen would be bypassed by piping items in.
+filter applied only by the screen would be bypassed by piping items in. Fabric's hopper patch bails
+out as soon as vanilla finds a `Container`, and the transfer API wraps any `Container`
+automatically, so that one hook covers hoppers, droppers, pipes and the screen alike.
 
-That one hook really does cover everything, which is worth recording because it is easy to assume
-rather than check. Hoppers reach it directly. Other mods' pipes reach it too: fabric's transfer API
-wraps any `Container` block entity automatically, and that wrapper calls `canPlaceItem` like
-anything else. The API also patches hoppers, but that hook bails out when vanilla already found a
-`Container` — so for a drawer it never runs, and there is no second path to keep in step.
+Scoping cuts both ways, and that is deliberate: past an upgrade's reach a hopper may still fill the
+drawer with anything. A level-one lock on a 27-slot drawer locks nine slots, not twenty-seven.
 
-A locked drawer reads differently on the face. Its count is drawn in the lock's own gold rather than
-white, and once emptied it keeps showing its filter — drawn smaller, over a count of zero — because
-an empty locked drawer is exactly the one that most needs labelling. That is the whole point of
-locking a drawer before the items arrive.
+The front face draws a locked drawer's claims, cycling through them when there are several, and
+tints its count in the lock's gold.
 
 #### Voiding
 
-A voiding drawer accepts the item it is full of and destroys the excess, so the machine filling it
-never backs up. That is the whole value of the upgrade: a cobble generator feeding a full drawer
-should keep running, not jam.
+A covered slot discards what it has no room for, rather than backing the system up.
 
-**It voids only what it is locked to.** The shipped `void` entry sets `locks_contents` as well as
-`voids_overflow`, so one item is enough to set a drawer up, and the flag alone does nothing on a
-drawer with no filter. Voiding anything a drawer happened to be full of would make a misrouted
-stack of diamonds disappear silently; locking first means the drawer only ever destroys the one
-item a player explicitly named it for, and anything else is *refused*. The failure mode becomes a
-backed-up pipe, which is recoverable, instead of items that are simply gone. The two flags stay
-independent in the datapack — a pack can set either — and `voids_overflow` is optional, so entries
-written before voiding existed still decode.
+Voiding used to require the lock flag: it was a drawer-wide switch, and the filter was the only
+thing standing between it and destroying whatever arrived. Now that it is scoped to the slots it
+covers, and only ever applies to what one of those slots already holds or has claimed, the lock flag
+is no longer what makes it safe — so the shipped void upgrade no longer sets it.
 
-**Why it is not in `canPlaceItem`.** The lock lives there, and that hook can only accept or reject.
-Voiding has to *accept* an insert and throw the excess away, which it cannot express. Worse, a
-hopper never reaches it: `HopperBlockEntity.ejectItems` calls `isFullContainer` first and gives up
-before any per-slot check runs. That test passes only if some slot reports room, so a drawer that
-wants to keep draining a hopper must have one.
+The mechanism is a single overflow slot past the end of the storage, and it is worth knowing why:
 
-So a drawer has one slot past its storage — the overflow slot. It always reads empty, so the drawer
-never looks full; whatever is written to it is discarded by `setChanged` on the same tick. It is
-offered only when the drawer is voiding and genuinely has nowhere else to put the item, so a drawer
-with room stores what arrives as usual.
-
-**One mechanism, not two.** The insertion paths agree because they all bottom out in the same
-place. Fabric's transfer API patches hoppers, but that hook begins by bailing out when vanilla
-already found a `Container` — which a drawer is — so hoppers use the vanilla path, and other mods'
-pipes arrive through `ItemStorage.SIDED`, whose automatic wrapper calls the very same
-`canPlaceItem` / `getItem` / `setItem`. Implementing voiding in the container makes it impossible
-for the two to disagree, rather than something to keep in sync. A dropper, which inserts without a
-direction, goes through the same slots.
-
-Two consequences worth knowing about, both deliberate:
-
-- **The chest screen cannot void.** The overflow slot is past the end of the grid the menu lays
-  out, so a player shift-clicking into a full voiding drawer is bounced, exactly as today. That
-  keeps the vanilla `ChestMenu` — the reason this works at all is that `checkContainerSize` is a
-  minimum and the menu adds exactly `rows * 9` slots, so no custom menu or screen was needed. It
-  also means voiding is something automation does, never something a player's own hands can do by
-  accident, which is the right side to err on for a feature that destroys items.
-- **`getContainerSize()` is one larger than the storage**, so anything measuring fullness has to
-  use `storageSize()` instead. The comparator does: left on the generic helper it divides by the
-  container size and a completely full drawer reads 14, never 15. A gametest pins that at 15.
-
-The slot has to be a real index below `getContainerSize()` rather than a virtual one past the end,
-because the transfer API's sided wrapper indexes a backing list sized from exactly that method and
-would throw on anything outside it.
+- **`canPlaceItem` cannot express voiding.** It answers yes or no about a stack; voiding means
+  accepting one and discarding it. `HopperBlockEntity.ejectItems` also bails at `isFullContainer`
+  before any per-slot check, so a drawer with no room would never be offered the item at all.
+- **The overflow slot always reads empty and discards what is written to it**, which is what makes a
+  full voiding drawer look like it has room.
+- **It is a real index, not one past the end.** The transfer API's sided wrapper indexes a list
+  sized from `getContainerSize()` and would throw otherwise.
+- **`getContainerSize()` is therefore one larger than the storage.** Anything measuring fullness has
+  to use `storageSize()` — the comparator does, which is why a full drawer reads 15 rather than 14.
 
 ### Not yet
 
-Capacity limits, grouping and sorting. Capacity is the awkward one: size is structural, decided
-before the level's registries are reachable, so a capacity upgrade cannot just be another flag in
-the registry.
-
-Voiding is here, but only for automation — the chest screen bounces rather than voids, for the
-reasons above. Voiding by hand would need a custom menu, which the vanilla `ChestMenu` arrangement
-is worth more than.
-
-Single-item-type behaviour is partly here — a locked drawer is one — but choosing the displayed item
-independently of the filter is not.
+Grouping, sorting, and stack upgrades. Capacity is still the awkward one: container size is
+structural, decided before the level's registries are reachable, so a capacity upgrade cannot just
+be another flag in the registry the way lock levels are.
 
 The front face shows whichever item the drawer holds most of, counted across every slot holding it.
-Which item is displayed will become customisable later.
+Choosing what a drawer displays, independently of what it is locked to, is not here.
 
 That preview is synced on its own — one stack and a count — rather than by broadcasting the
 inventory, so the payload is the same whether the drawer holds one item or fifty-four stacks, and a
-packet only goes out when the face would actually look different.
+packet only goes out when the face or the screen would actually look different.
+
 
 ## Tests
 
@@ -274,10 +305,14 @@ Three layers, in increasing cost and decreasing frequency.
 renamed field or out-of-range value does not throw at runtime — the registry entry is silently
 dropped and drawers fall back — so this is checked in CI rather than discovered in a world. For the
 lock the fallback is inert by design, which means a dropped entry turns a drawer the player believes
-is filtered into one that quietly accepts anything.
+is filtered into one that quietly accepts anything. The level arithmetic is checked here too: two
+level-one locks must reach exactly as far as one level-two, because that is the sum a player does in
+their head.
 
 **Server gametests.** Persistence, hopper interop, comparator output, drop-on-break, that a broken
-drawer still stacks with a fresh one, and the lock:
+drawer still stacks with a fresh one, that upgrade slots and lock capacity rise with the tier and
+the level, that capacity pools across duplicates, that an unchosen selection covers the first rows
+and a chosen one is capped, and the lock:
 that it claims the right item, refuses everything else, cannot be bypassed by a hopper, and does not
 swallow what it refuses. These need a real ticking world: a plain dedicated server never block-ticks
 hoppers even in force-loaded chunks, so a hopper assertion there passes whether or not the code

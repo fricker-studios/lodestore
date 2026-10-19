@@ -107,6 +107,24 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 
 			context.waitTicks(40);
 			LOGGER.info("[lodestore] gui screenshot -> {}", context.takeScreenshot("drawer-gui-open"));
+
+			// Hover the first upgrade so its help text is in the shot. Right-clicking an upgrade
+			// to change its reach is not a gesture anything else in the game teaches, so the hint
+			// is the only thing that makes it discoverable — worth a picture of its own.
+			int[] cursor = context.computeOnClient(client -> {
+				// The reinforced drawer's screen: 176 of chest plus a 66-wide panel, and the
+				// vanilla chest's own height for six rows.
+				double scale = client.getWindow().getGuiScale();
+				int left = (client.getWindow().getGuiScaledWidth() - (176 + 66)) / 2;
+				int top = (client.getWindow().getGuiScaledHeight() - (114 + 6 * 18)) / 2;
+
+				// Middle of the first upgrade slot.
+				return new int[] {(int) ((left + 184 + 8) * scale), (int) ((top + 18 + 8) * scale)};
+			});
+
+			context.getInput().setCursorPos(cursor[0], cursor[1]);
+			context.waitTicks(20);
+			LOGGER.info("[lodestore] tooltip screenshot -> {}", context.takeScreenshot("drawer-upgrade-tooltip"));
 		}
 	}
 
@@ -171,6 +189,17 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 		drawer.setItem(2, new ItemStack(Items.REDSTONE, 16));
 		drawer.setItem(3, new ItemStack(LodestoreBlocks.STURDY_DRAWER, 2));
 		drawer.setChanged();
+
+		// This is the drawer the GUI screenshot opens. A level-two lock reaches two rows and the
+		// void upgrade one, and the void's row is moved off the lock's so the two tints can be
+		// told apart — overlapping them would prove only that something was drawn.
+		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE_2));
+		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
+
+		for (int slot = 0; slot < 9; slot++) {
+			drawer.toggleTarget(false, slot);
+			drawer.toggleTarget(false, 18 + slot);
+		}
 	}
 
 	private static DrawerBlockEntity place(ServerLevel level, BlockPos pos, Block block) {

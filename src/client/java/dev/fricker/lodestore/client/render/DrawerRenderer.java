@@ -1,5 +1,7 @@
 package dev.fricker.lodestore.client.render;
 
+import java.util.List;
+
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 
@@ -36,6 +38,8 @@ public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, Dr
 	private static final float TEXT_SCALE = 0.014f;
 	/** The gold from the lock upgrade's own sprite, so a locked count is recognisably its doing. */
 	private static final int LOCKED_COLOR = 0xFFF2C852;
+	/** Ticks each item of a multi-item filter is shown for before the face moves to the next. */
+	private static final int FILTER_CYCLE_TICKS = 40;
 
 	private final ItemModelResolver itemModelResolver;
 	private final Font font;
@@ -88,14 +92,24 @@ public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, Dr
 
 		// The preview is synced on its own, so the client never holds the inventory.
 		ItemStack preview = drawer.previewItem();
-		ItemStack locked = drawer.lockedItem();
+		List<ItemStack> locked = drawer.lockedItems();
 
 		// A locked drawer goes on showing its filter after the last item leaves. Without this an
 		// empty locked drawer is blank, which is exactly the drawer a player most needs labelled.
 		state.locked = !locked.isEmpty();
 		state.ghost = preview.isEmpty() && state.locked;
 
-		ItemStack shown = state.ghost ? locked : preview;
+		// A filter may name several items and the face has room for one, so it takes them in
+		// turn. Drawn from the game time rather than a counter per drawer, so a wall of drawers
+		// cycles together instead of flickering out of step.
+		ItemStack filter = ItemStack.EMPTY;
+
+		if (state.locked) {
+			long time = drawer.getLevel() == null ? 0L : drawer.getLevel().getGameTime();
+			filter = locked.get((int) Math.floorMod(time / FILTER_CYCLE_TICKS, locked.size()));
+		}
+
+		ItemStack shown = state.ghost ? filter : preview;
 		state.blank = shown.isEmpty();
 		state.amount = drawer.previewCount();
 
