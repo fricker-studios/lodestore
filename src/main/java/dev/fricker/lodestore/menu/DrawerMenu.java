@@ -127,7 +127,8 @@ public class DrawerMenu extends AbstractContainerMenu {
 	}
 
 	/**
-	 * Toggles a storage slot in an upgrade's selection.
+	 * Applies a slot click made while choosing for an upgrade: for the lock it picks the slot the
+	 * front face shows, for the void upgrade it toggles the slot in or out of its selection.
 	 *
 	 * <p>Rides vanilla's container-button packet rather than a payload of our own: that path is
 	 * already validated against the container the player actually has open, which is exactly the
@@ -146,7 +147,7 @@ public class DrawerMenu extends AbstractContainerMenu {
 			return false;
 		}
 
-		return drawer.toggleTarget(lock, storageSlot);
+		return lock ? drawer.chooseDisplaySlot(storageSlot) : drawer.toggleVoidTarget(storageSlot);
 	}
 
 	@Override

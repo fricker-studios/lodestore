@@ -59,7 +59,8 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 				}
 
 				// One of each tier, left to right, so the three sprites can be compared directly.
-				// The front face previews the most common item, so the mixed one shows its logs.
+				// The mixed one is locked and shows the slot chosen for its face — iron, though it
+				// holds more logs — so it proves the choice beats the most-common default.
 				single(level, new BlockPos(-4, Y, 0), LodestoreBlocks.BASIC_DRAWER, Items.COBBLESTONE, 320);
 				single(level, new BlockPos(-2, Y, 0), LodestoreBlocks.STURDY_DRAWER, Items.DIAMOND, 128);
 				mixed(level, new BlockPos(0, Y, 0), LodestoreBlocks.REINFORCED_DRAWER);
@@ -109,7 +110,7 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 			LOGGER.info("[lodestore] gui screenshot -> {}", context.takeScreenshot("drawer-gui-open"));
 
 			// Hover the first upgrade so its help text is in the shot. Right-clicking an upgrade
-			// to change its reach is not a gesture anything else in the game teaches, so the hint
+			// to choose its slots is not a gesture anything else in the game teaches, so the hint
 			// is the only thing that makes it discoverable — worth a picture of its own.
 			int[] cursor = context.computeOnClient(client -> {
 				// The reinforced drawer's screen: 176 of chest plus a 66-wide panel, and the
@@ -159,7 +160,7 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 	/**
 	 * A locked drawer that has been emptied — the state the lock exists for.
 	 *
-	 * <p>The lock claims its filter from the first item in, so this stocks one, lets the lock take
+	 * <p>A lock on an empty drawer claims the first item in, so this stocks one, lets the lock take
 	 * it, and then empties the drawer again. Its face should still name the item.
 	 */
 	private static void lockedAndEmptied(ServerLevel level, BlockPos pos, Block block, Item item) {
@@ -190,15 +191,16 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 		drawer.setItem(3, new ItemStack(LodestoreBlocks.STURDY_DRAWER, 2));
 		drawer.setChanged();
 
-		// This is the drawer the GUI screenshot opens. A level-two lock reaches two rows and the
-		// void upgrade one, and the void's row is moved off the lock's so the two tints can be
-		// told apart — overlapping them would prove only that something was drawn.
-		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE_2));
+		// This is the drawer the GUI screenshot opens. The lock's gold marks the one slot the face
+		// shows and the void's purple the row it covers, moved off the first row so the two tints
+		// can be told apart — overlapping them would prove only that something was drawn.
+		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
 		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
+		drawer.chooseDisplaySlot(1);
 
 		for (int slot = 0; slot < 9; slot++) {
-			drawer.toggleTarget(false, slot);
-			drawer.toggleTarget(false, 18 + slot);
+			drawer.toggleVoidTarget(slot);
+			drawer.toggleVoidTarget(18 + slot);
 		}
 	}
 

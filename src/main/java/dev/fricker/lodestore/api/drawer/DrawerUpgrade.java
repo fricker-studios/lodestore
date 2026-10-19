@@ -14,7 +14,8 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  * <p>Which item installs an upgrade is deliberately not here: the item carries the key, not the
  * other way round, so two items may share behaviour and an upgrade may exist with no item at all.
  *
- * @param locksContents whether the drawer accepts only the single item it has been locked to
+ * @param locksContents whether the drawer accepts only what it held when the lock went on — every
+ *                      kind of item in it, or the first one put in if it was empty
  * @param voidsOverflow whether the drawer accepts and destroys the item it is locked to once it has
  *                      no room left, instead of refusing it. Has no effect on a drawer that is not
  *                      locked: voiding is only ever applied to the one item a drawer was explicitly
@@ -27,9 +28,9 @@ public record DrawerUpgrade(boolean locksContents, boolean voidsOverflow, int sl
 			// flag means "does not void", which is the harmless reading of the two.
 			Codec.BOOL.optionalFieldOf("voids_overflow", false).forGetter(DrawerUpgrade::voidsOverflow)
 			,
-			// How far one of these reaches. Levels are data, not code: a level-two lock is a
-			// level-one lock with a larger number here, and capacities pool across what is
-			// installed, so two level-ones reach exactly as far as one level-two.
+			// How many storage slots one of these reaches, for behaviours that cover chosen
+			// slots. Capacities pool across what is installed, so two void upgrades reach twice
+			// as far as one. The lock ignores it: it always covers the whole drawer.
 			Codec.intRange(0, 1024).optionalFieldOf("slot_capacity", 0).forGetter(DrawerUpgrade::slotCapacity)
 	).apply(instance, DrawerUpgrade::new));
 

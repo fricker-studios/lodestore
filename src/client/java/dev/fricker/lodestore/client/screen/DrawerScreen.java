@@ -29,9 +29,11 @@ import dev.fricker.lodestore.menu.DrawerMenu;
  * the file and the player-inventory section from a fixed offset — so one texture serves any row
  * count and the drawer keeps looking like the chest it behaves as. Only the upgrade column is ours.
  *
- * <p>Right-clicking an installed upgrade turns on slot selection for it: the storage slots it
- * covers are tinted, and clicking one adds or removes it. Which slots an upgrade covers is read
- * straight off the drawer's own block entity, which every client near the block already has.
+ * <p>Right-clicking an installed upgrade turns on slot selection for it. For the void upgrade the
+ * storage slots it covers are tinted, and clicking one adds or removes it. For the lock, which
+ * covers the whole drawer, clicking a slot picks the one whose item the front face shows. What each
+ * upgrade has chosen is read straight off the drawer's own block entity, which every client near
+ * the block already has.
  */
 public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	private static final Identifier CHEST_BACKGROUND =
@@ -62,7 +64,10 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	private static final int BEHAVIOUR_LOCK = 0;
 	private static final int BEHAVIOUR_VOID = 1;
 
-	/** The lock's gold and the void upgrade's purple, so a tint names the upgrade that put it there. */
+	/**
+	 * The lock's gold on the slot the face shows, and the void upgrade's purple on the slots it
+	 * covers, so a tint names the upgrade that put it there.
+	 */
 	private static final int LOCK_TINT = 0x55F2C852;
 	private static final int VOID_TINT = 0x553B1E6E;
 	/** While choosing, the upgrade being edited is picked out more strongly than the other. */
@@ -137,7 +142,7 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	}
 
 	/**
-	 * Tints the storage slots each upgrade covers.
+	 * Tints the slot the face shows and the storage slots the void upgrade covers.
 	 *
 	 * <p>Drawn here rather than over the slots: this runs before them and in the same menu-local
 	 * coordinates, so the tint sits under the items instead of washing them out.
@@ -152,14 +157,14 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 			return;
 		}
 
-		Set<Integer> lockSlots = drawer.lockedSlots();
+		int displaySlot = drawer.displaySlot();
 		Set<Integer> voidSlots = drawer.voidedSlots();
 
 		for (int slot = 0; slot < getMenu().storageEnd(); slot++) {
 			int x = 8 + (slot % 9) * 18;
 			int y = DrawerMenu.FIRST_SLOT_Y + (slot / 9) * 18;
 
-			if (lockSlots.contains(slot)) {
+			if (slot == displaySlot) {
 				graphics.fill(x, y, x + 16, y + 16, LOCK_TINT);
 			}
 
@@ -167,7 +172,7 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 				graphics.fill(x, y, x + 16, y + 16, VOID_TINT);
 			}
 
-			boolean chosen = selecting == BEHAVIOUR_LOCK ? lockSlots.contains(slot)
+			boolean chosen = selecting == BEHAVIOUR_LOCK ? slot == displaySlot
 					: selecting == BEHAVIOUR_VOID && voidSlots.contains(slot);
 
 			if (chosen) {
@@ -183,10 +188,11 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	/**
 	 * Explains what right-clicking an upgrade does, on the upgrade itself.
 	 *
-	 * <p>The gesture is not one anything else in the game teaches, and an upgrade whose reach can
-	 * be changed looks exactly like one whose reach cannot. The hint goes here rather than on the
-	 * item so it appears where the gesture works, and the covered count comes with it because
-	 * "how far does this one actually reach" is the question the tint is answering.
+	 * <p>The gesture is not one anything else in the game teaches, and an upgrade with something
+	 * to choose looks exactly like one without. The hint goes here rather than on the item so it
+	 * appears where the gesture works. The void upgrade's covered count comes with it, because
+	 * "how far does this one actually reach" is the question its tint is answering; the lock
+	 * covers the whole drawer, so it has no reach worth stating.
 	 */
 	@Override
 	protected List<Component> getTooltipFromContainerItem(ItemStack stack) {
@@ -207,30 +213,34 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 		boolean lock = behaviour == BEHAVIOUR_LOCK;
 
 		hinted.add(Component.translatable(lock
-						? "lodestore.upgrade.adjust_locked"
+						? "lodestore.upgrade.choose_display"
 						: "lodestore.upgrade.adjust_voided")
 				.withStyle(ChatFormatting.GRAY));
 
 		DrawerBlockEntity drawer = drawer();
 
-		if (drawer != null) {
-			int covered = (lock ? drawer.lockedSlots() : drawer.voidedSlots()).size();
-			hinted.add(Component.translatable("lodestore.upgrade.coverage", covered, menu.storageEnd())
+		if (drawer != null && !lock) {
+			hinted.add(Component.translatable("lodestore.upgrade.coverage",
+							drawer.voidedSlots().size(), menu.storageEnd())
 					.withStyle(ChatFormatting.DARK_GRAY));
 		}
 
 		if (selecting == behaviour) {
-			hinted.add(Component.translatable("lodestore.upgrade.selecting").withStyle(ChatFormatting.DARK_GRAY));
+			hinted.add(Component.translatable(lock
+							? "lodestore.upgrade.selecting_display"
+							: "lodestore.upgrade.selecting")
+					.withStyle(ChatFormatting.DARK_GRAY));
 		}
 
 		return hinted;
 	}
 
 	/**
-	 * Right-click an upgrade to start choosing its slots; click storage slots to add or remove.
+	 * Right-click an upgrade to start choosing; then click a storage slot to show it on the face
+	 * (the lock) or to add or remove it (the void upgrade).
 	 *
-	 * <p>Shift-click acts on everything between the last slot clicked and this one, so a row or a
-	 * block of slots takes two clicks rather than nine.
+	 * <p>For the void upgrade, shift-click acts on everything between the last slot clicked and
+	 * this one, so a row or a block of slots takes two clicks rather than nine.
 	 */
 	@Override
 	protected void slotClicked(Slot slot, int slotId, int button, ContainerInput input) {
@@ -244,11 +254,37 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 		}
 
 		if (selecting != BEHAVIOUR_NONE && slot != null && slotId >= 0 && slotId < menu.storageEnd()) {
-			toggle(slotId, input == ContainerInput.QUICK_MOVE);
+			if (selecting == BEHAVIOUR_LOCK) {
+				chooseDisplay(slot, slotId);
+			} else {
+				toggle(slotId, input == ContainerInput.QUICK_MOVE);
+			}
+
 			return;
 		}
 
 		super.slotClicked(slot, slotId, button, input);
+	}
+
+	/**
+	 * Picks the slot the front face shows. That is one slot rather than a selection, so picking
+	 * ends the mode. An empty slot has nothing to show and is ignored rather than ending it —
+	 * unless it is the slot already chosen, which clicking again lets go of.
+	 */
+	private void chooseDisplay(Slot slot, int slotId) {
+		DrawerBlockEntity drawer = drawer();
+		boolean current = drawer != null && drawer.displaySlot() == slotId;
+
+		if (!slot.hasItem() && !current) {
+			return;
+		}
+
+		if (minecraft != null && minecraft.gameMode != null) {
+			minecraft.gameMode.handleInventoryButtonClick(getMenu().containerId,
+					DrawerMenu.targetButton(true, slotId));
+		}
+
+		selecting = BEHAVIOUR_NONE;
 	}
 
 	private void toggle(int slotId, boolean range) {
@@ -260,7 +296,7 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 
 		for (int slot = Math.min(from, slotId); slot <= Math.max(from, slotId); slot++) {
 			minecraft.gameMode.handleInventoryButtonClick(getMenu().containerId,
-					DrawerMenu.targetButton(selecting == BEHAVIOUR_LOCK, slot));
+					DrawerMenu.targetButton(false, slot));
 		}
 
 		lastToggled = slotId;

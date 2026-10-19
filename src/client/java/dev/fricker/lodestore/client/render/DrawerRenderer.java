@@ -1,7 +1,5 @@
 package dev.fricker.lodestore.client.render;
 
-import java.util.List;
-
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 
@@ -26,8 +24,9 @@ import dev.fricker.lodestore.block.DrawerBlockEntity;
 /**
  * Draws the stored item on the drawer's front face.
  *
- * <p>Shows whichever item the drawer holds most of. Without this a drawer gives the player no
- * feedback at all: a full drawer and an empty one look identical from the outside.
+ * <p>Shows the item in the slot chosen through the lock, or else whichever item the drawer holds
+ * most of. Without this a drawer gives the player no feedback at all: a full drawer and an empty
+ * one look identical from the outside.
  */
 public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, DrawerRenderState> {
 	/** Half a block, plus a sliver, to sit just proud of the face without z-fighting. */
@@ -38,8 +37,6 @@ public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, Dr
 	private static final float TEXT_SCALE = 0.014f;
 	/** The gold from the lock upgrade's own sprite, so a locked count is recognisably its doing. */
 	private static final int LOCKED_COLOR = 0xFFF2C852;
-	/** Ticks each item of a multi-item filter is shown for before the face moves to the next. */
-	private static final int FILTER_CYCLE_TICKS = 40;
 
 	private final ItemModelResolver itemModelResolver;
 	private final Font font;
@@ -90,26 +87,16 @@ public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, Dr
 
 		state.facing = drawer.getBlockState().getValue(DrawerBlock.FACING);
 
-		// The preview is synced on its own, so the client never holds the inventory.
+		// The preview is synced on its own, so the client never holds the inventory. It already
+		// honours the slot chosen through the lock; the server picks it.
 		ItemStack preview = drawer.previewItem();
-		List<ItemStack> locked = drawer.lockedItems();
 
-		// A locked drawer goes on showing its filter after the last item leaves. Without this an
-		// empty locked drawer is blank, which is exactly the drawer a player most needs labelled.
-		state.locked = !locked.isEmpty();
+		// A locked drawer goes on showing what it is for after the last item leaves. Without this
+		// an empty locked drawer is blank, which is exactly the drawer a player most needs labelled.
+		state.locked = drawer.isLocked();
 		state.ghost = preview.isEmpty() && state.locked;
 
-		// A filter may name several items and the face has room for one, so it takes them in
-		// turn. Drawn from the game time rather than a counter per drawer, so a wall of drawers
-		// cycles together instead of flickering out of step.
-		ItemStack filter = ItemStack.EMPTY;
-
-		if (state.locked) {
-			long time = drawer.getLevel() == null ? 0L : drawer.getLevel().getGameTime();
-			filter = locked.get((int) Math.floorMod(time / FILTER_CYCLE_TICKS, locked.size()));
-		}
-
-		ItemStack shown = state.ghost ? filter : preview;
+		ItemStack shown = state.ghost ? drawer.ghostItem() : preview;
 		state.blank = shown.isEmpty();
 		state.amount = drawer.previewCount();
 

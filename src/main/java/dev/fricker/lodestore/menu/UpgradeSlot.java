@@ -20,8 +20,8 @@ public class UpgradeSlot extends Slot {
 	}
 
 	/**
-	 * Duplicates are allowed: capacity pools, so two level-one locks reach as far as one
-	 * level-two. Refusing a second of the same upgrade would make that impossible to express.
+	 * Duplicates are allowed: capacity pools, so two void upgrades reach twice as far as one.
+	 * Refusing a second of the same upgrade would make that impossible to express.
 	 */
 	@Override
 	public boolean mayPlace(ItemStack stack) {

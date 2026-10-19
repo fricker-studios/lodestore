@@ -12,9 +12,6 @@ import dev.fricker.lodestore.api.drawer.DrawerUpgrade;
  */
 public final class LodestoreDrawerUpgrades {
 	public static final ResourceKey<DrawerUpgrade> LOCK = key("lock");
-	/** Levels differ only in how many storage slots they reach; the behaviour is the same. */
-	public static final ResourceKey<DrawerUpgrade> LOCK_2 = key("lock_2");
-	public static final ResourceKey<DrawerUpgrade> LOCK_3 = key("lock_3");
 	public static final ResourceKey<DrawerUpgrade> VOID = key("void");
 
 	private LodestoreDrawerUpgrades() {

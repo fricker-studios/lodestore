@@ -156,11 +156,7 @@ for r, c in ((0, 0), (0, 13), (13, 0), (13, 13)):
 
 
 def plate(inner_rows, light="W", mid="N", dark="G"):
-    """A carrier plate, bevelled light-to-dark, holding a 12x10 motif.
-
-    The metal names the upgrade's level: iron, then copper, then diamond. Colour carries that at a
-    glance in a hotbar, where a numeral would be four pixels tall and unreadable.
-    """
+    """A carrier plate, bevelled light-to-dark, holding a 12x10 motif."""
     assert len(inner_rows) == 10
     rows = ["." * 16, "." + light * 14 + ".", "." + light + mid * 12 + dark + "."]
     rows += ["." + light + inner.replace("N", mid) + dark + "." for inner in inner_rows]
@@ -211,15 +207,10 @@ BLOCKS = {
     "reinforced_drawer_side": REINFORCED_SIDE,
     "reinforced_drawer_top": REINFORCED_TOP,
 }
-# Levels two and three are the same padlock on a richer plate.
 LOCK_UPGRADE = plate(LOCK_MOTIF)
-LOCK_UPGRADE_2 = plate(LOCK_MOTIF, "j", "k", "l")
-LOCK_UPGRADE_3 = plate(LOCK_MOTIF, "n", "p", "q")
 
 ITEMS = {
     "lock_upgrade": LOCK_UPGRADE,
-    "lock_upgrade_2": LOCK_UPGRADE_2,
-    "lock_upgrade_3": LOCK_UPGRADE_3,
     "void_upgrade": VOID_UPGRADE,
 }
 
