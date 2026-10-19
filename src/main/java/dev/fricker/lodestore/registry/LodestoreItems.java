@@ -19,12 +19,23 @@ public final class LodestoreItems {
 	public static final DrawerUpgradeItem LOCK_UPGRADE = new DrawerUpgradeItem(
 			new Item.Properties().setId(LOCK_UPGRADE_KEY), LodestoreDrawerUpgrades.LOCK);
 
+	public static final ResourceKey<Item> VOID_UPGRADE_KEY = itemKey("void_upgrade");
+	/**
+	 * Locks a drawer and then destroys what will not fit, so a filling machine never backs up.
+	 *
+	 * <p>Locks as well as voids, rather than only voiding, so that one item is enough to set a
+	 * drawer up and the thing it destroys is always something the player named.
+	 */
+	public static final DrawerUpgradeItem VOID_UPGRADE = new DrawerUpgradeItem(
+			new Item.Properties().setId(VOID_UPGRADE_KEY), LodestoreDrawerUpgrades.VOID);
+
 	private LodestoreItems() {
 	}
 
 	/** Forces class-loading and performs registration. */
 	public static void initialize() {
 		Registry.register(BuiltInRegistries.ITEM, LOCK_UPGRADE_KEY, LOCK_UPGRADE);
+		Registry.register(BuiltInRegistries.ITEM, VOID_UPGRADE_KEY, VOID_UPGRADE);
 	}
 
 	private static ResourceKey<Item> itemKey(String name) {

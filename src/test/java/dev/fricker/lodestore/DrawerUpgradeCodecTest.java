@@ -52,8 +52,32 @@ class DrawerUpgradeCodecTest {
 
 	@Test
 	void theLockUpgradeActuallyLocks() throws IOException {
-		assertEquals(new DrawerUpgrade(true), decode("lock"),
+		assertEquals(new DrawerUpgrade(true, false), decode("lock"),
 				"the shipped lock upgrade must set locks_contents, or it is an inert item");
+	}
+
+	/**
+	 * The void upgrade locks as well as voids. Voiding is only ever applied to the item a drawer
+	 * is locked to, so an entry that voided without locking would be inert — and an item that
+	 * destroys things being quietly inert is the worse half of that bargain to get wrong.
+	 */
+	@Test
+	void theVoidUpgradeVoidsAndLocks() throws IOException {
+		assertEquals(new DrawerUpgrade(true, true), decode("void"),
+				"the shipped void upgrade must set both locks_contents and voids_overflow");
+	}
+
+	/**
+	 * Upgrades written before voiding existed must keep decoding, so the flag has to be optional
+	 * and default to the harmless reading.
+	 */
+	@Test
+	void anUpgradeWithoutTheVoidFlagDoesNotVoid() {
+		DrawerUpgrade parsed = DrawerUpgrade.CODEC
+				.parse(JsonOps.INSTANCE, JsonParser.parseString("{\"locks_contents\":true}"))
+				.getOrThrow();
+
+		assertFalse(parsed.voidsOverflow(), "a missing voids_overflow must not destroy anything");
 	}
 
 	/** The fallback has to be inert: an unresolved upgrade must not filter anything. */
@@ -61,6 +85,8 @@ class DrawerUpgradeCodecTest {
 	void theFallbackDoesNothing() {
 		assertFalse(DrawerUpgrade.FALLBACK.locksContents(),
 				"an unresolved upgrade must not lock a drawer the player never locked");
+		assertFalse(DrawerUpgrade.FALLBACK.voidsOverflow(),
+				"an unresolved upgrade must not destroy items the player never asked it to");
 	}
 
 	@Test

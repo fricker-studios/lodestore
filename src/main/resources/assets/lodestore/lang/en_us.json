@@ -3,5 +3,6 @@
   "block.lodestore.reinforced_drawer": "Reinforced Drawer",
   "block.lodestore.sturdy_drawer": "Sturdy Drawer",
   "item.lodestore.lock_upgrade": "Lock Upgrade",
+  "item.lodestore.void_upgrade": "Void Upgrade",
   "itemGroup.lodestore.general": "Lodestore"
 }

@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -22,6 +23,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.util.Mth;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BaseContainerBlockEntity;
@@ -80,7 +82,7 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 
 	public DrawerBlockEntity(BlockPos pos, BlockState state) {
 		super(LodestoreBlockEntities.DRAWER, pos, state);
-		this.items = NonNullList.withSize(rows() * 9, ItemStack.EMPTY);
+		this.items = NonNullList.withSize(getContainerSize(), ItemStack.EMPTY);
 	}
 
 	/** Rows come from the block, not the datapack, so the size is known before the level is. */
@@ -144,14 +146,62 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 
 	/** Whether any installed upgrade locks this drawer to one kind of item. */
 	private boolean locks() {
+		return anyUpgrade(DrawerUpgrade::locksContents);
+	}
+
+	/** Whether any installed upgrade destroys what this drawer has no room for. */
+	private boolean voidsOverflow() {
+		return anyUpgrade(DrawerUpgrade::voidsOverflow);
+	}
+
+	private boolean anyUpgrade(Predicate<DrawerUpgrade> flag) {
 		for (ItemStack installed : upgrades) {
 			if (installed.getItem() instanceof DrawerUpgradeItem item
-					&& resolveUpgrade(item.upgradeKey()).locksContents()) {
+					&& flag.test(resolveUpgrade(item.upgradeKey()))) {
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/**
+	 * Whether this drawer is currently destroying what it cannot hold.
+	 *
+	 * <p>Requires a filter as well as the flag. Voiding is only ever applied to the one item the
+	 * drawer was explicitly told it is for, so the worst a misrouted item can do is back the system
+	 * up — which is recoverable — rather than vanish, which is not.
+	 */
+	private boolean isVoiding() {
+		return voidsOverflow() && !lockedItem.isEmpty();
+	}
+
+	/** Whether the storage slots could take any of {@code stack} — the question voiding answers. */
+	private boolean hasRoomInStorage(ItemStack stack) {
+		for (int slot = 0; slot < storageSize(); slot++) {
+			ItemStack existing = getItem(slot);
+
+			if (existing.isEmpty()) {
+				return true;
+			}
+
+			if (ItemStack.isSameItemSameComponents(existing, stack)
+					&& existing.getCount() < existing.getMaxStackSize()) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Empties the overflow slot. Writes the list directly rather than going through
+	 * {@link #setItem}, which would call {@link #setChanged()} straight back into here.
+	 */
+	private void discardOverflow() {
+		if (isVoiding() && !items.get(overflowSlot()).isEmpty()) {
+			items.set(overflowSlot(), ItemStack.EMPTY);
+		}
 	}
 
 	private DrawerUpgrade resolveUpgrade(ResourceKey<DrawerUpgrade> key) {
@@ -169,12 +219,33 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 		return previewCount;
 	}
 
+	/**
+	 * Comparator output, measured over the storage slots only.
+	 *
+	 * <p>{@code AbstractContainerMenu.getRedstoneSignalFromContainer} divides by
+	 * {@link #getContainerSize()}, which here counts the overflow slot that can never hold
+	 * anything — so a completely full drawer would read 14 and never 15.
+	 */
+	public int comparatorSignal() {
+		float fill = 0.0F;
+
+		for (int slot = 0; slot < storageSize(); slot++) {
+			ItemStack stack = getItem(slot);
+
+			if (!stack.isEmpty()) {
+				fill += (float) stack.getCount() / getMaxStackSize(stack);
+			}
+		}
+
+		return Mth.lerpDiscrete(fill / storageSize(), 0, 15);
+	}
+
 	/** Picks the most numerous item in the drawer, counting across every slot holding it. */
 	private void recomputePreview() {
 		List<ItemStack> kinds = new ArrayList<>();
 		List<Long> totals = new ArrayList<>();
 
-		for (int slot = 0; slot < getContainerSize(); slot++) {
+		for (int slot = 0; slot < storageSize(); slot++) {
 			ItemStack stack = getItem(slot);
 
 			if (stack.isEmpty()) {
@@ -220,6 +291,10 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 			return;
 		}
 
+		// Before the preview is recomputed, so a stack passing through the overflow slot never
+		// reaches the face — it was never stored.
+		discardOverflow();
+
 		ItemStack previousItem = previewItem;
 		long previousCount = previewCount;
 		ItemStack previousLock = lockedItem;
@@ -263,9 +338,41 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 		return out.buildResult();
 	}
 
+	/** How many slots actually store goods — what the chest screen shows. */
+	public int storageSize() {
+		return rows() * 9;
+	}
+
+	/**
+	 * The overflow slot: one slot past the storage, never drawn in the chest screen.
+	 *
+	 * <p>It exists so that a voiding drawer can <em>accept</em> an insert it has no room for.
+	 * Nothing else can express that. The lock is enforced in {@link #canPlaceItem}, which only
+	 * answers yes or no, and a hopper never even asks: {@code HopperBlockEntity.ejectItems} calls
+	 * {@code isFullContainer} first and gives up before any per-slot check. That test passes only
+	 * if some slot reports room, so a drawer that wants to keep draining a hopper has to have one.
+	 *
+	 * <p>Whatever lands here is discarded by {@link #setChanged()} on the same tick, so the slot
+	 * reads empty to the next caller and the drawer never looks full to a hopper. A full stack is
+	 * taken in one go, because {@code tryMoveInItem} hands an empty slot the whole stack — which is
+	 * what keeps throughput the same for a pipe moving 64 as for a hopper moving one.
+	 */
+	public int overflowSlot() {
+		return storageSize();
+	}
+
+	/**
+	 * Deliberately one larger than {@link #storageSize()}.
+	 *
+	 * <p>The vanilla {@code ChestMenu} is kept: {@code checkContainerSize} is a minimum rather than
+	 * an exact match, and the menu lays out exactly {@code rows * 9} slots, so the overflow slot is
+	 * simply not in the screen and no custom menu or screen is needed. It has to be a real index
+	 * below this number rather than a virtual one past the end, because the transfer API's sided
+	 * wrapper indexes a backing list sized from exactly this method and would throw otherwise.
+	 */
 	@Override
 	public int getContainerSize() {
-		return rows() * 9;
+		return storageSize() + 1;
 	}
 
 	@Override
@@ -343,6 +450,13 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity {
 		// Checked ahead of the nesting rule, and here rather than in the menu, for the same
 		// reason: a filter the GUI enforced alone would be bypassed by piping items in.
 		if (locks() && !lockedItem.isEmpty() && !ItemStack.isSameItemSameComponents(lockedItem, stack)) {
+			return false;
+		}
+
+		// The overflow slot is not storage, so it takes an item only when there is genuinely
+		// nowhere else for it to go. Asking here rather than relying on it being tried last
+		// keeps the slot honest to a caller that probes it on its own.
+		if (slot == overflowSlot() && (!isVoiding() || hasRoomInStorage(stack))) {
 			return false;
 		}
 

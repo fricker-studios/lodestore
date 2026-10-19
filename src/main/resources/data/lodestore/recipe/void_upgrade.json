@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "O": "minecraft:obsidian",
+    "I": "minecraft:iron_ingot"
+  },
+  "pattern": [
+    " O ",
+    "OIO",
+    " I "
+  ],
+  "result": {
+    "id": "lodestore:void_upgrade"
+  }
+}
