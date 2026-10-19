@@ -179,6 +179,12 @@ to be inside at the time.
 It is enforced in `Container#canPlaceItem`, next to the nesting rule and for the same reason: a
 filter applied only by the chest screen would be bypassed by piping items in.
 
+That one hook really does cover everything, which is worth recording because it is easy to assume
+rather than check. Hoppers reach it directly. Other mods' pipes reach it too: fabric's transfer API
+wraps any `Container` block entity automatically, and that wrapper calls `canPlaceItem` like
+anything else. The API also patches hoppers, but that hook bails out when vanilla already found a
+`Container` — so for a drawer it never runs, and there is no second path to keep in step.
+
 A locked drawer reads differently on the face. Its count is drawn in the lock's own gold rather than
 white, and once emptied it keeps showing its filter — drawn smaller, over a count of zero — because
 an empty locked drawer is exactly the one that most needs labelling. That is the whole point of
