@@ -55,9 +55,8 @@ import dev.fricker.lodestore.storage.DrawerOverflow;
  * drawer without the upgrade, a parked remainder against a slot with none, an aborted transaction
  * against a committed one.
  *
- * <p>A stack upgrade covers the whole drawer and gathers the same item into its first slots after
- * every change, so a setup that spreads one item over several slots of a stacked drawer will not
- * stay spread; the tests here use different items where slots must stay apart.
+ * <p>A stack upgrade covers the whole drawer. Stacks stay where they are put; what moves on its own
+ * is only what a slot holds past its capacity, when that capacity drops.
  */
 public class StorageLayerGameTests {
 	private static final BlockPos DRAWER = new BlockPos(1, 1, 1);
@@ -398,46 +397,193 @@ public class StorageLayerGameTests {
 	}
 
 	/**
-	 * With a stack upgrade, the same item spread over several slots is gathered into the first.
+	 * A stack moved out of a deep slot goes where it is put, and only that stack goes.
 	 *
-	 * <p>The drawer does this after every change, into slots that already hold the item and only as
-	 * far as they have room, so a full slot takes nothing and a partial merge leaves the rest where
-	 * it was. A plain drawer leaves everything where it was put, as a chest would.
+	 * <p>The drawer does not gather an item into one slot after a change; a version that did
+	 * followed a placed stack with the rest of its slot, which is not what moving a stack means.
 	 */
 	@GameTest
-	public void aStackUpgradeGathersAnItemIntoOneSlot(GameTestHelper helper) {
-		DrawerBlockEntity stacked = stackedDrawer(helper, DRAWER, LodestoreBlocks.BASIC_DRAWER);
-		DrawerBlockEntity plain = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+	public void aMovedStackStaysWhereItIsPut(GameTestHelper helper) {
+		DrawerBlockEntity drawer = stackedDrawer(helper, LodestoreBlocks.BASIC_DRAWER);
+		park(helper, drawer, 5, Items.OAK_LOG, STACK * DEPTH);
 
-		for (DrawerBlockEntity drawer : List.of(stacked, plain)) {
-			drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, STACK));
-			drawer.contents().setItem(5, new ItemStack(Items.COBBLESTONE, STACK));
-			drawer.contents().setItem(7, new ItemStack(Items.DIRT, 10));
-			drawer.setChanged();
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		AbstractContainerMenu menu = open(helper, drawer, player);
+		menu.clicked(5, 0, ContainerInput.PICKUP, player);
+		menu.clicked(0, 0, ContainerInput.PICKUP, player);
+
+		if (!menu.getCarried().isEmpty()) {
+			throw helper.assertionException("the stack did not go into the empty slot; cursor holds " + describe(menu.getCarried()));
 		}
 
-		if (stacked.total(0) != 2 * STACK || stacked.total(5) != 0) {
-			throw helper.assertionException("a stacked drawer did not gather its cobblestone: slot 0 holds "
-					+ stacked.total(0) + ", slot 5 " + stacked.total(5));
+		if (drawer.total(0) != STACK || drawer.total(5) != STACK * DEPTH - STACK) {
+			throw helper.assertionException("expected one stack in slot 0 and the rest left in slot 5, got "
+					+ drawer.total(0) + " and " + drawer.total(5));
 		}
 
-		if (stacked.total(7) != 10 || !stacked.contents().visible(7).is(Items.DIRT)) {
-			throw helper.assertionException("gathering touched an unrelated item in slot 7");
+		// Two half stacks of the same item in two slots stay two.
+		drawer.contents().setItem(1, new ItemStack(Items.COBBLESTONE, 30));
+		drawer.contents().setItem(2, new ItemStack(Items.COBBLESTONE, 30));
+		drawer.setChanged();
+
+		if (drawer.total(1) != 30 || drawer.total(2) != 30) {
+			throw helper.assertionException("the drawer gathered stacks on its own: " + drawer.total(1) + " and " + drawer.total(2));
 		}
 
-		if (plain.total(0) != STACK || plain.total(5) != STACK) {
-			throw helper.assertionException("a plain drawer gathered items it should have left alone: slot 0 holds "
-					+ plain.total(0) + ", slot 5 " + plain.total(5));
+		helper.succeed();
+	}
+
+	/**
+	 * Taking the stack upgrade out spreads what was parked into legal stacks of their own.
+	 *
+	 * <p>The pair: an upgrade the contents still need cannot be taken out — the slot refuses the
+	 * pickup on both sides, and the menu's synced flag is what the client's slot predicts from —
+	 * until enough slots are empty for the parked items to go somewhere.
+	 */
+	@GameTest
+	public void takingTheStackUpgradeOutSpreadsItsStacks(GameTestHelper helper) {
+		DrawerBlockEntity drawer = stackedDrawer(helper, LodestoreBlocks.BASIC_DRAWER);
+		park(helper, drawer, 0, Items.COBBLESTONE, 200);
+
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		AbstractContainerMenu menu = open(helper, drawer, player);
+		int upgradeIndex = drawer.storageSize();
+		menu.clicked(upgradeIndex, 0, ContainerInput.PICKUP, player);
+
+		if (!menu.getCarried().is(LodestoreItems.STACK_UPGRADE) || !drawer.upgrades().isEmpty()) {
+			throw helper.assertionException("the upgrade did not come out; cursor holds " + describe(menu.getCarried()));
 		}
 
-		// Fill slot 0 to the brim; a stack put elsewhere now has nowhere to go and stays.
-		park(helper, stacked, 0, Items.COBBLESTONE, STACK * DEPTH - 2 * STACK);
-		stacked.contents().setItem(5, new ItemStack(Items.COBBLESTONE, STACK));
-		stacked.setChanged();
+		long sum = 0;
 
-		if (stacked.total(0) != STACK * DEPTH || stacked.total(5) != STACK) {
-			throw helper.assertionException("a full slot took items it had no room for: slot 0 holds "
-					+ stacked.total(0) + ", slot 5 " + stacked.total(5));
+		for (int slot = 0; slot < drawer.storageSize(); slot++) {
+			sum += drawer.total(slot);
+
+			if (drawer.total(slot) > STACK) {
+				throw helper.assertionException("slot " + slot + " still holds " + drawer.total(slot) + " with no stack upgrade");
+			}
+		}
+
+		if (sum != 200 || drawer.total(0) != STACK || drawer.total(3) != 200 - 3 * STACK) {
+			throw helper.assertionException("expected 200 spread as 64, 64, 64, 8 from slot 0, got " + sum
+					+ " with slot 0 at " + drawer.total(0) + " and slot 3 at " + drawer.total(3));
+		}
+
+		helper.succeed();
+	}
+
+	@GameTest
+	public void anUpgradeTheContentsNeedCannotBeTakenOut(GameTestHelper helper) {
+		DrawerBlockEntity drawer = stackedDrawer(helper, LodestoreBlocks.BASIC_DRAWER);
+		park(helper, drawer, 0, Items.COBBLESTONE, STACK * DEPTH);
+
+		for (int slot = 1; slot < drawer.storageSize(); slot++) {
+			drawer.contents().setItem(slot, new ItemStack(Items.DIRT, STACK));
+		}
+
+		drawer.setChanged();
+
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		AbstractContainerMenu menu = open(helper, drawer, player);
+		int upgradeIndex = drawer.storageSize();
+		menu.broadcastChanges();
+
+		if (menu.getSlot(upgradeIndex).mayPickup(player)) {
+			throw helper.assertionException("the slot lets the upgrade out of a drawer with nowhere to spread 192 cobblestone");
+		}
+
+		menu.clicked(upgradeIndex, 0, ContainerInput.PICKUP, player);
+		menu.clicked(upgradeIndex, 0, ContainerInput.QUICK_MOVE, player);
+
+		if (drawer.upgrades().size() != 1 || !menu.getCarried().isEmpty() || drawer.total(0) != STACK * DEPTH) {
+			throw helper.assertionException("the upgrade left anyway: " + drawer.upgrades().size() + " installed, cursor "
+					+ describe(menu.getCarried()) + ", slot 0 at " + drawer.total(0));
+		}
+
+		// Two empty slots are not enough for three stacks' worth; three are.
+		drawer.contents().setItem(25, ItemStack.EMPTY);
+		drawer.contents().setItem(26, ItemStack.EMPTY);
+		drawer.setChanged();
+		menu.broadcastChanges();
+
+		if (menu.getSlot(upgradeIndex).mayPickup(player)) {
+			throw helper.assertionException("two empty slots were taken as room for 192 cobblestone");
+		}
+
+		drawer.contents().setItem(24, ItemStack.EMPTY);
+		drawer.setChanged();
+		menu.broadcastChanges();
+
+		if (!menu.getSlot(upgradeIndex).mayPickup(player)) {
+			throw helper.assertionException("three empty slots should be room enough for 192 cobblestone");
+		}
+
+		// Taken out by something other than the menu — a pack change, say — nothing is lost: the
+		// slot is over capacity, reports no room, and drains normally.
+		drawer.contents().setItem(24, new ItemStack(Items.DIRT, STACK));
+		drawer.contents().setItem(25, new ItemStack(Items.DIRT, STACK));
+		drawer.contents().setItem(26, new ItemStack(Items.DIRT, STACK));
+		drawer.upgradeContainer().removeItemNoUpdate(0);
+		drawer.setChanged();
+
+		if (drawer.total(0) != STACK * DEPTH || drawer.slotCapacity(0, new ItemStack(Items.COBBLESTONE)) != STACK) {
+			throw helper.assertionException("an over-capacity slot lost items or kept its capacity: "
+					+ drawer.total(0) + " at capacity " + drawer.slotCapacity(0, new ItemStack(Items.COBBLESTONE)));
+		}
+
+		long intoSlot;
+
+		try (Transaction transaction = Transaction.openOuter()) {
+			intoSlot = drawer.storage().getSlot(0).insert(ItemVariant.of(Items.COBBLESTONE), 1, transaction);
+			transaction.commit();
+		}
+
+		if (intoSlot != 0) {
+			throw helper.assertionException("an over-capacity slot accepted more");
+		}
+
+		long extracted;
+
+		try (Transaction transaction = Transaction.openOuter()) {
+			extracted = drawer.storage().extract(ItemVariant.of(Items.COBBLESTONE), 150, transaction);
+			transaction.commit();
+		}
+
+		if (extracted != 150 || drawer.total(0) != STACK * DEPTH - 150) {
+			throw helper.assertionException("draining an over-capacity slot went wrong: took " + extracted
+					+ ", left " + drawer.total(0));
+		}
+
+		helper.succeed();
+	}
+
+	/** An upgrade taken out through the menu goes back in through it, and the drawer deepens again. */
+	@GameTest
+	public void anUpgradeTakenOutGoesBackIn(GameTestHelper helper) {
+		DrawerBlockEntity drawer = stackedDrawer(helper, LodestoreBlocks.BASIC_DRAWER);
+		park(helper, drawer, 0, Items.COBBLESTONE, 100);
+
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		AbstractContainerMenu menu = open(helper, drawer, player);
+		int upgradeIndex = drawer.storageSize();
+
+		menu.clicked(upgradeIndex, 0, ContainerInput.PICKUP, player);
+
+		if (!drawer.upgrades().isEmpty() || drawer.total(0) != STACK || drawer.total(1) != 100 - STACK) {
+			throw helper.assertionException("taking the upgrade out did not spread 100 into 64 and 36: "
+					+ drawer.total(0) + " and " + drawer.total(1));
+		}
+
+		menu.clicked(upgradeIndex, 0, ContainerInput.PICKUP, player);
+
+		if (drawer.upgrades().size() != 1 || !menu.getCarried().isEmpty()) {
+			throw helper.assertionException("the upgrade did not go back in; cursor holds " + describe(menu.getCarried()));
+		}
+
+		if (drawer.slotCapacity(0, new ItemStack(Items.COBBLESTONE)) != STACK * DEPTH
+				|| drawer.total(0) != STACK || drawer.total(1) != 100 - STACK) {
+			throw helper.assertionException("putting the upgrade back changed the contents or not the capacity: "
+					+ drawer.total(0) + " and " + drawer.total(1) + " at " + drawer.slotCapacity(0, new ItemStack(Items.COBBLESTONE)));
 		}
 
 		helper.succeed();
@@ -612,12 +758,25 @@ public class StorageLayerGameTests {
 						+ (overflow == null ? "nothing" : overflow.total()));
 			}
 
+			// Placed back without its upgrade, which dropped separately: the 200 are all there, spread
+			// into legal stacks because the slot they were parked in no longer holds that many.
 			BlockPos again = new BlockPos(3, 1, 1);
 			DrawerBlockEntity placed = place(helper, again, LodestoreBlocks.STURDY_DRAWER);
 			placed.applyComponentsFromItemStack(dropped);
+			long back = 0;
 
-			if (placed.total(0) != 200 || !placed.contents().visible(0).is(Items.COBBLESTONE)) {
-				throw helper.assertionException("placing the drop back gave " + placed.total(0) + " cobblestone, not 200");
+			for (int slot = 0; slot < placed.storageSize(); slot++) {
+				if (placed.contents().visible(slot).is(Items.COBBLESTONE)) {
+					back += placed.total(slot);
+				}
+
+				if (placed.total(slot) > STACK) {
+					throw helper.assertionException("slot " + slot + " holds " + placed.total(slot) + " with no stack upgrade");
+				}
+			}
+
+			if (back != 200) {
+				throw helper.assertionException("placing the drop back gave " + back + " cobblestone, not 200");
 			}
 
 			helper.succeed();
@@ -625,56 +784,6 @@ public class StorageLayerGameTests {
 	}
 
 	// --- capacity changes and transactions ---------------------------------------
-
-	/** Removing the upgrade under a parked remainder destroys nothing; the slot drains normally. */
-	@GameTest
-	public void removingTheStackUpgradeDestroysNothing(GameTestHelper helper) {
-		DrawerBlockEntity drawer = stackedDrawer(helper, LodestoreBlocks.BASIC_DRAWER);
-		park(helper, drawer, 0, Items.COBBLESTONE, 200);
-
-		drawer.upgradeContainer().removeItemNoUpdate(0);
-		drawer.setChanged();
-
-		if (drawer.slotCapacity(0, new ItemStack(Items.COBBLESTONE)) != STACK) {
-			throw helper.assertionException("capacity should have fallen back to a stack, is "
-					+ drawer.slotCapacity(0, new ItemStack(Items.COBBLESTONE)));
-		}
-
-		if (drawer.total(0) != 200) {
-			throw helper.assertionException("removing the upgrade changed the count to " + drawer.total(0));
-		}
-
-		long intoSlot;
-
-		try (Transaction transaction = Transaction.openOuter()) {
-			intoSlot = drawer.storage().getSlot(0).insert(ItemVariant.of(Items.COBBLESTONE), 1, transaction);
-			transaction.commit();
-		}
-
-		if (intoSlot != 0) {
-			throw helper.assertionException("an over-capacity slot accepted more");
-		}
-
-		// The drawer as a whole still has room elsewhere, which is the point: the slot is what is full.
-		if (insert(drawer, Items.COBBLESTONE, 1) != 1 || drawer.total(1) != 1) {
-			throw helper.assertionException("the drawer's other slots stopped taking items");
-		}
-
-		long extracted;
-
-		try (Transaction transaction = Transaction.openOuter()) {
-			extracted = drawer.storage().extract(ItemVariant.of(Items.COBBLESTONE), 150, transaction);
-			transaction.commit();
-		}
-
-		if (extracted != 150 || drawer.total(0) != 50 || drawer.remainder(0) != 0
-				|| drawer.contents().visible(0).getCount() != 50) {
-			throw helper.assertionException("draining an over-capacity slot went wrong: took " + extracted
-					+ ", left " + drawer.total(0) + " with " + drawer.remainder(0) + " parked");
-		}
-
-		helper.succeed();
-	}
 
 	/** An aborted insert leaves the remainder untouched; a committed one changes it. */
 	@GameTest
@@ -712,8 +821,8 @@ public class StorageLayerGameTests {
 		DrawerBlockEntity stacked = stackedDrawer(helper, DRAWER, LodestoreBlocks.BASIC_DRAWER);
 		DrawerBlockEntity plain = place(helper, plainPos, LodestoreBlocks.BASIC_DRAWER);
 
-		// Twenty-seven stacks each: a plain drawer is full; a stacked one gathers them into seven
-		// slots and is a quarter full.
+		// Twenty-seven stacks each: a plain drawer is full; the storage packs a stacked one's into
+		// seven slots, and it is a quarter full.
 		for (int slot = 0; slot < plain.storageSize(); slot++) {
 			plain.contents().setItem(slot, new ItemStack(Items.COBBLESTONE, STACK));
 		}

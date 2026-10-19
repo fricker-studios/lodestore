@@ -318,13 +318,62 @@ public class DrawerBlockEntity extends BlockEntity
 	 * on the upgrade, and the deepest installed upgrade's numbers are the drawer's.
 	 */
 	public int slotCapacity(int slot, ItemStack stack) {
+		if (slot < 0 || slot >= storageSize()) {
+			return 0;
+		}
+
+		return capacityWith(stack, stackMultiplier(), unstackableDepth());
+	}
+
+	/** The capacity formula, for a given depth — the drawer's, or the one it would have. */
+	private static int capacityWith(ItemStack stack, int multiplier, int unstackable) {
 		int perStack = stack.isEmpty() ? NOMINAL_STACK : Math.max(1, stack.getMaxStackSize());
 
-		if (!isStackedSlot(slot)) {
+		if (multiplier <= 1 && unstackable <= 1) {
 			return perStack;
 		}
 
-		return perStack == 1 ? unstackableDepth() : perStack * stackMultiplier();
+		return perStack == 1 ? unstackable : perStack * multiplier;
+	}
+
+	/**
+	 * Whether the upgrade in this slot may be taken out: only if what the drawer holds would still
+	 * fit without it, spreading what is parked into empty slots. Otherwise the slot refuses the
+	 * pickup and its tooltip says why — the alternative was contents stranded over capacity, or
+	 * spilled on the floor, neither of which anyone taking out an upgrade meant.
+	 */
+	public boolean canRemoveUpgrade(int upgradeSlot) {
+		if (upgradeSlot < 0 || upgradeSlot >= upgrades.size() || upgrades.get(upgradeSlot).isEmpty()) {
+			return true;
+		}
+
+		int multiplier = 1;
+		int unstackable = 1;
+
+		for (int slot = 0; slot < upgrades.size(); slot++) {
+			if (slot != upgradeSlot && upgrades.get(slot).getItem() instanceof DrawerUpgradeItem item) {
+				DrawerUpgrade upgrade = resolveUpgrade(item.upgradeKey());
+				multiplier = Math.max(multiplier, upgrade.stacksPerSlot());
+				unstackable = Math.max(unstackable, upgrade.unstackablePerSlot());
+			}
+		}
+
+		int without = multiplier;
+		int withoutUnstackable = unstackable;
+		return contents.fitsUnder(stack -> capacityWith(stack, without, withoutUnstackable));
+	}
+
+	/** Which upgrade slots may be emptied right now, one bit each, for the menu to sync. */
+	private int removableUpgrades() {
+		int mask = 0;
+
+		for (int slot = 0; slot < upgrades.size(); slot++) {
+			if (canRemoveUpgrade(slot)) {
+				mask |= 1 << slot;
+			}
+		}
+
+		return mask;
 	}
 
 	/** How many more of a slot's item are parked behind its visible stack. */
@@ -815,11 +864,9 @@ public class DrawerBlockEntity extends BlockEntity
 			return;
 		}
 
-		// With a stack upgrade, the same item spread over several slots is gathered into the first
-		// ones. After the rebalance the menu has done, before anything is measured or sent.
-		if (stacks()) {
-			contents.compact();
-		}
+		// A slot over its capacity — an upgrade taken out, a level lowered — spreads what is parked
+		// into empty slots. A no-op while everything fits, so it never moves what a player placed.
+		contents.spread();
 
 		ItemStack previousItem = previewItem;
 		long previousCount = previewCount;
@@ -1085,13 +1132,18 @@ public class DrawerBlockEntity extends BlockEntity
 	// --- menu --------------------------------------------------------------------
 
 	/**
-	 * What the menu needs that its slots cannot carry: whether a lock is installed, which decides
-	 * whether the filter grid is there at all. One int, synced by the menu's own data-slot path.
+	 * What the menu needs that its slots cannot carry: whether a lock is installed, and which
+	 * upgrades may be taken out. Two ints, synced by the menu's own data-slot path, so the client's
+	 * slots predict a refused pickup instead of flickering.
 	 */
 	private final ContainerData menuData = new ContainerData() {
 		@Override
 		public int get(int index) {
-			return lockCapacity() > 0 ? 1 : 0;
+			return switch (index) {
+				case DrawerMenu.DATA_LOCKED -> lockCapacity() > 0 ? 1 : 0;
+				case DrawerMenu.DATA_REMOVABLE -> removableUpgrades();
+				default -> 0;
+			};
 		}
 
 		@Override

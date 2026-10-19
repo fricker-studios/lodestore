@@ -454,54 +454,74 @@ public final class DrawerContents implements Container {
 	}
 
 	/**
-	 * Merges every item into the earliest slots that hold it, as far as their capacity allows.
+	 * Moves what a slot holds past its capacity into empty slots, as far as there are any.
 	 *
-	 * <p>What a stack upgrade is for: with slots that hold several stacks, the same item spread
-	 * over several slots is clutter, so the drawer gathers it after every change. Only into slots
-	 * that already hold the item, which is also what keeps a lock's claim honest — an empty locked
-	 * slot is never filled by this. Totals are preserved exactly; a partial merge leaves the rest
-	 * where it was.
-	 *
-	 * <p>Safe to run from the menu's {@code setChanged}: vanilla reads a slot afresh each time it
-	 * looks, and the one stack it holds across a call — the one it is moving out — is always the
-	 * source of that move, never something this would take from.
+	 * <p>What happens when the capacity under a slot drops: a stack upgrade taken out, a pack
+	 * lowering a level, a broken drawer placed without its upgrade. The parked items go back out
+	 * into legal stacks of their own, in empty slots, so the drawer looks as it would have without
+	 * the upgrade. Whatever finds no empty slot stays parked, over capacity, where it reports no
+	 * room and drains — nothing is ever lowered. Never runs while every slot is within capacity, so
+	 * it cannot move anything a player has just placed.
 	 *
 	 * @return whether anything moved
 	 */
-	public boolean compact() {
+	public boolean spread() {
 		boolean moved = false;
 
-		for (int target = 0; target < visible.size(); target++) {
-			ItemStack kind = kindOf(target);
+		for (int slot = 0; slot < visible.size(); slot++) {
+			ItemStack kind = kindOf(slot);
 
 			if (kind.isEmpty()) {
 				continue;
 			}
 
-			for (int source = target + 1; source < visible.size(); source++) {
-				long room = room(target, kind);
+			long excess = total(slot) - rules.capacity(slot, kind);
 
-				if (room <= 0) {
-					break;
-				}
-
-				ItemStack other = kindOf(source);
-
-				if (other.isEmpty() || !ItemStack.isSameItemSameComponents(kind, other)) {
+			for (int empty = 0; empty < visible.size() && excess > 0; empty++) {
+				if (!kindOf(empty).isEmpty()) {
 					continue;
 				}
 
-				long amount = Math.min(room, total(source));
+				long chunk = Math.min(excess, room(empty, kind));
 
-				if (amount > 0) {
-					take(source, amount);
-					add(target, kind, amount);
+				if (chunk > 0) {
+					take(slot, chunk);
+					add(empty, kind, chunk);
+					excess -= chunk;
 					moved = true;
 				}
 			}
 		}
 
 		return moved;
+	}
+
+	/**
+	 * Whether everything here would fit if each item's capacity were {@code capacityOf}, counting
+	 * the empty slots the excess could spread into. The question a drawer asks before it lets an
+	 * upgrade be taken out.
+	 */
+	public boolean fitsUnder(java.util.function.ToIntFunction<ItemStack> capacityOf) {
+		int empties = 0;
+		long needed = 0;
+
+		for (int slot = 0; slot < visible.size(); slot++) {
+			ItemStack kind = kindOf(slot);
+
+			if (kind.isEmpty()) {
+				empties++;
+				continue;
+			}
+
+			long capacity = Math.max(1, capacityOf.applyAsInt(kind));
+			long excess = total(slot) - capacity;
+
+			if (excess > 0) {
+				needed += (excess + capacity - 1) / capacity;
+			}
+		}
+
+		return needed <= empties;
 	}
 
 	/**

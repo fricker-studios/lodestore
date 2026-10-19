@@ -329,15 +329,20 @@ same way to 64, 128 and 256. An item that does not stack holds `unstackable_per_
 32. The second number exists because four times one is a poor upgrade. Neither pools: the deepest
 installed level decides, so a level one beside a level three is a level three.
 
-Removing the upgrade from a drawer whose slots hold more than a stack destroys nothing: the slot is
-over capacity, reports no room, and drains normally. Nothing in a drawer ever lowers a count except
-a withdrawal.
+Stacks stay where they are put. A version of this gathered the same item into one slot after every
+change, and it followed a stack a player had just moved with the rest of its slot, which is not what
+moving a stack means. The drawer never moves anything of its own accord except what a slot holds
+past its capacity: when the stack upgrade is taken out — or a pack lowers a level, or a broken
+drawer is placed without its upgrade — the parked items spread back out into legal stacks of their
+own, in empty slots, so the drawer looks as it would have without the upgrade. An upgrade the
+contents still need cannot be taken out: the slot refuses the pickup, on both sides, and its
+tooltip says why. Whatever a pack change leaves with nowhere to go stays parked, over capacity,
+where it reports no room and drains normally. Nothing in a drawer ever lowers a count except a
+withdrawal.
 
-With the upgrade installed the drawer gathers, after every change, the same item from later slots
-into the first slot that holds it, as far as that slot has room. Only into slots already holding the
-item — an empty locked slot is never filled this way — and totals are exact; a partial merge leaves
-the rest where it was. Without the upgrade a drawer leaves everything where it was put, as a chest
-does, because merging two half stacks into one is not something anyone asked a chest to do.
+Hoppers and pipes top up a slot already holding an item before they open a new one, so a line
+into a stacked drawer fills it deep rather than wide. A sorter that honours
+`Slot#getMaxStackSize` merges to the slot's full capacity too.
 
 What a player sees: the slot draws its real total — 256, not the 64 a stack would say — shrunk when
 four digits would not fit, and the tooltip says that total out of what the slot could hold. Clicking
@@ -584,10 +589,11 @@ refused; a swap onto a parked remainder is refused, and the same swap on a slot 
 goes through; shift-click in fills through the parked space, and out drains a slot stack by stack;
 the menu's slots enforce the lock and nesting, and let an empty drawer in; a basic drawer spills its parked items as legal
 stacks, and a sturdy one keeps them in both components and gives them back when placed; removing
-the upgrade destroys nothing; an aborted insert leaves no trace; the comparator measures each slot
-against its own capacity; the three levels give the right numbers to a block, a pearl and a sword,
-and the deepest decides; a stacked drawer gathers an item into one slot and a plain one does not;
-upgrades are refused as goods through both doors. Migration gets a pair of its own: a tag written in the old shape by hand
+the upgrade spreads what was parked into legal stacks, cannot be taken out while the contents need
+it, and goes back in; a moved stack stays where it is put; an aborted insert leaves no trace; the
+comparator measures each slot against its own capacity; the three levels give the right numbers to
+a block, a pearl and a sword, and the deepest decides; upgrades are refused as goods through both
+doors. Migration gets a pair of its own: a tag written in the old shape by hand
 loads unchanged, and the same tag with a remainder table restores the count. And one assertion
 guards the premise — the block entity is not a `Container`, and a hopper finds nothing at it.
 

@@ -14,5 +14,6 @@
   "lodestore.slot.stored": "%s of %s in this slot",
   "lodestore.upgrade.adjust_locked": "Right-click to adjust locked slots",
   "lodestore.upgrade.coverage": "Covering %s of %s slots",
+  "lodestore.upgrade.needed": "Holds too much to take this out",
   "lodestore.upgrade.selecting": "Click a slot to add or remove, shift-click for a range"
 }

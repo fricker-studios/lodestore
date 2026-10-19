@@ -220,13 +220,20 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 			return tooltip;
 		}
 
+		List<Component> hinted = new ArrayList<>(tooltip);
+
+		// An upgrade the contents still need stays put, and a slot that silently refuses a click
+		// looks broken; this is the one line that explains it.
+		if (!menu.removable(hoveredSlot.index - menu.storageEnd())) {
+			hinted.add(Component.translatable("lodestore.upgrade.needed").withStyle(ChatFormatting.RED));
+		}
+
 		UpgradeBehaviour behaviour = behaviourOf(stack);
 
 		if (behaviour == null) {
-			return tooltip;
+			return hinted;
 		}
 
-		List<Component> hinted = new ArrayList<>(tooltip);
 		hinted.add(Component.translatable("lodestore.upgrade.adjust_locked").withStyle(ChatFormatting.GRAY));
 
 		if (drawer != null) {

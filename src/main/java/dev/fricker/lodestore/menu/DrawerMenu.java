@@ -39,9 +39,10 @@ public class DrawerMenu extends AbstractContainerMenu {
 	/** Upgrade slots wrap at three, so the panel is never wider than it needs to be. */
 	public static final int UPGRADES_PER_ROW = 3;
 
-	/** The one value the client needs that slots cannot carry: whether a lock is installed. */
+	/** What the client needs that slots cannot carry: whether a lock is installed, and which upgrades may be taken out. */
 	public static final int DATA_LOCKED = 0;
-	public static final int DATA_COUNT = 1;
+	public static final int DATA_REMOVABLE = 1;
+	public static final int DATA_COUNT = 2;
 
 	/** Button ids are a behaviour and a storage slot packed together; storage never exceeds 54. */
 	private static final int BUTTON_BEHAVIOUR_STRIDE = 256;
@@ -90,9 +91,11 @@ public class DrawerMenu extends AbstractContainerMenu {
 		}
 
 		for (int slot = 0; slot < this.upgradeSlots; slot++) {
+			int bit = 1 << slot;
 			addSlot(new UpgradeSlot(upgrades, slot,
 					PANEL_SLOT_X + (slot % UPGRADES_PER_ROW) * SLOT_PITCH,
-					FIRST_SLOT_Y + (slot / UPGRADES_PER_ROW) * SLOT_PITCH));
+					FIRST_SLOT_Y + (slot / UPGRADES_PER_ROW) * SLOT_PITCH,
+					() -> (menuData.get(DATA_REMOVABLE) & bit) != 0));
 		}
 
 		// Same arithmetic as the vanilla chest, so the player's own inventory sits where muscle
@@ -125,6 +128,11 @@ public class DrawerMenu extends AbstractContainerMenu {
 	/** Whether a lock is installed, from the synced menu data. */
 	public boolean locked() {
 		return menuData.get(DATA_LOCKED) != 0;
+	}
+
+	/** Whether the upgrade in this column slot may be taken out, from the synced menu data. */
+	public boolean removable(int upgradeSlot) {
+		return (menuData.get(DATA_REMOVABLE) & (1 << upgradeSlot)) != 0;
 	}
 
 	public int storageEnd() {
@@ -181,7 +189,7 @@ public class DrawerMenu extends AbstractContainerMenu {
 	public ItemStack quickMoveStack(Player player, int index) {
 		Slot slot = slots.get(index);
 
-		if (!slot.hasItem()) {
+		if (!slot.hasItem() || !slot.mayPickup(player)) {
 			return ItemStack.EMPTY;
 		}
 
