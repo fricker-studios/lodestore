@@ -11,7 +11,8 @@
 			"dev.fricker.lodestore.testmod.LodestoreTestmod"
 		],
 		"fabric-gametest": [
-			"dev.fricker.lodestore.testmod.DrawerGameTests"
+			"dev.fricker.lodestore.testmod.DrawerGameTests",
+			"dev.fricker.lodestore.testmod.StackCeilingGameTests"
 		],
 		"fabric-client-gametest": [
 			"dev.fricker.lodestore.testmod.client.DrawerRenderClientTest",
