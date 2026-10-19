@@ -14,6 +14,8 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
+import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
+import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 
@@ -60,7 +62,7 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 
 				// One of each tier, left to right, so the three sprites can be compared directly.
 				// The mixed one is locked and shows the slot chosen for its face — iron, though it
-				// holds more logs — so it proves the choice beats the most-common default.
+				// holds far more logs — so it proves the choice beats the most-common default.
 				single(level, new BlockPos(-4, Y, 0), LodestoreBlocks.BASIC_DRAWER, Items.COBBLESTONE, 320);
 				single(level, new BlockPos(-2, Y, 0), LodestoreBlocks.STURDY_DRAWER, Items.DIAMOND, 128);
 				mixed(level, new BlockPos(0, Y, 0), LodestoreBlocks.REINFORCED_DRAWER);
@@ -110,8 +112,8 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 			LOGGER.info("[lodestore] gui screenshot -> {}", context.takeScreenshot("drawer-gui-open"));
 
 			// Hover the first upgrade so its help text is in the shot. Right-clicking an upgrade
-			// to choose its slots is not a gesture anything else in the game teaches, so the hint
-			// is the only thing that makes it discoverable — worth a picture of its own.
+			// to choose the face's slot is not a gesture anything else in the game teaches, so the
+			// hint is the only thing that makes it discoverable — worth a picture of its own.
 			int[] cursor = context.computeOnClient(client -> {
 				// The reinforced drawer's screen: 176 of chest plus a 66-wide panel, and the
 				// vanilla chest's own height for six rows.
@@ -126,6 +128,21 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 			context.getInput().setCursorPos(cursor[0], cursor[1]);
 			context.waitTicks(20);
 			LOGGER.info("[lodestore] tooltip screenshot -> {}", context.takeScreenshot("drawer-upgrade-tooltip"));
+
+			// A slot of a stacked drawer draws its real total, and the tooltip says out of how much.
+			// Both are things only a picture can check. Worth one of its own.
+			int[] stacked = context.computeOnClient(client -> {
+				double scale = client.getWindow().getGuiScale();
+				int left = (client.getWindow().getGuiScaledWidth() - (176 + 66)) / 2;
+				int top = (client.getWindow().getGuiScaledHeight() - (114 + 6 * 18)) / 2;
+
+				// Middle of storage slot 0.
+				return new int[] {(int) ((left + 8 + 8) * scale), (int) ((top + 18 + 8) * scale)};
+			});
+
+			context.getInput().setCursorPos(stacked[0], stacked[1]);
+			context.waitTicks(20);
+			LOGGER.info("[lodestore] stacked slot screenshot -> {}", context.takeScreenshot("drawer-stacked-slot-tooltip"));
 		}
 	}
 
@@ -138,9 +155,9 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 
 		int slot = 0;
 
-		while (amount > 0 && slot < drawer.getContainerSize()) {
+		while (amount > 0 && slot < drawer.storageSize()) {
 			int count = Math.min(amount, item.getDefaultMaxStackSize());
-			drawer.setItem(slot++, new ItemStack(item, count));
+			drawer.contents().setItem(slot++, new ItemStack(item, count));
 			amount -= count;
 		}
 
@@ -160,7 +177,7 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 	/**
 	 * A locked drawer that has been emptied — the state the lock exists for.
 	 *
-	 * <p>A lock on an empty drawer claims the first item in, so this stocks one, lets the lock take
+	 * <p>The lock claims its filter from the first item in, so this stocks one, lets the lock take
 	 * it, and then empties the drawer again. Its face should still name the item.
 	 */
 	private static void lockedAndEmptied(ServerLevel level, BlockPos pos, Block block, Item item) {
@@ -171,10 +188,10 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 		}
 
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
-		drawer.setItem(0, new ItemStack(item, 1));
+		drawer.contents().setItem(0, new ItemStack(item, 1));
 		drawer.setChanged();
 
-		drawer.setItem(0, ItemStack.EMPTY);
+		drawer.contents().setItem(0, ItemStack.EMPTY);
 		drawer.setChanged();
 	}
 
@@ -185,22 +202,34 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 			return;
 		}
 
-		drawer.setItem(0, new ItemStack(Items.OAK_LOG, 64));
-		drawer.setItem(1, new ItemStack(Items.IRON_INGOT, 32));
-		drawer.setItem(2, new ItemStack(Items.REDSTONE, 16));
-		drawer.setItem(3, new ItemStack(LodestoreBlocks.STURDY_DRAWER, 2));
+		drawer.contents().setItem(0, new ItemStack(Items.OAK_LOG, 64));
+		drawer.contents().setItem(1, new ItemStack(Items.IRON_INGOT, 32));
+		drawer.contents().setItem(2, new ItemStack(Items.REDSTONE, 16));
+		drawer.contents().setItem(3, new ItemStack(LodestoreBlocks.STURDY_DRAWER, 2));
 		drawer.setChanged();
 
 		// This is the drawer the GUI screenshot opens. The lock's gold marks the one slot the face
-		// shows and the void's purple the row it covers, moved off the first row so the two tints
-		// can be told apart — overlapping them would prove only that something was drawn.
+		// shows; the lock, void and stack upgrades all cover the whole drawer and tint nothing else.
+		// The face points at the logs while the stack upgrade sorts, so the sort leaves them in
+		// slot 0 for the stacked-slot shot.
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+		drawer.chooseDisplaySlot(0);
 		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
-		drawer.chooseDisplaySlot(1);
+		drawer.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE));
 
-		for (int slot = 0; slot < 9; slot++) {
-			drawer.toggleVoidTarget(slot);
-			drawer.toggleVoidTarget(18 + slot);
+		// Slot 0 is filled to its four stacks: the stacked-slot screenshot hovers it, and the slot
+		// should draw 256 where a plain one would draw 64, with the tooltip saying out of how much.
+		try (Transaction transaction = Transaction.openOuter()) {
+			drawer.storage().getSlot(0).insert(ItemVariant.of(Items.OAK_LOG), 192, transaction);
+			transaction.commit();
+		}
+
+		// Then at the iron, wherever the sort put it, so the face shows 32 iron over 256 logs.
+		for (int slot = 0; slot < drawer.storageSize(); slot++) {
+			if (drawer.contents().visible(slot).is(Items.IRON_INGOT)) {
+				drawer.chooseDisplaySlot(slot);
+				break;
+			}
 		}
 	}
 

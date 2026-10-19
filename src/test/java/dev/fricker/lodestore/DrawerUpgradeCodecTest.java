@@ -50,13 +50,9 @@ class DrawerUpgradeCodecTest {
 		}
 	}
 
-	/**
-	 * The lock covers the whole drawer, so it has no reach to state. A capacity here would read
-	 * as a lock that covers some slots and not others, which it no longer is.
-	 */
 	@Test
 	void theLockUpgradeActuallyLocks() throws IOException {
-		assertEquals(new DrawerUpgrade(true, false, 0), decode("lock"),
+		assertEquals(new DrawerUpgrade(true, false, 1, 1), decode("lock"),
 				"the shipped lock upgrade must set locks_contents, or it is an inert item");
 	}
 
@@ -64,27 +60,55 @@ class DrawerUpgradeCodecTest {
 	 * The void upgrade voids without locking.
 	 *
 	 * <p>It used to have to lock as well, because voiding was a drawer-wide switch and the filter
-	 * was the only thing keeping it from destroying whatever arrived. Voiding is now scoped by the
-	 * slots it targets, and only ever applies to what one of those slots already holds, so the
-	 * lock flag is no longer what makes it safe.
+	 * was the only thing keeping it from destroying whatever arrived. Voiding now only ever applies
+	 * to what the drawer already holds, so the lock flag is no longer what makes it safe.
 	 */
 	@Test
 	void theVoidUpgradeVoidsWithoutLocking() throws IOException {
-		assertEquals(new DrawerUpgrade(false, true, 9), decode("void"),
+		assertEquals(new DrawerUpgrade(false, true, 1, 1), decode("void"),
 				"the shipped void upgrade must void, and no longer needs to lock to be safe");
 	}
 
 	/**
-	 * An upgrade that does not say how far it reaches reaches nothing. Defaulting to some
-	 * non-zero number would hand a pack's half-written entry control of slots nobody granted it.
+	 * The stack upgrade sets its two depths and nothing else; the layer it needs is what the rest
+	 * of this change built. Both default to one everywhere they are not written, so every upgrade
+	 * that predates them is a one-stack upgrade without saying so.
 	 */
 	@Test
-	void anUpgradeWithoutACapacityReachesNothing() {
-		DrawerUpgrade parsed = DrawerUpgrade.CODEC
-				.parse(JsonOps.INSTANCE, JsonParser.parseString("{\"locks_contents\":true}"))
-				.getOrThrow();
+	void theStackUpgradeStacks() throws IOException {
+		assertEquals(new DrawerUpgrade(false, false, 4, 8), decode("stack"),
+				"the shipped stack upgrade must set stacks_per_slot above one, or it is an inert item");
+		assertTrue(decode("stack").stacks());
+		assertFalse(decode("lock").stacks(), "a lock written without stacks_per_slot must read as depth one");
+	}
 
-		assertEquals(0, parsed.slotCapacity());
+	/** Levels are data: 256, 512 and 1,024 of a 64-stack, and 8, 16 and 32 of a tool. */
+	@Test
+	void stackLevelsGoDeeperThanOneAnother() throws IOException {
+		DrawerUpgrade one = decode("stack");
+		DrawerUpgrade two = decode("stack_2");
+		DrawerUpgrade three = decode("stack_3");
+
+		assertEquals(4, one.stacksPerSlot());
+		assertEquals(8, two.stacksPerSlot());
+		assertEquals(16, three.stacksPerSlot());
+		assertEquals(8, one.unstackablePerSlot());
+		assertEquals(16, two.unstackablePerSlot());
+		assertEquals(32, three.unstackablePerSlot());
+	}
+
+	/**
+	 * The lock covers the whole drawer, so it has no reach to state, and a pack written when it
+	 * did must still load: the old {@code slot_capacity} is ignored rather than rejected.
+	 */
+	@Test
+	void anOldLockWithAReachStillDecodes() {
+		DataResult<DrawerUpgrade> parsed = DrawerUpgrade.CODEC.parse(JsonOps.INSTANCE,
+				JsonParser.parseString("{\"locks_contents\":true,\"slot_capacity\":9}"));
+
+		assertTrue(parsed.isSuccess(), () -> "an old lock entry failed to decode: "
+				+ parsed.error().map(Object::toString).orElse("?"));
+		assertEquals(new DrawerUpgrade(true, false, 1, 1), parsed.getOrThrow());
 	}
 
 	/**
@@ -107,8 +131,8 @@ class DrawerUpgradeCodecTest {
 				"an unresolved upgrade must not lock a drawer the player never locked");
 		assertFalse(DrawerUpgrade.FALLBACK.voidsOverflow(),
 				"an unresolved upgrade must not destroy items the player never asked it to");
-		assertEquals(0, DrawerUpgrade.FALLBACK.slotCapacity(),
-				"an unresolved upgrade must not reach any slots");
+		assertFalse(DrawerUpgrade.FALLBACK.stacks(),
+				"an unresolved upgrade must not deepen any slots");
 	}
 
 	@Test

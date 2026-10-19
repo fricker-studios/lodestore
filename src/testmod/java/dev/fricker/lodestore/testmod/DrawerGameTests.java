@@ -15,7 +15,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.tags.BlockTags;
-import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -34,13 +33,16 @@ import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.phys.AABB;
 
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.fabricmc.fabric.api.transfer.v1.item.ContainerStorage;
+import net.fabricmc.fabric.api.transfer.v1.item.ItemStorage;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
+import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
 import dev.fricker.lodestore.block.DrawerBlockEntity;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
+import dev.fricker.lodestore.registry.LodestoreComponents;
 import dev.fricker.lodestore.registry.LodestoreItems;
+import dev.fricker.lodestore.storage.DrawerOverflow;
 import dev.fricker.lodestore.util.PersistenceSelfCheck;
 
 /**
@@ -60,29 +62,43 @@ public class DrawerGameTests {
 	}
 
 	/**
-	 * The container is one slot larger than the storage, and that slot is the overflow slot a
-	 * voiding drawer accepts into. The chest screen must not grow with it: the whole reason the
-	 * slot can exist at all is that {@code ChestMenu} checks a minimum and lays out exactly
-	 * {@code rows * 9}, so a drawer that handed back a menu sized from the container would put a
-	 * slot on screen that swallows whatever is dropped into it.
+	 * A drawer is not a {@code Container}, and a hopper cannot find one at it.
+	 *
+	 * <p>This is the premise of the storage layer, pinned: vanilla's hopper reaches a
+	 * {@code Container} before it reaches a {@code Storage}, and Fabric's patch takes the
+	 * transfer-API route only when {@code getContainerAt} finds nothing. A drawer that became a
+	 * container again — by delegation, say — would silently hand every hopper back to arithmetic
+	 * that cannot name a slot. The chest alongside proves the probe itself works.
 	 */
 	@GameTest
-	public void theOverflowSlotIsOutsideTheStorage(GameTestHelper helper) {
-		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+	public void aDrawerIsNotAContainer(GameTestHelper helper) {
+		BlockPos drawerPos = new BlockPos(1, 1, 1);
+		DrawerBlockEntity drawer = place(helper, drawerPos, LodestoreBlocks.BASIC_DRAWER);
+		helper.setBlock(new BlockPos(3, 1, 1), Blocks.CHEST.defaultBlockState());
 
-		if (drawer.getContainerSize() != drawer.storageSize() + 1) {
-			throw helper.assertionException("expected exactly one slot past the storage, container is "
-					+ drawer.getContainerSize() + " against " + drawer.storageSize() + " stored");
+		if (drawer instanceof net.minecraft.world.Container) {
+			throw helper.assertionException("the drawer block entity is a Container again; hoppers will "
+					+ "bypass its storage — see the README, 'Why the storage layer exists'");
 		}
 
-		if (drawer.overflowSlot() != drawer.storageSize()) {
-			throw helper.assertionException("the overflow slot should sit just past the storage, is "
-					+ drawer.overflowSlot());
+		if (HopperBlockEntity.getContainerAt(helper.getLevel(), helper.absolutePos(drawerPos)) != null) {
+			throw helper.assertionException("a hopper can find a Container at the drawer");
 		}
 
-		// A drawer nobody has upgraded must not quietly eat things through it.
-		expect(helper, drawer.canPlaceItem(drawer.overflowSlot(), new ItemStack(Items.COBBLESTONE)), false,
-				"a drawer with no void upgrade accepted an item into its overflow slot");
+		if (HopperBlockEntity.getContainerAt(helper.getLevel(), helper.absolutePos(new BlockPos(3, 1, 1))) == null) {
+			throw helper.assertionException("the probe cannot find the chest either; the test is measuring nothing");
+		}
+
+		Storage<ItemVariant> storage = ItemStorage.SIDED.find(helper.getLevel(), helper.absolutePos(drawerPos), Direction.UP);
+
+		if (storage != drawer.storage()) {
+			throw helper.assertionException("ItemStorage.SIDED does not resolve to the drawer's own storage, got " + storage);
+		}
+
+		if (drawer.contents().getContainerSize() != drawer.storageSize()) {
+			throw helper.assertionException("the contents are a different size from the storage: "
+					+ drawer.contents().getContainerSize() + " against " + drawer.storageSize());
+		}
 
 		helper.succeed();
 	}
@@ -94,7 +110,7 @@ public class DrawerGameTests {
 	public void basicDrawerSpillsContentsWhenBroken(GameTestHelper helper) {
 		BlockPos pos = new BlockPos(1, 1, 1);
 		DrawerBlockEntity drawer = place(helper, pos, LodestoreBlocks.BASIC_DRAWER);
-		drawer.setItem(0, new ItemStack(Items.DIAMOND, 5));
+		drawer.contents().setItem(0, new ItemStack(Items.DIAMOND, 5));
 
 		destroy(helper, pos);
 
@@ -129,7 +145,7 @@ public class DrawerGameTests {
 	private void assertKeepsContents(GameTestHelper helper, Block block) {
 		BlockPos pos = new BlockPos(1, 1, 1);
 		DrawerBlockEntity drawer = place(helper, pos, block);
-		drawer.setItem(0, new ItemStack(Items.DIAMOND, 5));
+		drawer.contents().setItem(0, new ItemStack(Items.DIAMOND, 5));
 
 		destroy(helper, pos);
 
@@ -172,25 +188,51 @@ public class DrawerGameTests {
 
 	// --- nesting -----------------------------------------------------------
 
+	/**
+	 * The rank rule applies to a drawer with contents. An empty drawer is a block item like any
+	 * other and compounds nothing, so every tier takes it.
+	 */
 	@GameTest
 	public void drawersRefuseToNestInsideThemselves(GameTestHelper helper) {
 		DrawerBlockEntity basic = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
 		DrawerBlockEntity sturdy = place(helper, new BlockPos(2, 1, 1), LodestoreBlocks.STURDY_DRAWER);
 		DrawerBlockEntity reinforced = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.REINFORCED_DRAWER);
 
-		ItemStack sturdyItem = new ItemStack(LodestoreBlocks.STURDY_DRAWER);
-		ItemStack reinforcedItem = new ItemStack(LodestoreBlocks.REINFORCED_DRAWER);
+		ItemStack sturdyItem = filledDrawer(LodestoreBlocks.STURDY_DRAWER);
+		ItemStack reinforcedItem = filledDrawer(LodestoreBlocks.REINFORCED_DRAWER);
 
-		expect(helper, sturdy.canPlaceItem(0, sturdyItem), false, "sturdy accepted a sturdy drawer");
-		expect(helper, sturdy.canPlaceItem(0, reinforcedItem), false, "sturdy accepted a reinforced drawer");
-		expect(helper, reinforced.canPlaceItem(0, sturdyItem), true, "reinforced rejected a sturdy drawer");
-		expect(helper, reinforced.canPlaceItem(0, reinforcedItem), false, "reinforced accepted a reinforced drawer");
+		expect(helper, sturdy.canStore(0, sturdyItem), false, "sturdy accepted a sturdy drawer with contents");
+		expect(helper, sturdy.canStore(0, reinforcedItem), false, "sturdy accepted a reinforced drawer with contents");
+		expect(helper, reinforced.canStore(0, sturdyItem), true, "reinforced rejected a sturdy drawer with contents");
+		expect(helper, reinforced.canStore(0, reinforcedItem), false, "reinforced accepted a reinforced drawer with contents");
 
 		// A basic drawer spills when broken, so nesting into it compounds nothing.
-		expect(helper, basic.canPlaceItem(0, reinforcedItem), true, "basic rejected a drawer");
-		expect(helper, sturdy.canPlaceItem(0, new ItemStack(Items.DIAMOND)), true, "sturdy rejected a plain item");
+		expect(helper, basic.canStore(0, reinforcedItem), true, "basic rejected a drawer");
+		expect(helper, sturdy.canStore(0, new ItemStack(Items.DIAMOND)), true, "sturdy rejected a plain item");
+
+		// Empty, every tier takes every tier.
+		for (DrawerBlockEntity drawer : List.of(basic, sturdy, reinforced)) {
+			for (Block block : List.of(LodestoreBlocks.BASIC_DRAWER, LodestoreBlocks.STURDY_DRAWER,
+					LodestoreBlocks.REINFORCED_DRAWER)) {
+				expect(helper, drawer.canStore(0, new ItemStack(block)), true,
+						drawer.tier() + " refused an empty " + block.getName().getString());
+			}
+		}
+
+		// Parked counts are contents too, even with the container component empty.
+		ItemStack parked = new ItemStack(LodestoreBlocks.REINFORCED_DRAWER);
+		parked.set(LodestoreComponents.DRAWER_OVERFLOW,
+				new DrawerOverflow(List.of(new DrawerOverflow.Entry(0, 100))));
+		expect(helper, reinforced.canStore(0, parked), false, "reinforced accepted a reinforced drawer with parked counts");
 
 		helper.succeed();
+	}
+
+	/** A drawer item holding five diamonds — what the rank rule is about. */
+	private static ItemStack filledDrawer(Block block) {
+		ItemStack stack = new ItemStack(block);
+		stack.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.DIAMOND, 5))));
+		return stack;
 	}
 
 	// --- tools ---------------------------------------------------------------
@@ -247,11 +289,10 @@ public class DrawerGameTests {
 			throw helper.assertionException(String.join("; ", failures));
 		}
 
-		// Guard against the check silently covering nothing, which would make it useless.
-		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
-
-		if (drawer.getContainerSize() == 0) {
-			throw helper.assertionException("no containers were exercised; the self-check is vacuous");
+		// Guard against the check silently covering nothing, which would make it useless. A drawer
+		// is no longer a Container, so a check that only knew containers would skip every one.
+		if (!PersistenceSelfCheck.covers(LodestoreBlocks.BASIC_DRAWER)) {
+			throw helper.assertionException("the self-check does not cover drawers; it is vacuous");
 		}
 
 		helper.succeed();
@@ -294,6 +335,26 @@ public class DrawerGameTests {
 				obsidian, iron, obsidian,
 				ItemStack.EMPTY, iron, ItemStack.EMPTY)), "void_upgrade", LodestoreItems.VOID_UPGRADE);
 
+		// The stack upgrade: chests around an iron ingot, over a second ingot — the same shape in
+		// the block that means "more room".
+		ItemStack chest = new ItemStack(Items.CHEST);
+		assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				ItemStack.EMPTY, chest, ItemStack.EMPTY,
+				chest, iron, chest,
+				ItemStack.EMPTY, iron, ItemStack.EMPTY)), "stack_upgrade", LodestoreItems.STACK_UPGRADE);
+
+		// Levels two and three: the previous level in copper, then in diamond, as the lock's are.
+		ItemStack copper = new ItemStack(Items.COPPER_INGOT);
+		ItemStack diamond = new ItemStack(Items.DIAMOND);
+		assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				ItemStack.EMPTY, copper, ItemStack.EMPTY,
+				copper, new ItemStack(LodestoreItems.STACK_UPGRADE), copper,
+				ItemStack.EMPTY, copper, ItemStack.EMPTY)), "stack_upgrade_2", LodestoreItems.STACK_UPGRADE_2);
+		assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				ItemStack.EMPTY, diamond, ItemStack.EMPTY,
+				diamond, new ItemStack(LodestoreItems.STACK_UPGRADE_2), diamond,
+				ItemStack.EMPTY, diamond, ItemStack.EMPTY)), "stack_upgrade_3", LodestoreItems.STACK_UPGRADE_3);
+
 		helper.succeed();
 	}
 
@@ -323,14 +384,17 @@ public class DrawerGameTests {
 	 */
 	@GameTest
 	public void everyRecipeHasAnUnlockAdvancement(GameTestHelper helper) {
-		// Folder per recipe: the drawers are decorations, the upgrade is not.
-		Map<String, String> recipes = Map.of(
-				"basic_drawer", "decorations",
-				"basic_drawer_from_chest", "decorations",
-				"sturdy_drawer", "decorations",
-				"reinforced_drawer", "decorations",
-				"lock_upgrade", "misc",
-				"void_upgrade", "misc");
+		// Folder per recipe: the drawers are decorations, the upgrades are not.
+		Map<String, String> recipes = Map.ofEntries(
+				Map.entry("basic_drawer", "decorations"),
+				Map.entry("basic_drawer_from_chest", "decorations"),
+				Map.entry("sturdy_drawer", "decorations"),
+				Map.entry("reinforced_drawer", "decorations"),
+				Map.entry("lock_upgrade", "misc"),
+				Map.entry("void_upgrade", "misc"),
+				Map.entry("stack_upgrade", "misc"),
+				Map.entry("stack_upgrade_2", "misc"),
+				Map.entry("stack_upgrade_3", "misc"));
 
 		for (Map.Entry<String, String> entry : recipes.entrySet()) {
 			String recipe = entry.getKey();
@@ -363,10 +427,10 @@ public class DrawerGameTests {
 	public void previewShowsTheMostCommonItem(GameTestHelper helper) {
 		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
 
-		drawer.setItem(0, new ItemStack(Items.REDSTONE, 10));
-		drawer.setItem(1, new ItemStack(Items.OAK_LOG, 30));
-		drawer.setItem(2, new ItemStack(Items.OAK_LOG, 30));
-		drawer.setItem(3, new ItemStack(Items.DIAMOND, 50));
+		drawer.contents().setItem(0, new ItemStack(Items.REDSTONE, 10));
+		drawer.contents().setItem(1, new ItemStack(Items.OAK_LOG, 30));
+		drawer.contents().setItem(2, new ItemStack(Items.OAK_LOG, 30));
+		drawer.contents().setItem(3, new ItemStack(Items.DIAMOND, 50));
 		drawer.setChanged();
 
 		if (!drawer.previewItem().is(Items.OAK_LOG)) {
@@ -418,7 +482,7 @@ public class DrawerGameTests {
 	public void hopperExtractsFromDrawer(GameTestHelper helper) {
 		BlockPos drawerPos = new BlockPos(1, 2, 1);
 		DrawerBlockEntity drawer = place(helper, drawerPos, LodestoreBlocks.BASIC_DRAWER);
-		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 64));
+		drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 64));
 		helper.setBlock(drawerPos.below(), Blocks.HOPPER.defaultBlockState());
 
 		helper.runAtTickTime(100, () -> {
@@ -470,7 +534,7 @@ public class DrawerGameTests {
 		});
 	}
 
-	/** A hopper must not be able to pipe a drawer past the nesting rule. */
+	/** A hopper must not be able to pipe a drawer with contents past the nesting rule. */
 	@GameTest(maxTicks = 200)
 	public void hopperCannotNestSturdyIntoSturdy(GameTestHelper helper) {
 		BlockPos drawerPos = new BlockPos(1, 1, 1);
@@ -478,11 +542,30 @@ public class DrawerGameTests {
 		helper.setBlock(drawerPos.above(), Blocks.HOPPER.defaultBlockState());
 
 		HopperBlockEntity hopper = helper.getBlockEntity(drawerPos.above(), HopperBlockEntity.class);
-		hopper.setItem(0, new ItemStack(LodestoreBlocks.STURDY_DRAWER, 4));
+		hopper.setItem(0, filledDrawer(LodestoreBlocks.STURDY_DRAWER));
 
 		helper.runAtTickTime(180, () -> {
 			if (!drawer.isEmpty()) {
-				throw helper.assertionException("a hopper nested a sturdy drawer inside a sturdy drawer");
+				throw helper.assertionException("a hopper nested a sturdy drawer with contents inside a sturdy drawer");
+			}
+
+			helper.succeed();
+		});
+	}
+
+	/** The pair: the same hopper moves an empty sturdy drawer in, because empty ones nest anywhere. */
+	@GameTest(maxTicks = 200)
+	public void hopperNestsAnEmptyDrawerAnywhere(GameTestHelper helper) {
+		BlockPos drawerPos = new BlockPos(1, 1, 1);
+		DrawerBlockEntity drawer = place(helper, drawerPos, LodestoreBlocks.STURDY_DRAWER);
+		helper.setBlock(drawerPos.above(), Blocks.HOPPER.defaultBlockState());
+
+		HopperBlockEntity hopper = helper.getBlockEntity(drawerPos.above(), HopperBlockEntity.class);
+		hopper.setItem(0, new ItemStack(LodestoreBlocks.REINFORCED_DRAWER, 4));
+
+		helper.runAtTickTime(180, () -> {
+			if (total(drawer, LodestoreBlocks.REINFORCED_DRAWER.asItem()) == 0) {
+				throw helper.assertionException("a hopper could not put an empty reinforced drawer into a sturdy drawer");
 			}
 
 			helper.succeed();
@@ -500,15 +583,14 @@ public class DrawerGameTests {
 			throw helper.assertionException("empty drawer should read 0 on a comparator");
 		}
 
-		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 64));
+		drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 64));
 		drawer.setChanged();
 
 		if (signal(helper, drawerPos) <= 0) {
 			throw helper.assertionException("drawer holds items but comparator still reads 0");
 		}
 
-		// The overflow slot must not count towards fullness. Measured over the container rather
-		// than the storage, a completely full drawer tops out at 14 and never reads full.
+		// Each slot is measured against its own capacity, and every slot here holds exactly one.
 		fillStorage(drawer, Items.COBBLESTONE);
 
 		if (signal(helper, drawerPos) != 15) {
@@ -578,8 +660,8 @@ public class DrawerGameTests {
 	@GameTest
 	public void lockClaimsEverythingTheDrawerAlreadyHolds(GameTestHelper helper) {
 		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
-		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 12));
-		drawer.setItem(14, new ItemStack(Items.DIRT, 3));
+		drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 12));
+		drawer.contents().setItem(14, new ItemStack(Items.DIRT, 3));
 		drawer.setChanged();
 
 		if (!drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE))) {
@@ -604,14 +686,14 @@ public class DrawerGameTests {
 					+ describe(drawer.lockedItems().getFirst()) + " out of nowhere");
 		}
 
-		expect(helper, drawer.canPlaceItem(0, new ItemStack(Items.REDSTONE)), true,
+		expect(helper, drawer.canStore(0, new ItemStack(Items.REDSTONE)), true,
 				"an empty locked drawer must take its first item");
 
-		drawer.setItem(0, new ItemStack(Items.REDSTONE, 4));
+		drawer.contents().setItem(0, new ItemStack(Items.REDSTONE, 4));
 		drawer.setChanged();
 
 		expectClaims(helper, drawer, Items.REDSTONE);
-		expect(helper, drawer.canPlaceItem(5, new ItemStack(Items.DIAMOND)), false,
+		expect(helper, drawer.canStore(5, new ItemStack(Items.DIAMOND)), false,
 				"once the first item is in, the drawer must refuse a second kind");
 
 		helper.succeed();
@@ -621,18 +703,23 @@ public class DrawerGameTests {
 	@GameTest
 	public void aLockedDrawerRefusesEverythingElse(GameTestHelper helper) {
 		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
-		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 12));
+		drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 12));
 		drawer.setChanged();
 
-		expect(helper, drawer.canPlaceItem(0, new ItemStack(Items.DIRT)), true,
+		expect(helper, drawer.canStore(0, new ItemStack(Items.DIRT)), true,
 				"an unlocked drawer should take anything; the test proves nothing otherwise");
 
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
 
+		if (drawer.lockedSlots().size() != drawer.storageSize()) {
+			throw helper.assertionException("the lock should cover all " + drawer.storageSize()
+					+ " slots, covers " + drawer.lockedSlots().size());
+		}
+
 		for (int slot : new int[] {0, 1, drawer.storageSize() - 1}) {
-			expect(helper, drawer.canPlaceItem(slot, new ItemStack(Items.COBBLESTONE)), true,
+			expect(helper, drawer.canStore(slot, new ItemStack(Items.COBBLESTONE)), true,
 					"slot " + slot + " must accept what the lock claimed");
-			expect(helper, drawer.canPlaceItem(slot, new ItemStack(Items.DIRT)), false,
+			expect(helper, drawer.canStore(slot, new ItemStack(Items.DIRT)), false,
 					"slot " + slot + " must refuse anything else");
 		}
 
@@ -640,8 +727,8 @@ public class DrawerGameTests {
 	}
 
 	/**
-	 * The lock is enforced in {@code canPlaceItem} for the same reason the nesting rule is: a
-	 * filter the screen applied alone would be bypassed by piping items in.
+	 * The lock is enforced on the storage's insert for the same reason the nesting rule is: a
+	 * filter the chest screen applied alone would be bypassed by piping items in.
 	 *
 	 * <p>One hopper carries both kinds, so each assertion is the other's control: dirt staying put
 	 * would also pass for a drawer that refused everything, and cobblestone arriving would also
@@ -651,7 +738,7 @@ public class DrawerGameTests {
 	public void aHopperIsHeldToTheLock(GameTestHelper helper) {
 		BlockPos drawerPos = new BlockPos(1, 1, 1);
 		DrawerBlockEntity drawer = place(helper, drawerPos, LodestoreBlocks.BASIC_DRAWER);
-		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 1));
+		drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 1));
 		drawer.setChanged();
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
 
@@ -684,14 +771,13 @@ public class DrawerGameTests {
 	public void oneTransferCannotSlipTwoKindsPastAnEmptyLock(GameTestHelper helper) {
 		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
-		ContainerStorage storage = ContainerStorage.of(drawer, null);
 
 		long cobblestone;
 		long dirt;
 
 		try (Transaction transaction = Transaction.openOuter()) {
-			cobblestone = storage.insert(ItemVariant.of(Items.COBBLESTONE), 5, transaction);
-			dirt = storage.insert(ItemVariant.of(Items.DIRT), 5, transaction);
+			cobblestone = drawer.storage().insert(ItemVariant.of(Items.COBBLESTONE), 5, transaction);
+			dirt = drawer.storage().insert(ItemVariant.of(Items.DIRT), 5, transaction);
 			transaction.commit();
 		}
 
@@ -711,19 +797,18 @@ public class DrawerGameTests {
 	 * A pipe that simulates an insert — opens a transaction, inserts, aborts — must not lock an
 	 * empty drawer to an item that never arrived. Only a committed insert claims.
 	 *
-	 * <p>The drawer does nothing itself to earn this: the transfer API holds back
-	 * {@code setChanged} until the outer transaction commits, and the claim is made there. This
-	 * pins that, so a Fabric release that stopped holding it back turns this red rather than
-	 * quietly locking drawers to phantoms.
+	 * <p>The lock does nothing itself to earn this: the drawer's storage reports a change once per
+	 * outer transaction, on commit, and the claim is made there. This pins that, so a change to the
+	 * storage that reported changes as they happened turns this red rather than quietly locking
+	 * drawers to phantoms.
 	 */
 	@GameTest
 	public void aSimulatedInsertClaimsNothing(GameTestHelper helper) {
 		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
-		ContainerStorage storage = ContainerStorage.of(drawer, null);
 
 		try (Transaction transaction = Transaction.openOuter()) {
-			storage.insert(ItemVariant.of(Items.DIAMOND), 5, transaction);
+			drawer.storage().insert(ItemVariant.of(Items.DIAMOND), 5, transaction);
 			transaction.abort();
 		}
 
@@ -732,15 +817,10 @@ public class DrawerGameTests {
 					+ describe(drawer.lockedItems().getFirst()));
 		}
 
-		long inserted;
+		ItemStack left = insert(drawer.storage(), new ItemStack(Items.REDSTONE, 5));
 
-		try (Transaction transaction = Transaction.openOuter()) {
-			inserted = storage.insert(ItemVariant.of(Items.REDSTONE), 5, transaction);
-			transaction.commit();
-		}
-
-		if (inserted != 5) {
-			throw helper.assertionException("the real insert after the simulated one took " + inserted + " of 5");
+		if (!left.isEmpty()) {
+			throw helper.assertionException("the real insert after the simulated one left " + left.getCount());
 		}
 
 		expectClaims(helper, drawer, Items.REDSTONE);
@@ -751,7 +831,7 @@ public class DrawerGameTests {
 	@GameTest
 	public void removingTheLockForgetsItsClaim(GameTestHelper helper) {
 		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
-		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 4));
+		drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 4));
 		drawer.setChanged();
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
 		expectClaims(helper, drawer, Items.COBBLESTONE);
@@ -762,10 +842,10 @@ public class DrawerGameTests {
 			throw helper.assertionException("the claim outlived the lock");
 		}
 
-		expect(helper, drawer.canPlaceItem(1, new ItemStack(Items.DIRT)), true,
+		expect(helper, drawer.canStore(1, new ItemStack(Items.DIRT)), true,
 				"without its lock the drawer should take anything again");
 
-		drawer.setItem(1, new ItemStack(Items.DIRT, 4));
+		drawer.contents().setItem(1, new ItemStack(Items.DIRT, 4));
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
 
 		expectClaims(helper, drawer, Items.COBBLESTONE, Items.DIRT);
@@ -780,13 +860,13 @@ public class DrawerGameTests {
 	public void upgradeStateSurvivesASaveAndLoad(GameTestHelper helper) {
 		BlockPos pos = new BlockPos(1, 1, 1);
 		DrawerBlockEntity drawer = place(helper, pos, LodestoreBlocks.BASIC_DRAWER);
-		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 12));
+		drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 12));
 		drawer.setChanged();
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
 
 		// Emptied before the save, so the claim can only come back from the claim itself and not
 		// be quietly recaptured from the contents.
-		drawer.setItem(0, ItemStack.EMPTY);
+		drawer.contents().setItem(0, ItemStack.EMPTY);
 		drawer.setChanged();
 
 		CompoundTag written = drawer.saveCustomOnly(helper.getLevel().registryAccess());
@@ -857,17 +937,15 @@ public class DrawerGameTests {
 	 * The behaviour the upgrade exists for: a drawer with no room left takes the item anyway and
 	 * destroys it, rather than refusing it.
 	 *
-	 * <p>{@code Container#canPlaceItem} cannot express this — it only answers yes or no — so this
-	 * goes through {@code HopperBlockEntity.addItem}, the same entry point a hopper and a dropper
-	 * use, and asserts on what comes back rather than on any internal state.
+	 * <p>Goes through {@code ItemStorage.SIDED}, the exact lookup Fabric's hopper and dropper
+	 * patches make, and asserts on what the storage accepts rather than on any internal state.
 	 */
 	@GameTest
 	public void aFullVoidingDrawerAcceptsAndDiscards(GameTestHelper helper) {
 		DrawerBlockEntity drawer = voidingDrawerFullOf(helper, Items.COBBLESTONE);
 		long before = total(drawer, Items.COBBLESTONE);
 
-		ItemStack left = HopperBlockEntity.addItem(new SimpleContainer(1), drawer,
-				new ItemStack(Items.COBBLESTONE, 64), Direction.DOWN);
+		ItemStack left = insert(helper, drawer, new ItemStack(Items.COBBLESTONE, 64));
 
 		if (!left.isEmpty()) {
 			throw helper.assertionException("a full voiding drawer refused " + left.getCount()
@@ -884,8 +962,7 @@ public class DrawerGameTests {
 
 	/**
 	 * The point of voiding: the machine upstream keeps running. A hopper that backs up is the
-	 * failure this upgrade exists to prevent, and a hopper is the only way to test it — the
-	 * drawer looking full to {@code isFullContainer} is what makes one give up.
+	 * failure this upgrade exists to prevent, and a real hopper is the only honest way to test it.
 	 */
 	@GameTest(maxTicks = 160)
 	public void aHopperKeepsDrainingIntoAFullVoidingDrawer(GameTestHelper helper) {
@@ -933,12 +1010,11 @@ public class DrawerGameTests {
 	@GameTest
 	public void aVoidingDrawerStoresWhileItHasRoom(GameTestHelper helper) {
 		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
-		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 1));
+		drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 1));
 		drawer.setChanged();
 		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
 
-		ItemStack left = HopperBlockEntity.addItem(new SimpleContainer(1), drawer,
-				new ItemStack(Items.COBBLESTONE, 32), Direction.DOWN);
+		ItemStack left = insert(helper, drawer, new ItemStack(Items.COBBLESTONE, 32));
 
 		if (!left.isEmpty()) {
 			throw helper.assertionException("a drawer with room refused " + left.getCount());
@@ -960,8 +1036,7 @@ public class DrawerGameTests {
 	public void aVoidingDrawerRefusesWhatItIsNotLockedTo(GameTestHelper helper) {
 		DrawerBlockEntity drawer = voidingDrawerFullOf(helper, Items.COBBLESTONE);
 
-		ItemStack left = HopperBlockEntity.addItem(new SimpleContainer(1), drawer,
-				new ItemStack(Items.DIAMOND, 7), Direction.DOWN);
+		ItemStack left = insert(helper, drawer, new ItemStack(Items.DIAMOND, 7));
 
 		if (left.getCount() != 7) {
 			throw helper.assertionException("a drawer voiding cobblestone destroyed " + (7 - left.getCount())
@@ -970,6 +1045,34 @@ public class DrawerGameTests {
 
 		if (total(drawer, Items.DIAMOND) != 0) {
 			throw helper.assertionException("the diamonds ended up inside the drawer");
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * A drawer both locked and voiding destroys the overflow of what it claimed, and still refuses
+	 * what it did not — the lock is not loosened by the void, nor the void by the lock.
+	 */
+	@GameTest
+	public void aLockedVoidingDrawerVoidsOnlyWhatItClaimed(GameTestHelper helper) {
+		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.STURDY_DRAWER);
+		fillStorage(drawer, Items.COBBLESTONE);
+		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
+		long before = total(drawer, Items.COBBLESTONE);
+
+		ItemStack cobblestone = insert(helper, drawer, new ItemStack(Items.COBBLESTONE, 64));
+
+		if (!cobblestone.isEmpty() || total(drawer, Items.COBBLESTONE) != before) {
+			throw helper.assertionException("a full drawer locked to cobblestone stopped voiding it");
+		}
+
+		ItemStack diamonds = insert(helper, drawer, new ItemStack(Items.DIAMOND, 7));
+
+		if (diamonds.getCount() != 7) {
+			throw helper.assertionException("a drawer locked to cobblestone destroyed "
+					+ (7 - diamonds.getCount()) + " diamonds");
 		}
 
 		helper.succeed();
@@ -1005,8 +1108,7 @@ public class DrawerGameTests {
 		}
 
 		long before = total(reloaded, Items.COBBLESTONE);
-		ItemStack left = HopperBlockEntity.addItem(new SimpleContainer(1), reloaded,
-				new ItemStack(Items.COBBLESTONE, 64), Direction.DOWN);
+		ItemStack left = insert(reloaded.storage(), new ItemStack(Items.COBBLESTONE, 64));
 
 		if (!left.isEmpty() || total(reloaded, Items.COBBLESTONE) != before) {
 			throw helper.assertionException("a reloaded voiding drawer stopped voiding");
@@ -1073,146 +1175,6 @@ public class DrawerGameTests {
 		helper.succeed();
 	}
 
-	// --- slot targeting -----------------------------------------------------
-
-	/**
-	 * Capacity pools across installed upgrades, which is the arithmetic a player does in their
-	 * head: two void upgrades reach the same two rows. The lock grants none, since it covers the
-	 * whole drawer and has no reach to add.
-	 */
-	@GameTest
-	public void voidCapacityPoolsAcrossUpgrades(GameTestHelper helper) {
-		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.REINFORCED_DRAWER);
-
-		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
-
-		if (drawer.voidCapacity() != 9) {
-			throw helper.assertionException("one void upgrade should reach 9 slots, reaches "
-					+ drawer.voidCapacity());
-		}
-
-		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
-		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
-
-		if (drawer.voidCapacity() != 18) {
-			throw helper.assertionException("two void upgrades and a lock should reach 18 slots, reach "
-					+ drawer.voidCapacity());
-		}
-
-		helper.succeed();
-	}
-
-	/**
-	 * Choosing nothing covers the first rows, not none of them.
-	 *
-	 * <p>An upgrade that did nothing until its owner had clicked nine slots would simply look
-	 * broken, so an empty selection means "as far as this upgrade reaches, from the start".
-	 */
-	@GameTest
-	public void anUnchosenSelectionCoversTheFirstRows(GameTestHelper helper) {
-		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.REINFORCED_DRAWER);
-		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
-
-		expectCovers(helper, drawer.voidedSlots(), 0, 9);
-
-		DrawerBlockEntity deeper = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.REINFORCED_DRAWER);
-		deeper.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
-		deeper.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
-
-		expectCovers(helper, deeper.voidedSlots(), 0, 18);
-		helper.succeed();
-	}
-
-	/** Toggling adds and removes one slot, and refuses to reach past the installed capacity. */
-	@GameTest
-	public void togglingRespectsCapacity(GameTestHelper helper) {
-		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.REINFORCED_DRAWER);
-		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
-
-		// The first edit seeds from the default, so this removes one of the nine already covered.
-		expect(helper, drawer.toggleVoidTarget(0), true, "toggling a covered slot should remove it");
-
-		if (drawer.voidedSlots().contains(0) || drawer.voidedSlots().size() != 8) {
-			throw helper.assertionException("expected 8 slots after removing one, got "
-					+ drawer.voidedSlots().size());
-		}
-
-		expect(helper, drawer.toggleVoidTarget(20), true, "there is room for another slot");
-		expect(helper, drawer.toggleVoidTarget(21), false, "a tenth slot is past one void upgrade's reach");
-
-		if (drawer.voidedSlots().size() != 9) {
-			throw helper.assertionException("capacity should cap the selection at 9, got "
-					+ drawer.voidedSlots().size());
-		}
-
-		helper.succeed();
-	}
-
-	/**
-	 * A drawer both locked and voiding destroys the overflow of what it claimed, and still refuses
-	 * what it did not — the lock is not loosened by the void, nor the void by the lock.
-	 */
-	@GameTest
-	public void aLockedVoidingDrawerVoidsOnlyWhatItClaimed(GameTestHelper helper) {
-		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.STURDY_DRAWER);
-		fillStorage(drawer, Items.COBBLESTONE);
-		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
-		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
-		long before = total(drawer, Items.COBBLESTONE);
-
-		ItemStack cobblestone = HopperBlockEntity.addItem(new SimpleContainer(1), drawer,
-				new ItemStack(Items.COBBLESTONE, 64), Direction.DOWN);
-
-		if (!cobblestone.isEmpty() || total(drawer, Items.COBBLESTONE) != before) {
-			throw helper.assertionException("a full drawer locked to cobblestone stopped voiding it");
-		}
-
-		ItemStack diamonds = HopperBlockEntity.addItem(new SimpleContainer(1), drawer,
-				new ItemStack(Items.DIAMOND, 7), Direction.DOWN);
-
-		if (diamonds.getCount() != 7) {
-			throw helper.assertionException("a drawer locked to cobblestone destroyed "
-					+ (7 - diamonds.getCount()) + " diamonds");
-		}
-
-		helper.succeed();
-	}
-
-	/** Targeting, the claim and the display choice are not inventory, so they need their own round trip. */
-	@GameTest
-	public void targetingSurvivesASaveAndLoad(GameTestHelper helper) {
-		BlockPos pos = new BlockPos(1, 1, 1);
-		DrawerBlockEntity drawer = place(helper, pos, LodestoreBlocks.REINFORCED_DRAWER);
-		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
-		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
-		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 4));
-		drawer.setChanged();
-		// The default already fills one void upgrade's nine slots, so one has to go to make room.
-		drawer.toggleVoidTarget(8);
-		drawer.toggleVoidTarget(30);
-		drawer.chooseDisplaySlot(0);
-
-		CompoundTag written = drawer.saveCustomOnly(helper.getLevel().registryAccess());
-
-		DrawerBlockEntity reloaded = new DrawerBlockEntity(
-				helper.absolutePos(pos), LodestoreBlocks.REINFORCED_DRAWER.defaultBlockState());
-		reloaded.setLevel(helper.getLevel());
-		reloaded.loadWithComponents(TagValueInput.create(
-				ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), written));
-
-		if (!reloaded.voidedSlots().contains(30) || reloaded.voidedSlots().contains(8)) {
-			throw helper.assertionException("the chosen void slots did not survive a save and load");
-		}
-
-		if (reloaded.displaySlot() != 0) {
-			throw helper.assertionException("the slot chosen for the face did not survive a save and load, got "
-					+ reloaded.displaySlot());
-		}
-
-		expectClaims(helper, reloaded, Items.COBBLESTONE);
-		helper.succeed();
-	}
-
 	// --- what the face shows -------------------------------------------------
 
 	/**
@@ -1222,9 +1184,9 @@ public class DrawerGameTests {
 	@GameTest
 	public void theChosenSlotIsWhatTheFaceShows(GameTestHelper helper) {
 		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
-		drawer.setItem(0, new ItemStack(Items.REDSTONE, 10));
-		drawer.setItem(1, new ItemStack(Items.DIAMOND, 50));
-		drawer.setItem(2, new ItemStack(Items.REDSTONE, 5));
+		drawer.contents().setItem(0, new ItemStack(Items.REDSTONE, 10));
+		drawer.contents().setItem(1, new ItemStack(Items.DIAMOND, 50));
+		drawer.contents().setItem(2, new ItemStack(Items.REDSTONE, 5));
 		drawer.setChanged();
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
 
@@ -1253,7 +1215,7 @@ public class DrawerGameTests {
 	@GameTest
 	public void aDisplaySlotNeedsALockAndAnItem(GameTestHelper helper) {
 		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
-		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 4));
+		drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 4));
 		drawer.setChanged();
 
 		expect(helper, drawer.chooseDisplaySlot(0), false, "without a lock there is no choice to make");
@@ -1279,14 +1241,14 @@ public class DrawerGameTests {
 	@GameTest
 	public void anEmptiedDrawerKeepsNamingTheChosenItem(GameTestHelper helper) {
 		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
-		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 4));
-		drawer.setItem(1, new ItemStack(Items.DIRT, 4));
+		drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 4));
+		drawer.contents().setItem(1, new ItemStack(Items.DIRT, 4));
 		drawer.setChanged();
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
 		drawer.chooseDisplaySlot(1);
 
-		drawer.setItem(0, ItemStack.EMPTY);
-		drawer.setItem(1, ItemStack.EMPTY);
+		drawer.contents().setItem(0, ItemStack.EMPTY);
+		drawer.contents().setItem(1, ItemStack.EMPTY);
 		drawer.setChanged();
 
 		if (!drawer.previewItem().isEmpty()) {
@@ -1299,6 +1261,33 @@ public class DrawerGameTests {
 					+ describe(drawer.ghostItem()));
 		}
 
+		helper.succeed();
+	}
+
+	/** The claim and the display choice are not inventory, so they need their own round trip. */
+	@GameTest
+	public void theDisplayChoiceSurvivesASaveAndLoad(GameTestHelper helper) {
+		BlockPos pos = new BlockPos(1, 1, 1);
+		DrawerBlockEntity drawer = place(helper, pos, LodestoreBlocks.REINFORCED_DRAWER);
+		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+		drawer.contents().setItem(30, new ItemStack(Items.COBBLESTONE, 4));
+		drawer.setChanged();
+		drawer.chooseDisplaySlot(30);
+
+		CompoundTag written = drawer.saveCustomOnly(helper.getLevel().registryAccess());
+
+		DrawerBlockEntity reloaded = new DrawerBlockEntity(
+				helper.absolutePos(pos), LodestoreBlocks.REINFORCED_DRAWER.defaultBlockState());
+		reloaded.setLevel(helper.getLevel());
+		reloaded.loadWithComponents(TagValueInput.create(
+				ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), written));
+
+		if (reloaded.displaySlot() != 30) {
+			throw helper.assertionException("the slot chosen for the face did not survive a save and load, got "
+					+ reloaded.displaySlot());
+		}
+
+		expectClaims(helper, reloaded, Items.COBBLESTONE);
 		helper.succeed();
 	}
 
@@ -1320,19 +1309,6 @@ public class DrawerGameTests {
 		}
 	}
 
-	private static void expectCovers(GameTestHelper helper, java.util.Set<Integer> covered,
-			int from, int count) {
-		if (covered.size() != count) {
-			throw helper.assertionException("expected " + count + " slots covered, got " + covered.size());
-		}
-
-		for (int slot = from; slot < from + count; slot++) {
-			if (!covered.contains(slot)) {
-				throw helper.assertionException("slot " + slot + " should be covered and is not");
-			}
-		}
-	}
-
 
 	// --- helpers -----------------------------------------------------------
 
@@ -1350,30 +1326,53 @@ public class DrawerGameTests {
 		return drawer;
 	}
 
-	/** Fills every storage slot to the brim, leaving the overflow slot alone. */
+	/** Fills every storage slot to one full stack. */
 	private static void fillStorage(DrawerBlockEntity drawer, net.minecraft.world.item.Item item) {
 		int max = new ItemStack(item).getMaxStackSize();
 
 		for (int slot = 0; slot < drawer.storageSize(); slot++) {
-			drawer.setItem(slot, new ItemStack(item, max));
+			drawer.contents().setItem(slot, new ItemStack(item, max));
 		}
 
 		drawer.setChanged();
 	}
 
-	/** Counts across the whole container, so anything stranded in the overflow slot shows up. */
+	/** Counts an item across every slot, parked remainders included. */
 	private static long total(DrawerBlockEntity drawer, net.minecraft.world.item.Item item) {
 		long found = 0;
 
-		for (int slot = 0; slot < drawer.getContainerSize(); slot++) {
-			ItemStack stack = drawer.getItem(slot);
-
-			if (stack.is(item)) {
-				found += stack.getCount();
+		for (int slot = 0; slot < drawer.storageSize(); slot++) {
+			if (drawer.contents().visible(slot).is(item)) {
+				found += drawer.contents().total(slot);
 			}
 		}
 
 		return found;
+	}
+
+	/**
+	 * Inserts through {@code ItemStorage.SIDED} at the drawer's position — the lookup a hopper,
+	 * dropper or pipe makes — and returns what was not accepted, in the shape a hopper would hold.
+	 */
+	private static ItemStack insert(GameTestHelper helper, DrawerBlockEntity drawer, ItemStack stack) {
+		Storage<ItemVariant> storage = ItemStorage.SIDED.find(helper.getLevel(), drawer.getBlockPos(), Direction.UP);
+
+		if (storage == null) {
+			throw helper.assertionException("no Storage<ItemVariant> at the drawer");
+		}
+
+		return insert(storage, stack);
+	}
+
+	private static ItemStack insert(Storage<ItemVariant> storage, ItemStack stack) {
+		long accepted;
+
+		try (Transaction transaction = Transaction.openOuter()) {
+			accepted = storage.insert(ItemVariant.of(stack), stack.getCount(), transaction);
+			transaction.commit();
+		}
+
+		return stack.copyWithCount(stack.getCount() - (int) accepted);
 	}
 
 	private static HopperBlockEntity hopperAbove(GameTestHelper helper, BlockPos drawerPos, ItemStack load) {

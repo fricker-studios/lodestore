@@ -43,9 +43,9 @@ public class DrawerPersistenceClientTest implements FabricClientGameTest {
 				level.setBlockAndUpdate(POS, LodestoreBlocks.BASIC_DRAWER.defaultBlockState());
 
 				if (level.getBlockEntity(POS) instanceof DrawerBlockEntity drawer) {
-					drawer.setItem(0, new ItemStack(Items.DIAMOND, EXPECTED));
+					drawer.contents().setItem(0, new ItemStack(Items.DIAMOND, EXPECTED));
 					drawer.setChanged();
-					LOGGER.info("[lodestore] before disconnect: {} diamonds", drawer.getItem(0).getCount());
+					LOGGER.info("[lodestore] before disconnect: {} diamonds", drawer.contents().visible(0).getCount());
 				} else {
 					throw new AssertionError("drawer block entity missing right after placement");
 				}
@@ -65,7 +65,7 @@ public class DrawerPersistenceClientTest implements FabricClientGameTest {
 				ServerLevel level = server.overworld();
 
 				if (level.getBlockEntity(POS) instanceof DrawerBlockEntity drawer) {
-					found.set(drawer.getItem(0).getCount());
+					found.set(drawer.contents().visible(0).getCount());
 				} else {
 					found.set(-2);
 				}

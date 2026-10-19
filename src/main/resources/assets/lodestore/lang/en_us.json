@@ -3,11 +3,15 @@
   "block.lodestore.reinforced_drawer": "Reinforced Drawer",
   "block.lodestore.sturdy_drawer": "Sturdy Drawer",
   "item.lodestore.lock_upgrade": "Lock Upgrade",
+  "item.lodestore.stack_upgrade": "Stack Upgrade",
+  "item.lodestore.stack_upgrade_2": "Stack Upgrade II",
+  "item.lodestore.stack_upgrade_3": "Stack Upgrade III",
   "item.lodestore.void_upgrade": "Void Upgrade",
   "itemGroup.lodestore.general": "Lodestore",
-  "lodestore.upgrade.adjust_voided": "Right-click to adjust voided slots",
+  "lodestore.drawer.overflow": "Holds %s more than its stacks show",
+  "lodestore.slot.stored": "%s of %s in this slot",
   "lodestore.upgrade.choose_display": "Right-click to choose the slot shown on the front",
-  "lodestore.upgrade.coverage": "Covering %s of %s slots",
-  "lodestore.upgrade.selecting": "Click a slot to add or remove, shift-click for a range",
+  "lodestore.upgrade.compress": "Right-click to sort the drawer",
+  "lodestore.upgrade.needed": "Holds too much to take this out",
   "lodestore.upgrade.selecting_display": "Click a slot to show its item, or the shown one to stop"
 }

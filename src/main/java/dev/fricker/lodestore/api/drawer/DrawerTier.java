@@ -19,8 +19,9 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  *
  * @param keepsContents whether contents survive being broken, shulker-style, rather than spilling
  * @param nestingRank   ordering used to stop drawers nesting inside themselves. A drawer that keeps
- *                      its contents refuses any drawer of equal or higher rank, which would
- *                      otherwise let storage compound without limit.
+ *                      its contents refuses any drawer <em>with contents</em> of equal or higher
+ *                      rank, which would otherwise let storage compound without limit. An empty
+ *                      drawer compounds nothing and is taken by any tier.
  * @param upgradeSlots  how many upgrades a drawer of this tier may hold at once
  */
 public record DrawerTier(boolean keepsContents, int nestingRank, int upgradeSlots) {
