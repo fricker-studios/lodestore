@@ -52,7 +52,7 @@ class DrawerUpgradeCodecTest {
 
 	@Test
 	void theLockUpgradeActuallyLocks() throws IOException {
-		assertEquals(new DrawerUpgrade(true, false, 9), decode("lock"),
+		assertEquals(new DrawerUpgrade(true, false, 9, 1), decode("lock"),
 				"the shipped lock upgrade must set locks_contents, or it is an inert item");
 	}
 
@@ -66,8 +66,21 @@ class DrawerUpgradeCodecTest {
 	 */
 	@Test
 	void theVoidUpgradeVoidsWithoutLocking() throws IOException {
-		assertEquals(new DrawerUpgrade(false, true, 9), decode("void"),
+		assertEquals(new DrawerUpgrade(false, true, 9, 1), decode("void"),
 				"the shipped void upgrade must void, and no longer needs to lock to be safe");
+	}
+
+	/**
+	 * The stack upgrade sets a depth and nothing else; the layer it needs is what the rest of this
+	 * change built. Depth defaults to one everywhere it is not written, so every upgrade that
+	 * predates it is a one-stack upgrade without saying so.
+	 */
+	@Test
+	void theStackUpgradeStacks() throws IOException {
+		assertEquals(new DrawerUpgrade(false, false, 9, 4), decode("stack"),
+				"the shipped stack upgrade must set stacks_per_slot above one, or it is an inert item");
+		assertTrue(decode("stack").stacks());
+		assertFalse(decode("lock").stacks(), "a lock written without stacks_per_slot must read as depth one");
 	}
 
 	/** Levels are data: the same behaviour, reaching further. */

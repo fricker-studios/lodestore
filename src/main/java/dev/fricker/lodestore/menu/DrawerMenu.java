@@ -1,5 +1,7 @@
 package dev.fricker.lodestore.menu;
 
+import org.jspecify.annotations.Nullable;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
@@ -10,8 +12,10 @@ import net.minecraft.world.inventory.ContainerData;
 import net.minecraft.world.inventory.SimpleContainerData;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 
 import dev.fricker.lodestore.api.drawer.DrawerTier;
+import dev.fricker.lodestore.api.drawer.UpgradeBehaviour;
 import dev.fricker.lodestore.block.DrawerBlockEntity;
 import dev.fricker.lodestore.item.DrawerUpgradeItem;
 
@@ -22,9 +26,10 @@ import dev.fricker.lodestore.item.DrawerUpgradeItem;
  * they were installed. The cost is real — a custom menu is a thing to maintain, and the vanilla one
  * was free — but there is no way to show upgrade slots without one.
  *
- * <p>Only {@code rows * 9} storage slots are added, deliberately. A voiding drawer's container is
- * one larger than its storage so that hoppers have a slot to insert into, and that overflow slot
- * must never appear on screen: it always reads empty and discards what is put in it.
+ * <p>The storage slots hang off the drawer's {@code DrawerContents}, which is a {@code Container}
+ * the block entity owns rather than the block entity itself — a hopper looks for a container at the
+ * block entity and must not find one. Each slot only ever shows a legal stack; the drawer's own
+ * {@link DrawerSlot} is what lets a click reach the room a stack upgrade adds behind it.
  */
 public class DrawerMenu extends AbstractContainerMenu {
 	/** Left edge of the upgrade slots, past the right edge of the vanilla chest background. */
@@ -42,6 +47,7 @@ public class DrawerMenu extends AbstractContainerMenu {
 	private static final int BUTTON_BEHAVIOUR_STRIDE = 256;
 
 	private final Container storage;
+	private final @Nullable DrawerBlockEntity drawer;
 	private final ContainerData menuData;
 	private final int rows;
 	private final int upgradeSlots;
@@ -49,24 +55,28 @@ public class DrawerMenu extends AbstractContainerMenu {
 
 	/**
 	 * Client side. The containers are stand-ins: the server owns the real contents and streams
-	 * them into these slots, so they only have to be the right shape.
+	 * them into these slots, so they only have to be the right shape. The drawer is the client's
+	 * copy of the block entity, which carries the synced targeting, depth and remainders the slots
+	 * need to predict what the server will allow.
 	 */
 	public DrawerMenu(int containerId, Inventory playerInventory, DrawerMenuData data) {
 		this(containerId, playerInventory,
 				new SimpleContainer(data.rows() * 9),
+				drawerAt(playerInventory.player.level(), data.pos()),
 				new SimpleContainer(DrawerTier.MAX_UPGRADE_SLOTS),
 				new SimpleContainerData(DATA_COUNT),
 				data.rows(), data.upgradeSlots(), data.pos());
 	}
 
-	public DrawerMenu(int containerId, Inventory playerInventory, Container storage, Container upgrades,
-			ContainerData menuData, int rows, int upgradeSlots, BlockPos pos) {
+	public DrawerMenu(int containerId, Inventory playerInventory, Container storage, @Nullable DrawerBlockEntity drawer,
+			Container upgrades, ContainerData menuData, int rows, int upgradeSlots, BlockPos pos) {
 		super(LodestoreMenus.DRAWER, containerId);
 
 		checkContainerSize(storage, rows * 9);
 		checkContainerDataCount(menuData, DATA_COUNT);
 
 		this.storage = storage;
+		this.drawer = drawer;
 		this.menuData = menuData;
 		this.rows = rows;
 		this.upgradeSlots = Math.min(upgradeSlots, upgrades.getContainerSize());
@@ -74,8 +84,8 @@ public class DrawerMenu extends AbstractContainerMenu {
 
 		for (int row = 0; row < rows; row++) {
 			for (int column = 0; column < 9; column++) {
-				addSlot(new Slot(storage, column + row * 9,
-						8 + column * SLOT_PITCH, FIRST_SLOT_Y + row * SLOT_PITCH));
+				addSlot(new DrawerSlot(storage, column + row * 9,
+						8 + column * SLOT_PITCH, FIRST_SLOT_Y + row * SLOT_PITCH, drawer));
 			}
 		}
 
@@ -89,6 +99,10 @@ public class DrawerMenu extends AbstractContainerMenu {
 		// memory expects it however many rows the drawer has.
 		addStandardInventorySlots(playerInventory, 8, 103 + (rows - 4) * SLOT_PITCH);
 		addDataSlots(menuData);
+	}
+
+	private static @Nullable DrawerBlockEntity drawerAt(Level level, BlockPos pos) {
+		return level.getBlockEntity(pos) instanceof DrawerBlockEntity drawer ? drawer : null;
 	}
 
 	public int rows() {
@@ -122,8 +136,8 @@ public class DrawerMenu extends AbstractContainerMenu {
 	}
 
 	/** Packs a targeting click into the one int vanilla's button path carries. */
-	public static int targetButton(boolean lock, int storageSlot) {
-		return (lock ? 0 : 1) * BUTTON_BEHAVIOUR_STRIDE + storageSlot;
+	public static int targetButton(UpgradeBehaviour behaviour, int storageSlot) {
+		return behaviour.ordinal() * BUTTON_BEHAVIOUR_STRIDE + storageSlot;
 	}
 
 	/**
@@ -135,18 +149,18 @@ public class DrawerMenu extends AbstractContainerMenu {
 	 */
 	@Override
 	public boolean clickMenuButton(Player player, int id) {
-		if (id < 0 || !(storage instanceof DrawerBlockEntity drawer)) {
+		if (id < 0 || drawer == null) {
 			return false;
 		}
 
-		boolean lock = id / BUTTON_BEHAVIOUR_STRIDE == 0;
+		UpgradeBehaviour behaviour = UpgradeBehaviour.byId(id / BUTTON_BEHAVIOUR_STRIDE);
 		int storageSlot = id % BUTTON_BEHAVIOUR_STRIDE;
 
-		if (storageSlot >= storageEnd()) {
+		if (behaviour == null || storageSlot >= storageEnd()) {
 			return false;
 		}
 
-		return drawer.toggleTarget(lock, storageSlot);
+		return drawer.toggleTarget(behaviour, storageSlot);
 	}
 
 	@Override
@@ -158,6 +172,10 @@ public class DrawerMenu extends AbstractContainerMenu {
 	 * Shift-clicking. An upgrade moved in from the player's inventory goes to the upgrade column
 	 * rather than into storage, which is the only sensible reading of the gesture — a drawer full
 	 * of loose upgrade items is never what was meant.
+	 *
+	 * <p>Out of a storage slot, this moves one legal stack; vanilla then calls it again for as long
+	 * as the slot still holds the same item, so a slot with stacks parked behind the visible one
+	 * empties as far as the player's inventory can take.
 	 */
 	@Override
 	public ItemStack quickMoveStack(Player player, int index) {

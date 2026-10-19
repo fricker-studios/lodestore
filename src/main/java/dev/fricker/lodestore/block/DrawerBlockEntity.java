@@ -5,63 +5,124 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Predicate;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.component.DataComponentGetter;
 import net.minecraft.core.component.DataComponentMap;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.Container;
 import net.minecraft.world.ContainerHelper;
+import net.minecraft.world.Containers;
+import net.minecraft.world.LockCode;
+import net.minecraft.world.Nameable;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerData;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.util.Mth;
-import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BaseContainerBlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.TagValueOutput;
-import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
+import net.minecraft.world.phys.Vec3;
+
+import net.fabricmc.fabric.api.menu.v1.ExtendedMenuProvider;
+import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
+import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
+import net.fabricmc.fabric.api.transfer.v1.storage.base.SidedStorageBlockEntity;
 
 import dev.fricker.lodestore.api.LodestoreRegistries;
 import dev.fricker.lodestore.api.drawer.DrawerTier;
 import dev.fricker.lodestore.api.drawer.DrawerUpgrade;
+import dev.fricker.lodestore.api.drawer.UpgradeBehaviour;
 import dev.fricker.lodestore.item.DrawerUpgradeItem;
 import dev.fricker.lodestore.menu.DrawerMenu;
 import dev.fricker.lodestore.menu.DrawerMenuData;
-
-import net.fabricmc.fabric.api.menu.v1.ExtendedMenuProvider;
 import dev.fricker.lodestore.registry.LodestoreBlockEntities;
+import dev.fricker.lodestore.registry.LodestoreComponents;
+import dev.fricker.lodestore.storage.ContentsHolder;
+import dev.fricker.lodestore.storage.DrawerContents;
+import dev.fricker.lodestore.storage.DrawerOverflow;
+import dev.fricker.lodestore.storage.DrawerStorage;
 
 /**
- * A drawer, currently a plain container.
+ * A drawer.
  *
- * <p>Extends {@link BaseContainerBlockEntity} so it is a vanilla {@code Container}: hoppers, pipes
- * and the transfer API all interoperate with no extra work, and the shulker-style "keeps contents"
- * behaviour comes from the loot table copying the implicit {@code minecraft:container} component
- * this base class already exposes.
+ * <p>Deliberately <em>not</em> a {@link Container}, and not a {@link BaseContainerBlockEntity}. Being
+ * one used to be what made hoppers, droppers, pipes and the comparator work for free, and that was
+ * given up on purpose: vanilla's hopper computes the room in a slot from the item's own stack size
+ * with the container nowhere in the expression, {@code Container#getMaxStackSize} cannot name a
+ * slot, and Fabric's hopper patch takes the transfer-API route only when vanilla finds no container
+ * at all. So a drawer that wants per-slot capacity has to be reachable only as a
+ * {@link Storage}, which is what {@link SidedStorageBlockEntity} makes it. The measurements are in
+ * {@code StackCeilingGameTests} and the README.
+ *
+ * <p>The contents themselves live in {@link DrawerContents}: a legal stack plus a parked remainder
+ * per slot. This class owns the rules the contents ask about — what a slot's capacity is, what it
+ * will take, what the drawer voids — and everything a container block entity used to get from its
+ * base class: its name, its lock, its menu, its components, and spilling on break.
  *
  * <p>Still has no ticker — drawers remain purely reactive.
  */
-public class DrawerBlockEntity extends BaseContainerBlockEntity
-		implements ExtendedMenuProvider<DrawerMenuData> {
-	private NonNullList<ItemStack> items;
+public class DrawerBlockEntity extends BlockEntity
+		implements ExtendedMenuProvider<DrawerMenuData>, Nameable, SidedStorageBlockEntity, ContentsHolder {
+	/** The nominal stack an empty slot's capacity is quoted against. */
+	private static final int NOMINAL_STACK = 64;
+
+	private final DrawerContents contents;
+
+	/** The menu's window onto the contents and the storage are the same object's two faces. */
+	private final DrawerContents.Rules rules = new DrawerContents.Rules() {
+		@Override
+		public int capacity(int slot, ItemStack stack) {
+			return slotCapacity(slot, stack);
+		}
+
+		@Override
+		public boolean canStore(int slot, ItemStack stack) {
+			return DrawerBlockEntity.this.canStore(slot, stack);
+		}
+
+		@Override
+		public boolean voids(ItemStack stack) {
+			return isVoiding(stack);
+		}
+
+		@Override
+		public void onChanged() {
+			setChanged();
+		}
+
+		@Override
+		public boolean stillValid(Player player) {
+			return Container.stillValidBlockEntity(DrawerBlockEntity.this, player);
+		}
+	};
 
 	/**
 	 * What the front face shows: the most common item inside, and how many of it there are.
@@ -74,11 +135,15 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 	private ItemStack previewItem = ItemStack.EMPTY;
 	private long previewCount;
 
+	/** The custom name and lock a container block entity used to inherit. Same keys, same codecs. */
+	private @Nullable Component name;
+	private LockCode lockKey = LockCode.NO_LOCK;
+
 	/**
 	 * Installed upgrades, one stack each.
 	 *
-	 * <p>Kept outside {@link #getItems()} on purpose: upgrades are hardware bolted to the drawer,
-	 * not stored goods. Putting them in the inventory would expose them in the chest screen, let a
+	 * <p>Kept outside the contents on purpose: upgrades are hardware bolted to the drawer, not
+	 * stored goods. Putting them in the inventory would expose them in the chest screen, let a
 	 * hopper pull one out, and — for the tiers whose contents ride inside the dropped item — make
 	 * them duplicate along with everything else.
 	 */
@@ -87,10 +152,6 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 
 	/**
 	 * The upgrade slots as a {@link Container}, for the drawer menu to hang slots off.
-	 *
-	 * <p>Deliberately a separate object from the block entity. The block entity is the Container
-	 * that hoppers, droppers and the transfer API see; exposing upgrades through it would be the
-	 * very thing the field above is kept out of {@link #getItems()} to avoid.
 	 *
 	 * <p>Sized to {@link DrawerTier#MAX_UPGRADE_SLOTS} rather than to this drawer's tier, because
 	 * a datapack reload can change the tier's count under a drawer that already exists. The menu
@@ -158,8 +219,7 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 	 * upgrade covers before anyone has told it otherwise — an upgrade that did nothing until its
 	 * owner had clicked nine slots would simply look broken.
 	 */
-	private final SortedSet<Integer> lockTargets = new TreeSet<>();
-	private final SortedSet<Integer> voidTargets = new TreeSet<>();
+	private final Map<UpgradeBehaviour, SortedSet<Integer>> targets = new EnumMap<>(UpgradeBehaviour.class);
 
 	/**
 	 * What each locked slot has been locked to.
@@ -170,20 +230,59 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 	 */
 	private final NonNullList<ItemStack> slotFilters;
 
+	/**
+	 * How many stacks a covered slot holds, as the server last told this client.
+	 *
+	 * <p>The client never has the installed upgrades, so it cannot work the depth out; like the
+	 * covered sets, it is sent the answer.
+	 */
+	private int syncedStackDepth = 1;
+
 	/** What the client was last told, so a change worth sending can be spotted in setChanged. */
 	private List<ItemStack> broadcastFilters = List.of();
-	private Set<Integer> broadcastLock = Set.of();
-	private Set<Integer> broadcastVoid = Set.of();
+	private final Map<UpgradeBehaviour, Set<Integer>> broadcastTargets = new EnumMap<>(UpgradeBehaviour.class);
+	private int broadcastStackDepth = 1;
+	private DrawerOverflow broadcastOverflow = DrawerOverflow.EMPTY;
 
 	public DrawerBlockEntity(BlockPos pos, BlockState state) {
 		super(LodestoreBlockEntities.DRAWER, pos, state);
-		this.items = NonNullList.withSize(getContainerSize(), ItemStack.EMPTY);
+		this.contents = new DrawerContents(storageSize(), rules);
 		this.slotFilters = NonNullList.withSize(storageSize(), ItemStack.EMPTY);
+
+		for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
+			targets.put(behaviour, new TreeSet<>());
+			broadcastTargets.put(behaviour, Set.of());
+		}
 	}
 
 	/** Rows come from the block, not the datapack, so the size is known before the level is. */
 	private int rows() {
 		return getBlockState().getBlock() instanceof DrawerBlock drawer ? drawer.rows() : 3;
+	}
+
+	/** How many slots store goods — what the chest screen shows, and all there is. */
+	public int storageSize() {
+		return rows() * 9;
+	}
+
+	/** The contents: the menu's container, and the owner of every count. */
+	@Override
+	public DrawerContents contents() {
+		return contents;
+	}
+
+	/** The transfer-API face, which is also what {@link #getItemStorage} hands out. */
+	public DrawerStorage storage() {
+		return contents.storage();
+	}
+
+	@Override
+	public @Nullable Storage<ItemVariant> getItemStorage(@Nullable Direction side) {
+		return contents.storage();
+	}
+
+	public boolean isEmpty() {
+		return contents.isEmpty();
 	}
 
 	/** Resolves this drawer's behaviour from the datapack-driven registry. */
@@ -202,8 +301,56 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 				.orElse(DrawerTier.FALLBACK);
 	}
 
+	// --- capacity ----------------------------------------------------------------
+
+	/**
+	 * How many of {@code stack} a slot may hold: the item's own stack size, times the depth a stack
+	 * upgrade grants the slot. The one place capacity is decided; the storage, the menu's slots and
+	 * the comparator all ask here, which is why none of them can disagree about how full a slot is.
+	 */
+	public int slotCapacity(int slot, ItemStack stack) {
+		int perStack = stack.isEmpty() ? NOMINAL_STACK : Math.max(1, stack.getMaxStackSize());
+		return perStack * (isStackedSlot(slot) ? stackDepth() : 1);
+	}
+
+	/** How many more of a slot's item are parked behind its visible stack. */
+	public long remainder(int slot) {
+		return slot >= 0 && slot < storageSize() ? contents.remainder(slot) : 0;
+	}
+
+	/** Everything in a slot, visible and parked. */
+	public long total(int slot) {
+		return slot >= 0 && slot < storageSize() ? contents.total(slot) : 0;
+	}
+
+	/**
+	 * How many stacks a covered slot holds. The deepest installed stack upgrade decides; depth does
+	 * not pool, so two level-ones double the reach and not the depth.
+	 */
+	public int stackDepth() {
+		if (isClient()) {
+			return syncedStackDepth;
+		}
+
+		int depth = 1;
+
+		for (ItemStack installed : upgrades) {
+			if (installed.getItem() instanceof DrawerUpgradeItem item) {
+				depth = Math.max(depth, resolveUpgrade(item.upgradeKey()).stacksPerSlot());
+			}
+		}
+
+		return depth;
+	}
+
+	// --- upgrades ----------------------------------------------------------------
+
 	public ItemStack previewItem() {
 		return previewItem;
+	}
+
+	public long previewCount() {
+		return previewCount;
 	}
 
 	/** Installed upgrades, empties omitted, for the drop-on-break path and for tests. */
@@ -223,12 +370,12 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 		return installed;
 	}
 
-	/** The upgrade slots, for the menu. Not the container hoppers see. */
+	/** The upgrade slots, for the menu. */
 	public Container upgradeContainer() {
 		return upgradeContainer;
 	}
 
-	/** Whether an upgrade of this kind is already installed; one of each is the rule. */
+	/** Whether an upgrade of this kind is already installed. */
 	public boolean hasUpgrade(net.minecraft.world.item.Item item) {
 		for (ItemStack installed : upgrades) {
 			if (!installed.isEmpty() && installed.getItem() == item) {
@@ -241,26 +388,31 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 
 	/** Storage slots the installed locks control, pooled across levels and duplicates. */
 	public int lockCapacity() {
-		return capacity(DrawerUpgrade::locksContents);
+		return capacity(UpgradeBehaviour.LOCK);
 	}
 
 	/** Storage slots the installed void upgrades control. */
 	public int voidCapacity() {
-		return capacity(DrawerUpgrade::voidsOverflow);
+		return capacity(UpgradeBehaviour.VOID);
+	}
+
+	/** Storage slots the installed stack upgrades control. */
+	public int stackCapacity() {
+		return capacity(UpgradeBehaviour.STACK);
 	}
 
 	/**
-	 * Capacity pools. Two level-one upgrades reach exactly as far as one level-two, because what
+	 * Reach pools. Two level-one upgrades reach exactly as far as one level-two, because what
 	 * decides the reach is the total granted, not which upgrade granted it.
 	 */
-	private int capacity(Predicate<DrawerUpgrade> flag) {
+	public int capacity(UpgradeBehaviour behaviour) {
 		int total = 0;
 
 		for (ItemStack installed : upgrades) {
 			if (installed.getItem() instanceof DrawerUpgradeItem item) {
 				DrawerUpgrade upgrade = resolveUpgrade(item.upgradeKey());
 
-				if (flag.test(upgrade)) {
+				if (behaviour.grantedBy(upgrade)) {
 					total += upgrade.slotCapacity();
 				}
 			}
@@ -269,14 +421,22 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 		return total;
 	}
 
-	/** The storage slots the locks cover: those chosen, or the first {@code capacity} by default. */
-	public SortedSet<Integer> lockedSlots() {
-		return isClient() ? Collections.unmodifiableSortedSet(lockTargets) : covered(lockTargets, lockCapacity());
+	/** The storage slots a behaviour covers: those chosen, or the first {@code capacity} by default. */
+	public SortedSet<Integer> coveredSlots(UpgradeBehaviour behaviour) {
+		SortedSet<Integer> chosen = targets.get(behaviour);
+		return isClient() ? Collections.unmodifiableSortedSet(chosen) : covered(chosen, capacity(behaviour));
 	}
 
-	/** The storage slots the void upgrades cover. */
+	public SortedSet<Integer> lockedSlots() {
+		return coveredSlots(UpgradeBehaviour.LOCK);
+	}
+
 	public SortedSet<Integer> voidedSlots() {
-		return isClient() ? Collections.unmodifiableSortedSet(voidTargets) : covered(voidTargets, voidCapacity());
+		return coveredSlots(UpgradeBehaviour.VOID);
+	}
+
+	public SortedSet<Integer> stackedSlots() {
+		return coveredSlots(UpgradeBehaviour.STACK);
 	}
 
 	/**
@@ -313,24 +473,27 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 	 * <p>The first edit seeds the selection from the default, so clicking a tenth slot adds to
 	 * what the upgrade already covered rather than discarding it.
 	 *
+	 * <p>Un-targeting a slot that holds more than one stack destroys nothing: the slot is over
+	 * capacity, reports no room, and drains normally. Nothing in the drawer ever lowers a count.
+	 *
 	 * @return {@code false} when the selection is already at capacity and nothing changed
 	 */
-	public boolean toggleTarget(boolean lock, int storageSlot) {
-		SortedSet<Integer> targets = lock ? lockTargets : voidTargets;
-		int capacity = lock ? lockCapacity() : voidCapacity();
+	public boolean toggleTarget(UpgradeBehaviour behaviour, int storageSlot) {
+		SortedSet<Integer> chosen = targets.get(behaviour);
+		int capacity = capacity(behaviour);
 
 		if (capacity <= 0 || storageSlot < 0 || storageSlot >= storageSize()) {
 			return false;
 		}
 
-		if (targets.isEmpty()) {
-			targets.addAll(covered(targets, capacity));
+		if (chosen.isEmpty()) {
+			chosen.addAll(covered(chosen, capacity));
 		}
 
-		if (targets.contains(storageSlot)) {
-			targets.remove(storageSlot);
-		} else if (targets.size() < capacity) {
-			targets.add(storageSlot);
+		if (chosen.contains(storageSlot)) {
+			chosen.remove(storageSlot);
+		} else if (chosen.size() < capacity) {
+			chosen.add(storageSlot);
 		} else {
 			return false;
 		}
@@ -341,12 +504,17 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 
 	/** Whether a lock covers this storage slot. */
 	public boolean isLockedSlot(int storageSlot) {
-		return locks() && lockedSlots().contains(storageSlot);
+		return lockedSlots().contains(storageSlot);
 	}
 
 	/** Whether a void upgrade covers this storage slot. */
 	public boolean isVoidedSlot(int storageSlot) {
-		return voidsOverflow() && voidedSlots().contains(storageSlot);
+		return voidedSlots().contains(storageSlot);
+	}
+
+	/** Whether a stack upgrade covers this storage slot. */
+	public boolean isStackedSlot(int storageSlot) {
+		return stackedSlots().contains(storageSlot);
 	}
 
 	/** What a locked slot has been locked to, or empty if it has not claimed anything yet. */
@@ -391,7 +559,7 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 
 	/** Whether a lock is installed and at least one of its slots has claimed something. */
 	public boolean isLocked() {
-		return locks() && !lockedItems().isEmpty();
+		return !lockedItems().isEmpty();
 	}
 
 	/** Whether {@code stack} is what this slot is locked to, or the slot has claimed nothing yet. */
@@ -402,13 +570,9 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 
 	/** Locked slots claim whatever lands in them, and keep that claim once the slot empties. */
 	private void captureSlotFilters() {
-		if (!locks()) {
-			return;
-		}
-
 		for (int slot : lockedSlots()) {
 			if (slot < slotFilters.size() && slotFilters.get(slot).isEmpty()) {
-				ItemStack held = items.get(slot);
+				ItemStack held = contents.visible(slot);
 
 				if (!held.isEmpty()) {
 					slotFilters.set(slot, held.copyWithCount(1));
@@ -430,8 +594,8 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 	/**
 	 * Installs an upgrade, taking a copy of a single item from {@code stack}.
 	 *
-	 * @return {@code false} if the drawer is full or already has this upgrade, in which case
-	 *         nothing is consumed and the caller should fall back to opening the drawer
+	 * @return {@code false} if the drawer is full, in which case nothing is consumed and the
+	 *         caller should fall back to opening the drawer
 	 */
 	public boolean installUpgrade(ItemStack stack) {
 		if (!(stack.getItem() instanceof DrawerUpgradeItem)) {
@@ -448,11 +612,6 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 		}
 
 		return false;
-	}
-
-	/** Whether any installed upgrade locks this drawer to one kind of item. */
-	private boolean locks() {
-		return anyUpgrade(DrawerUpgrade::locksContents);
 	}
 
 	/** Whether any installed upgrade destroys what this drawer has no room for. */
@@ -472,7 +631,7 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 	}
 
 	/**
-	 * Whether this drawer is currently destroying what it cannot hold.
+	 * Whether this drawer destroys {@code stack} rather than refusing it, once nothing has room.
 	 *
 	 * <p>Only ever true for an item one of the voided slots has claimed or already holds. The
 	 * worst a misrouted item can then do is back the system up, which is recoverable, rather than
@@ -490,7 +649,7 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 				return true;
 			}
 
-			ItemStack held = items.get(slot);
+			ItemStack held = contents.visible(slot);
 
 			if (!held.isEmpty() && ItemStack.isSameItemSameComponents(held, stack)) {
 				return true;
@@ -498,45 +657,6 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 		}
 
 		return false;
-	}
-
-	/**
-	 * Whether the voided slots could take any of {@code stack} — the question voiding answers.
-	 *
-	 * <p>Asks only about the slots the void upgrade covers. Room elsewhere in the drawer is not
-	 * room as far as voiding is concerned, or a half-targeted drawer would never void at all.
-	 */
-	private boolean hasRoomInStorage(ItemStack stack) {
-		for (int slot : voidedSlots()) {
-			ItemStack existing = items.get(slot);
-
-			if (existing.isEmpty()) {
-				return slotAccepts(slot, stack);
-			}
-
-			if (existing.isEmpty()) {
-				return true;
-			}
-
-			if (ItemStack.isSameItemSameComponents(existing, stack)
-					&& existing.getCount() < existing.getMaxStackSize()) {
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	/**
-	 * Empties the overflow slot. Writes the list directly rather than going through
-	 * {@link #setItem}, which would call {@link #setChanged()} straight back into here.
-	 */
-	private void discardOverflow() {
-		ItemStack overflow = items.get(overflowSlot());
-
-		if (!overflow.isEmpty() && isVoiding(overflow)) {
-			items.set(overflowSlot(), ItemStack.EMPTY);
-		}
 	}
 
 	private DrawerUpgrade resolveUpgrade(ResourceKey<DrawerUpgrade> key) {
@@ -550,29 +670,47 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 				.orElse(DrawerUpgrade.FALLBACK);
 	}
 
-	public long previewCount() {
-		return previewCount;
+	/**
+	 * Whether a slot would take this kind of item at all, room aside.
+	 *
+	 * <p>The lock and the nesting rule, in one place, asked by both doors into the contents: the
+	 * storage's insert and the menu's slot. A rule enforced at only one of them is not a rule — the
+	 * screen alone would be bypassed by piping items in, and the storage alone by a player's hand.
+	 * Works on the client too, from the synced claims and the synced registry, so the screen can
+	 * predict a refusal instead of flickering.
+	 */
+	public boolean canStore(int slot, ItemStack stack) {
+		if (slot < 0 || slot >= storageSize()) {
+			return false;
+		}
+
+		if (isLockedSlot(slot) && !slotAccepts(slot, stack)) {
+			return false;
+		}
+
+		DrawerTier self = tier();
+
+		if (!self.keepsContents()) {
+			return true;
+		}
+
+		// Stops a drawer that keeps its contents from holding another of equal or higher rank,
+		// which would otherwise let storage compound without limit.
+		if (stack.getItem() instanceof BlockItem blockItem && blockItem.getBlock() instanceof DrawerBlock other) {
+			return self.canContain(resolve(other.tierKey()));
+		}
+
+		return true;
 	}
 
 	/**
-	 * Comparator output, measured over the storage slots only.
+	 * Comparator output, each slot measured against its own capacity.
 	 *
-	 * <p>{@code AbstractContainerMenu.getRedstoneSignalFromContainer} divides by
-	 * {@link #getContainerSize()}, which here counts the overflow slot that can never hold
-	 * anything — so a completely full drawer would read 14 and never 15.
+	 * <p>A stack-upgraded slot a quarter full reads a quarter full, so a hopper line into one does
+	 * not look done until it is.
 	 */
 	public int comparatorSignal() {
-		float fill = 0.0F;
-
-		for (int slot = 0; slot < storageSize(); slot++) {
-			ItemStack stack = getItem(slot);
-
-			if (!stack.isEmpty()) {
-				fill += (float) stack.getCount() / getMaxStackSize(stack);
-			}
-		}
-
-		return Mth.lerpDiscrete(fill / storageSize(), 0, 15);
+		return Mth.lerpDiscrete(contents.fill(), 0, 15);
 	}
 
 	/** Picks the most numerous item in the drawer, counting across every slot holding it. */
@@ -581,7 +719,7 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 		List<Long> totals = new ArrayList<>();
 
 		for (int slot = 0; slot < storageSize(); slot++) {
-			ItemStack stack = getItem(slot);
+			ItemStack stack = contents.visible(slot);
 
 			if (stack.isEmpty()) {
 				continue;
@@ -598,9 +736,9 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 
 			if (index < 0) {
 				kinds.add(stack);
-				totals.add((long) stack.getCount());
+				totals.add(contents.total(slot));
 			} else {
-				totals.set(index, totals.get(index) + stack.getCount());
+				totals.set(index, totals.get(index) + contents.total(slot));
 			}
 		}
 
@@ -626,10 +764,6 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 			return;
 		}
 
-		// Before the preview is recomputed, so a stack passing through the overflow slot never
-		// reaches the face — it was never stored.
-		discardOverflow();
-
 		ItemStack previousItem = previewItem;
 		long previousCount = previewCount;
 		recomputePreview();
@@ -639,21 +773,38 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 		captureSlotFilters();
 
 		List<ItemStack> currentFilters = lockedItems();
-		SortedSet<Integer> currentLock = lockedSlots();
-		SortedSet<Integer> currentVoid = voidedSlots();
+		int currentDepth = stackDepth();
+		DrawerOverflow currentOverflow = contents.overflow();
+		boolean targetsChanged = false;
+
+		for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
+			if (!broadcastTargets.get(behaviour).equals(coveredSlots(behaviour))) {
+				targetsChanged = true;
+				break;
+			}
+		}
 
 		// Only tell clients when the face or the screen would actually look different. Targeting
 		// is in here because choosing a slot changes nothing else — without it the tints in the
-		// screen would never update.
+		// screen would never update. The remainders are in here for the slot tooltip, and cost
+		// bytes rather than packets: a parked count cannot change without the face's count
+		// changing with it.
 		if (!ItemStack.isSameItemSameComponents(previousItem, previewItem) || previousCount != previewCount
-				|| !sameStacks(broadcastFilters, currentFilters)
-				|| !broadcastLock.equals(currentLock) || !broadcastVoid.equals(currentVoid)) {
+				|| !sameStacks(broadcastFilters, currentFilters) || targetsChanged
+				|| broadcastStackDepth != currentDepth || !broadcastOverflow.equals(currentOverflow)) {
 			broadcastFilters = currentFilters;
-			broadcastLock = new TreeSet<>(currentLock);
-			broadcastVoid = new TreeSet<>(currentVoid);
+			broadcastStackDepth = currentDepth;
+			broadcastOverflow = currentOverflow;
+
+			for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
+				broadcastTargets.put(behaviour, new TreeSet<>(coveredSlots(behaviour)));
+			}
+
 			level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
 		}
 	}
+
+	// --- persistence -------------------------------------------------------------
 
 	/**
 	 * Writes which slots each behaviour covers and what each locked slot has claimed.
@@ -666,15 +817,12 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 		// Disk keeps what was chosen, so "nothing chosen" stays the default and follows the
 		// upgrades if they change. The sync tag carries the resolved answer, because the client
 		// has no upgrades to resolve it from.
-		Collection<Integer> lock = resolved ? lockedSlots() : lockTargets;
-		Collection<Integer> voided = resolved ? voidedSlots() : voidTargets;
+		for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
+			Collection<Integer> slots = resolved ? coveredSlots(behaviour) : targets.get(behaviour);
 
-		if (!lock.isEmpty()) {
-			out.putIntArray("lock_targets", toIntArray(lock));
-		}
-
-		if (!voided.isEmpty()) {
-			out.putIntArray("void_targets", toIntArray(voided));
+			if (!slots.isEmpty()) {
+				out.putIntArray(targetKey(behaviour), toIntArray(slots));
+			}
 		}
 
 		List<Integer> claimedSlots = new ArrayList<>();
@@ -694,12 +842,13 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 	}
 
 	private void loadTargeting(ValueInput data) {
-		lockTargets.clear();
-		voidTargets.clear();
 		slotFilters.clear();
 
-		data.getIntArray("lock_targets").ifPresent(slots -> addAll(lockTargets, slots));
-		data.getIntArray("void_targets").ifPresent(slots -> addAll(voidTargets, slots));
+		for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
+			SortedSet<Integer> chosen = targets.get(behaviour);
+			chosen.clear();
+			data.getIntArray(targetKey(behaviour)).ifPresent(slots -> addAll(chosen, slots));
+		}
 
 		int[] claimedSlots = data.getIntArray("claim_slots").orElse(new int[0]);
 		List<ItemStack> claimedItems = data.read("claim_items", ItemStack.CODEC.listOf()).orElse(List.of());
@@ -711,6 +860,11 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 				slotFilters.set(slot, claimedItems.get(i));
 			}
 		}
+	}
+
+	/** {@code lock_targets} and {@code void_targets} predate the enum and keep their names. */
+	private static String targetKey(UpgradeBehaviour behaviour) {
+		return behaviour.name().toLowerCase(java.util.Locale.ROOT) + "_targets";
 	}
 
 	private static int[] toIntArray(Collection<Integer> values) {
@@ -749,7 +903,13 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 		return ClientboundBlockEntityDataPacket.create(this);
 	}
 
-	/** Deliberately carries the preview only, never the inventory. */
+	/**
+	 * Deliberately carries the preview only, never the inventory.
+	 *
+	 * <p>The parked remainders go with it, under their own key so a reload from disk cannot
+	 * mistake them for the saved ones: the client has no stacks to attach them to, and reads them
+	 * as bare counts for the screen's slot tooltip.
+	 */
 	@Override
 	public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
 		TagValueOutput out = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, registries);
@@ -762,68 +922,31 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 		// A locked drawer draws its filter on the face even while empty, so this has to reach
 		// the client separately — an empty drawer has no preview to carry it.
 		saveTargeting(out, true);
+		out.putInt("stack_depth", stackDepth());
+
+		DrawerOverflow overflow = contents.overflow();
+
+		if (!overflow.isEmpty()) {
+			out.store("synced_overflow", DrawerOverflow.CODEC, overflow);
+		}
 
 		return out.buildResult();
 	}
 
-	/** How many slots actually store goods — what the chest screen shows. */
-	public int storageSize() {
-		return rows() * 9;
-	}
-
 	/**
-	 * The overflow slot: one slot past the storage, never drawn in the chest screen.
+	 * Writes the contents and everything bolted to the drawer.
 	 *
-	 * <p>It exists so that a voiding drawer can <em>accept</em> an insert it has no room for.
-	 * Nothing else can express that. The lock is enforced in {@link #canPlaceItem}, which only
-	 * answers yes or no, and a hopper never even asks: {@code HopperBlockEntity.ejectItems} calls
-	 * {@code isFullContainer} first and gives up before any per-slot check. That test passes only
-	 * if some slot reports room, so a drawer that wants to keep draining a hopper has to have one.
-	 *
-	 * <p>Whatever lands here is discarded by {@link #setChanged()} on the same tick, so the slot
-	 * reads empty to the next caller and the drawer never looks full to a hopper. A full stack is
-	 * taken in one go, because {@code tryMoveInItem} hands an empty slot the whole stack — which is
-	 * what keeps throughput the same for a pipe moving 64 as for a hopper moving one.
-	 */
-	public int overflowSlot() {
-		return storageSize();
-	}
-
-	/**
-	 * Deliberately one larger than {@link #storageSize()}.
-	 *
-	 * <p>The vanilla {@code ChestMenu} is kept: {@code checkContainerSize} is a minimum rather than
-	 * an exact match, and the menu lays out exactly {@code rows * 9} slots, so the overflow slot is
-	 * simply not in the screen and no custom menu or screen is needed. It has to be a real index
-	 * below this number rather than a virtual one past the end, because the transfer API's sided
-	 * wrapper indexes a backing list sized from exactly this method and would throw otherwise.
-	 */
-	@Override
-	public int getContainerSize() {
-		return storageSize() + 1;
-	}
-
-	@Override
-	protected NonNullList<ItemStack> getItems() {
-		return items;
-	}
-
-	@Override
-	protected void setItems(NonNullList<ItemStack> replacement) {
-		this.items = replacement;
-	}
-
-	/**
-	 * Writes the contents.
-	 *
-	 * <p>{@link BaseContainerBlockEntity} saves only the custom name and lock — every vanilla
-	 * container writes its own items, and so must this one. Without it a drawer's contents live
-	 * only in memory and vanish the moment the world is reloaded.
+	 * <p>The contents are today's {@code Items} list plus the remainders when there are any, so a
+	 * world saved before the storage layer existed loads with no conversion: it simply has no
+	 * remainders. The name and lock use vanilla's keys, which {@code BaseContainerBlockEntity}
+	 * used to write and this class now does.
 	 */
 	@Override
 	protected void saveAdditional(ValueOutput data) {
 		super.saveAdditional(data);
-		ContainerHelper.saveAllItems(data, items);
+		contents.save(data);
+		lockKey.addToTag(data);
+		data.storeNullable("CustomName", ComponentSerialization.CODEC, name);
 
 		// Written densely, without the empty slots, so the save format does not depend on
 		// MAX_UPGRADE_SLOTS and a later change to that ceiling cannot strand anything.
@@ -839,9 +962,9 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 	@Override
 	protected void loadAdditional(ValueInput data) {
 		super.loadAdditional(data);
-
-		items = NonNullList.withSize(getContainerSize(), ItemStack.EMPTY);
-		ContainerHelper.loadAllItems(data, items);
+		contents.load(data);
+		lockKey = LockCode.fromTag(data);
+		name = parseCustomNameSafe(data, "CustomName");
 
 		// Present only in the sync tag, which deliberately carries no items; a drawer loaded
 		// from disk has the real contents and recomputes from them instead.
@@ -851,8 +974,13 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 		for (int slot = 0; slot < saved.size() && slot < upgrades.size(); slot++) {
 			upgrades.set(slot, saved.get(slot));
 		}
+
 		loadTargeting(data);
 		broadcastFilters = lockedItems();
+
+		syncedStackDepth = data.getIntOr("stack_depth", 1);
+		data.read("synced_overflow", DrawerOverflow.CODEC)
+				.ifPresent(overflow -> contents.applyOverflow(overflow, false));
 
 		previewItem = data.read("preview_item", ItemStack.CODEC).orElse(ItemStack.EMPTY);
 		previewCount = data.getLongOr("preview_count", 0L);
@@ -862,36 +990,58 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 		}
 	}
 
+	// --- name and lock -----------------------------------------------------------
+
 	@Override
-	protected Component getDefaultName() {
-		return getBlockState().getBlock().getName();
+	public Component getName() {
+		return name != null ? name : getBlockState().getBlock().getName();
 	}
+
+	@Override
+	public Component getDisplayName() {
+		return getName();
+	}
+
+	@Override
+	public @Nullable Component getCustomName() {
+		return name;
+	}
+
+	public boolean canOpen(Player player) {
+		return lockKey.canUnlock(player);
+	}
+
+	// --- menu --------------------------------------------------------------------
 
 	/**
 	 * What the menu needs that its slots cannot carry: whether a lock is installed, which decides
 	 * whether the filter grid is there at all. One int, synced by the menu's own data-slot path.
 	 */
-	private final net.minecraft.world.inventory.ContainerData menuData =
-			new net.minecraft.world.inventory.ContainerData() {
-				@Override
-				public int get(int index) {
-					return locks() ? 1 : 0;
-				}
+	private final ContainerData menuData = new ContainerData() {
+		@Override
+		public int get(int index) {
+			return lockCapacity() > 0 ? 1 : 0;
+		}
 
-				@Override
-				public void set(int index, int value) {
-					// Server-owned; the client is told, never the other way round.
-				}
+		@Override
+		public void set(int index, int value) {
+			// Server-owned; the client is told, never the other way round.
+		}
 
-				@Override
-				public int getCount() {
-					return DrawerMenu.DATA_COUNT;
-				}
-			};
+		@Override
+		public int getCount() {
+			return DrawerMenu.DATA_COUNT;
+		}
+	};
 
 	@Override
-	protected AbstractContainerMenu createMenu(int syncId, Inventory playerInventory) {
-		return new DrawerMenu(syncId, playerInventory, this, upgradeContainer,
+	public @Nullable AbstractContainerMenu createMenu(int syncId, Inventory playerInventory, Player player) {
+		if (!canOpen(player)) {
+			BaseContainerBlockEntity.sendChestLockedNotifications(Vec3.atCenterOf(worldPosition), player, getDisplayName());
+			return null;
+		}
+
+		return new DrawerMenu(syncId, playerInventory, contents, this, upgradeContainer,
 				menuData, rows(), upgradeSlots(), worldPosition);
 	}
 
@@ -907,46 +1057,15 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 		return new DrawerMenuData(rows(), upgradeSlots(), worldPosition);
 	}
 
-	/**
-	 * Stops a drawer that keeps its contents from holding another of equal or higher rank.
-	 *
-	 * <p>Applies to hoppers as well as the GUI, since {@code Container#canPlaceItem} governs both —
-	 * otherwise the rule would be trivially bypassed by piping one in.
-	 */
-	@Override
-	public boolean canPlaceItem(int slot, ItemStack stack) {
-		// Per slot, and checked here rather than in the menu for the same reason the nesting
-		// rule is: a filter the screen enforced alone would be bypassed by piping items in.
-		if (slot < storageSize() && isLockedSlot(slot) && !slotAccepts(slot, stack)) {
-			return false;
-		}
-
-		// The overflow slot is not storage, so it takes an item only when there is genuinely
-		// nowhere else for it to go. Asking here rather than relying on it being tried last
-		// keeps the slot honest to a caller that probes it on its own.
-		if (slot == overflowSlot() && (!isVoiding(stack) || hasRoomInStorage(stack))) {
-			return false;
-		}
-
-		DrawerTier self = tier();
-
-		if (!self.keepsContents()) {
-			return true;
-		}
-
-		if (stack.getItem() instanceof BlockItem blockItem && blockItem.getBlock() instanceof DrawerBlock other) {
-			return self.canContain(resolve(other.tierKey()));
-		}
-
-		return true;
-	}
+	// --- breaking and components -------------------------------------------------
 
 	/**
-	 * Keeps a shulker-style drawer from spilling.
+	 * What happens to the contents when the block goes.
 	 *
-	 * <p>This is the hook that drops a container block entity's contents on removal. For tiers
-	 * whose contents ride inside the dropped item via the {@code minecraft:container} component,
-	 * letting it run would duplicate everything inside.
+	 * <p>Vanilla's default spills a block entity's contents only if it is a {@code Container}, and
+	 * this one is not, so spilling is ours to do: every slot's total, as as many legal stacks as it
+	 * takes. The tiers that keep their contents skip it — for them the contents ride inside the
+	 * dropped item via the components below, and spilling as well would duplicate everything.
 	 */
 	@Override
 	public void preRemoveSideEffects(BlockPos pos, BlockState state) {
@@ -961,26 +1080,65 @@ public class DrawerBlockEntity extends BaseContainerBlockEntity
 
 		upgrades.clear();
 
-		if (tier().keepsContents()) {
+		if (tier().keepsContents() || level == null) {
 			return;
 		}
 
-		super.preRemoveSideEffects(pos, state);
+		NonNullList<ItemStack> spilled = NonNullList.create();
+		spilled.addAll(contents.drain());
+		Containers.dropContents(level, pos, spilled);
 	}
 
+	/**
+	 * Reads a placed drawer's contents back off the item.
+	 *
+	 * <p>{@code minecraft:container} carries the visible stacks; the remainders come separately,
+	 * as counts against those stacks, and a count whose stack did not arrive is dropped rather than
+	 * attached to nothing.
+	 */
 	@Override
 	protected void applyImplicitComponents(DataComponentGetter components) {
 		super.applyImplicitComponents(components);
+		name = components.get(DataComponents.CUSTOM_NAME);
+		lockKey = components.getOrDefault(DataComponents.LOCK, LockCode.NO_LOCK);
+
+		contents.clearContent();
+		components.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).copyInto(contents.items());
+		contents.applyOverflow(
+				components.getOrDefault(LodestoreComponents.DRAWER_OVERFLOW, DrawerOverflow.EMPTY), true);
 		setChanged();
 	}
 
+	/**
+	 * What the dropped item carries for the tiers whose loot table copies it.
+	 *
+	 * <p>The visible stacks are all legal, so {@code minecraft:container} validates none of them
+	 * away. The remainders go in their own component, and only when there are any, so an ordinary
+	 * drawer's drop stays identical to a fresh item and the two still stack.
+	 */
 	@Override
 	protected void collectImplicitComponents(DataComponentMap.Builder builder) {
 		super.collectImplicitComponents(builder);
+		builder.set(DataComponents.CUSTOM_NAME, name);
+
+		if (!lockKey.equals(LockCode.NO_LOCK)) {
+			builder.set(DataComponents.LOCK, lockKey);
+		}
+
+		builder.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(contents.items()));
+
+		DrawerOverflow overflow = contents.overflow();
+
+		if (!overflow.isEmpty()) {
+			builder.set(LodestoreComponents.DRAWER_OVERFLOW, overflow);
+		}
 	}
 
 	@Override
-	public @Nullable Component getCustomName() {
-		return super.getCustomName();
+	public void removeComponentsFromTag(ValueOutput output) {
+		output.discard("CustomName");
+		output.discard("lock");
+		output.discard("Items");
+		output.discard(DrawerContents.OVERFLOW_KEY);
 	}
 }

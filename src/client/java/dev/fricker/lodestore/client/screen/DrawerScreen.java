@@ -1,5 +1,7 @@
 package dev.fricker.lodestore.client.screen;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -18,6 +20,7 @@ import net.minecraft.world.item.ItemStack;
 import dev.fricker.lodestore.Lodestore;
 import dev.fricker.lodestore.api.LodestoreRegistries;
 import dev.fricker.lodestore.api.drawer.DrawerUpgrade;
+import dev.fricker.lodestore.api.drawer.UpgradeBehaviour;
 import dev.fricker.lodestore.block.DrawerBlockEntity;
 import dev.fricker.lodestore.item.DrawerUpgradeItem;
 import dev.fricker.lodestore.menu.DrawerMenu;
@@ -58,20 +61,20 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	/** The vanilla chest's own arithmetic, so the player's inventory lands where it always does. */
 	private static final int CHROME_HEIGHT = 114;
 
-	private static final int BEHAVIOUR_NONE = -1;
-	private static final int BEHAVIOUR_LOCK = 0;
-	private static final int BEHAVIOUR_VOID = 1;
-
-	/** The lock's gold and the void upgrade's purple, so a tint names the upgrade that put it there. */
+	/**
+	 * The lock's gold, the void upgrade's purple and the stack upgrade's green, so a tint names
+	 * the upgrade that put it there. Each is the colour of its sprite's motif.
+	 */
 	private static final int LOCK_TINT = 0x55F2C852;
 	private static final int VOID_TINT = 0x553B1E6E;
-	/** While choosing, the upgrade being edited is picked out more strongly than the other. */
+	private static final int STACK_TINT = 0x555FBF5F;
+	/** While choosing, the upgrade being edited is picked out more strongly than the others. */
 	private static final int SELECTING_TINT = 0x99FFFFFF;
 
 	private final int rows;
 
-	/** Which upgrade's slots are being chosen, or {@link #BEHAVIOUR_NONE}. Purely a client mode. */
-	private int selecting = BEHAVIOUR_NONE;
+	/** Which upgrade's slots are being chosen, or null. Purely a client mode. */
+	private @Nullable UpgradeBehaviour selecting;
 	/** The last slot toggled, so a shift-click can act on everything between it and the next. */
 	private int lastToggled = -1;
 
@@ -85,7 +88,7 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	}
 
 	/** The drawer itself, which carries the targeting. Null if the chunk went away under us. */
-	private DrawerBlockEntity drawer() {
+	private @Nullable DrawerBlockEntity drawer() {
 		if (minecraft == null || minecraft.level == null) {
 			return null;
 		}
@@ -95,9 +98,9 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	}
 
 	/** Which kind of targeting an upgrade item owns, resolved against the synced registry. */
-	private int behaviourOf(ItemStack stack) {
+	private @Nullable UpgradeBehaviour behaviourOf(ItemStack stack) {
 		if (!(stack.getItem() instanceof DrawerUpgradeItem item) || minecraft == null || minecraft.level == null) {
-			return BEHAVIOUR_NONE;
+			return null;
 		}
 
 		DrawerUpgrade upgrade = minecraft.level.registryAccess()
@@ -105,11 +108,29 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 				.flatMap(registry -> registry.getOptional(item.upgradeKey()))
 				.orElse(DrawerUpgrade.FALLBACK);
 
-		if (upgrade.locksContents()) {
-			return BEHAVIOUR_LOCK;
+		for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
+			if (behaviour.grantedBy(upgrade)) {
+				return behaviour;
+			}
 		}
 
-		return upgrade.voidsOverflow() ? BEHAVIOUR_VOID : BEHAVIOUR_NONE;
+		return null;
+	}
+
+	private static int tint(UpgradeBehaviour behaviour) {
+		return switch (behaviour) {
+			case LOCK -> LOCK_TINT;
+			case VOID -> VOID_TINT;
+			case STACK -> STACK_TINT;
+		};
+	}
+
+	private static String adjustKey(UpgradeBehaviour behaviour) {
+		return switch (behaviour) {
+			case LOCK -> "lodestore.upgrade.adjust_locked";
+			case VOID -> "lodestore.upgrade.adjust_voided";
+			case STACK -> "lodestore.upgrade.adjust_stacked";
+		};
 	}
 
 	@Override
@@ -152,25 +173,19 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 			return;
 		}
 
-		Set<Integer> lockSlots = drawer.lockedSlots();
-		Set<Integer> voidSlots = drawer.voidedSlots();
+		Set<Integer> chosenSlots = selecting == null ? Set.of() : drawer.coveredSlots(selecting);
 
 		for (int slot = 0; slot < getMenu().storageEnd(); slot++) {
 			int x = 8 + (slot % 9) * 18;
 			int y = DrawerMenu.FIRST_SLOT_Y + (slot / 9) * 18;
 
-			if (lockSlots.contains(slot)) {
-				graphics.fill(x, y, x + 16, y + 16, LOCK_TINT);
+			for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
+				if (drawer.coveredSlots(behaviour).contains(slot)) {
+					graphics.fill(x, y, x + 16, y + 16, tint(behaviour));
+				}
 			}
 
-			if (voidSlots.contains(slot)) {
-				graphics.fill(x, y, x + 16, y + 16, VOID_TINT);
-			}
-
-			boolean chosen = selecting == BEHAVIOUR_LOCK ? lockSlots.contains(slot)
-					: selecting == BEHAVIOUR_VOID && voidSlots.contains(slot);
-
-			if (chosen) {
+			if (chosenSlots.contains(slot)) {
 				// An outline rather than a wash, so the item underneath stays readable.
 				graphics.fill(x, y, x + 16, y + 1, SELECTING_TINT);
 				graphics.fill(x, y + 15, x + 16, y + 16, SELECTING_TINT);
@@ -181,40 +196,57 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	}
 
 	/**
-	 * Explains what right-clicking an upgrade does, on the upgrade itself.
+	 * Two tooltips of ours.
 	 *
-	 * <p>The gesture is not one anything else in the game teaches, and an upgrade whose reach can
-	 * be changed looks exactly like one whose reach cannot. The hint goes here rather than on the
-	 * item so it appears where the gesture works, and the covered count comes with it because
-	 * "how far does this one actually reach" is the question the tint is answering.
+	 * <p>On an upgrade: what right-clicking it does. The gesture is not one anything else in the
+	 * game teaches, and an upgrade whose reach can be changed looks exactly like one whose reach
+	 * cannot. The hint goes here rather than on the item so it appears where the gesture works, and
+	 * the covered count comes with it because "how far does this one actually reach" is the
+	 * question the tint is answering.
+	 *
+	 * <p>On a storage slot a stack upgrade covers: how much is really in it. The slot shows one
+	 * legal stack, and nothing else on screen says there are more behind it.
 	 */
 	@Override
 	protected List<Component> getTooltipFromContainerItem(ItemStack stack) {
 		List<Component> tooltip = super.getTooltipFromContainerItem(stack);
 		DrawerMenu menu = getMenu();
 
-		if (hoveredSlot == null || hoveredSlot.index < menu.storageEnd() || hoveredSlot.index >= menu.upgradeEnd()) {
+		if (hoveredSlot == null) {
 			return tooltip;
 		}
 
-		int behaviour = behaviourOf(stack);
+		DrawerBlockEntity drawer = drawer();
 
-		if (behaviour == BEHAVIOUR_NONE) {
+		if (hoveredSlot.index < menu.storageEnd()) {
+			int slot = hoveredSlot.index;
+
+			if (drawer == null || (!drawer.isStackedSlot(slot) && drawer.remainder(slot) == 0)) {
+				return tooltip;
+			}
+
+			List<Component> hinted = new ArrayList<>(tooltip);
+			hinted.add(Component.translatable("lodestore.slot.stored",
+							stack.getCount() + drawer.remainder(slot), drawer.slotCapacity(slot, stack))
+					.withStyle(ChatFormatting.GRAY));
+			return hinted;
+		}
+
+		if (hoveredSlot.index >= menu.upgradeEnd()) {
+			return tooltip;
+		}
+
+		UpgradeBehaviour behaviour = behaviourOf(stack);
+
+		if (behaviour == null) {
 			return tooltip;
 		}
 
 		List<Component> hinted = new ArrayList<>(tooltip);
-		boolean lock = behaviour == BEHAVIOUR_LOCK;
-
-		hinted.add(Component.translatable(lock
-						? "lodestore.upgrade.adjust_locked"
-						: "lodestore.upgrade.adjust_voided")
-				.withStyle(ChatFormatting.GRAY));
-
-		DrawerBlockEntity drawer = drawer();
+		hinted.add(Component.translatable(adjustKey(behaviour)).withStyle(ChatFormatting.GRAY));
 
 		if (drawer != null) {
-			int covered = (lock ? drawer.lockedSlots() : drawer.voidedSlots()).size();
+			int covered = drawer.coveredSlots(behaviour).size();
 			hinted.add(Component.translatable("lodestore.upgrade.coverage", covered, menu.storageEnd())
 					.withStyle(ChatFormatting.DARK_GRAY));
 		}
@@ -237,21 +269,21 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 		DrawerMenu menu = getMenu();
 
 		if (slot != null && button == 1 && slotId >= menu.storageEnd() && slotId < menu.upgradeEnd()) {
-			int behaviour = behaviourOf(slot.getItem());
-			selecting = behaviour == BEHAVIOUR_NONE || behaviour == selecting ? BEHAVIOUR_NONE : behaviour;
+			UpgradeBehaviour behaviour = behaviourOf(slot.getItem());
+			selecting = behaviour == null || behaviour == selecting ? null : behaviour;
 			lastToggled = -1;
 			return;
 		}
 
-		if (selecting != BEHAVIOUR_NONE && slot != null && slotId >= 0 && slotId < menu.storageEnd()) {
-			toggle(slotId, input == ContainerInput.QUICK_MOVE);
+		if (selecting != null && slot != null && slotId >= 0 && slotId < menu.storageEnd()) {
+			toggle(selecting, slotId, input == ContainerInput.QUICK_MOVE);
 			return;
 		}
 
 		super.slotClicked(slot, slotId, button, input);
 	}
 
-	private void toggle(int slotId, boolean range) {
+	private void toggle(UpgradeBehaviour behaviour, int slotId, boolean range) {
 		if (minecraft == null || minecraft.gameMode == null) {
 			return;
 		}
@@ -260,7 +292,7 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 
 		for (int slot = Math.min(from, slotId); slot <= Math.max(from, slotId); slot++) {
 			minecraft.gameMode.handleInventoryButtonClick(getMenu().containerId,
-					DrawerMenu.targetButton(selecting == BEHAVIOUR_LOCK, slot));
+					DrawerMenu.targetButton(behaviour, slot));
 		}
 
 		lastToggled = slotId;

@@ -5,7 +5,6 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.block.Block;
@@ -15,6 +14,8 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 import dev.fricker.lodestore.Lodestore;
 import dev.fricker.lodestore.api.drawer.DrawerTier;
 import dev.fricker.lodestore.block.DrawerBlock;
+import dev.fricker.lodestore.item.DrawerBlockItem;
+import dev.fricker.lodestore.storage.DrawerOverflow;
 
 /**
  * Block registration.
@@ -65,14 +66,16 @@ public final class LodestoreBlocks {
 	 *
 	 * <p>The item carries an empty {@code minecraft:container} by default, which is not cosmetic.
 	 * Breaking a drawer copies the block entity's implicit components onto the dropped item, and
-	 * {@link net.minecraft.world.level.block.entity.BaseContainerBlockEntity} writes that component
-	 * whether or not the drawer held anything. Without the same component on the item to begin
-	 * with, a drawer that has been placed once carries a patch a never-placed one does not, the two
-	 * stop stacking in the inventory, and the player ends up with two piles of identical drawers.
-	 * Declaring it here makes the copied value equal the prototype, which
+	 * the drawer writes that component whether or not it held anything. Without the same component
+	 * on the item to begin with, a drawer that has been placed once carries a patch a never-placed
+	 * one does not, the two stop stacking in the inventory, and the player ends up with two piles
+	 * of identical drawers. Declaring it here makes the copied value equal the prototype, which
 	 * {@code PatchedDataComponentMap} then drops instead of recording.
 	 *
-	 * <p>It goes on every tier, not just the two that keep their contents: which tiers those are is
+	 * <p>The overflow component — the counts parked behind full stacks — gets the same treatment
+	 * for the same reason, even though the drawer only writes it when there is something to say.
+	 *
+	 * <p>Both go on every tier, not just the two that keep their contents: which tiers those are is
 	 * datapack-driven and the loot tables are data too, so the item side stays permissive rather
 	 * than encoding an assumption a pack can change.
 	 */
@@ -81,9 +84,10 @@ public final class LodestoreBlocks {
 		Registry.register(
 				BuiltInRegistries.ITEM,
 				key.identifier(),
-				new BlockItem(block, new Item.Properties()
+				new DrawerBlockItem(block, new Item.Properties()
 						.setId(ResourceKey.create(Registries.ITEM, key.identifier()))
-						.component(DataComponents.CONTAINER, ItemContainerContents.EMPTY))
+						.component(DataComponents.CONTAINER, ItemContainerContents.EMPTY)
+						.component(LodestoreComponents.DRAWER_OVERFLOW, DrawerOverflow.EMPTY))
 		);
 	}
 }

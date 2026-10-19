@@ -24,22 +24,25 @@ import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
 /**
- * Why there is no stack upgrade.
+ * Why the storage layer exists.
  *
- * <p>A stack upgrade — targeted slots that hold more than a normal stack — was designed, measured
- * and abandoned. These tests are what the measurement found, kept as assertions rather than as
- * prose, because every one of them is a limit in Minecraft rather than in Lodestore. If a later
- * version lifts one, the test that pins it goes red and someone gets to reopen the question; a
- * paragraph in the README would simply go quietly out of date.
+ * <p>A stack upgrade — targeted slots that hold more than a normal stack — was first attempted
+ * through vanilla's {@code Container} and abandoned there. These tests are what the measurement
+ * found, kept as assertions rather than as prose, because every one of them is a limit in Minecraft
+ * rather than in Lodestore. They are also the design constraints of the storage layer that was
+ * built instead: a drawer is no longer a {@code Container}, holds each slot as a legal stack plus a
+ * parked count, and never constructs the over-sized stack these tests show cannot survive. If a
+ * later version lifts one of them, the test goes red and someone gets to ask whether the layer
+ * still needs to work the way it does.
  *
- * <p>The full argument is in the README under "Why there is no stack upgrade". The short version:
+ * <p>The full argument is in the README under "Why the storage layer exists". The short version:
  * raising {@code Container#getMaxStackSize} works for the screen, for pipes and for the comparator,
  * and is ignored by the vanilla hopper and by the {@code minecraft:container} component that
  * carries a drawer's contents when it is broken. The second of those destroys items silently.
  *
  * <p>Nothing here touches a drawer. That is deliberate: these are vanilla's rules, and a test that
  * went through a drawer would be measuring Lodestore's reaction to them instead of the rules
- * themselves.
+ * themselves. {@code StorageLayerGameTests} is where the drawer's reaction is measured.
  */
 public class StackCeilingGameTests {
 	/** A ceiling well past any item's own, and past the 99 the codecs allow, so both walls show. */
@@ -54,9 +57,9 @@ public class StackCeilingGameTests {
 	 * container nowhere in the expression. So a drawer can tell the screen and the transfer API
 	 * that a slot holds 256, and a hopper will still stop at 64 and then sit there full.
 	 *
-	 * <p>Fabric's hopper patch does not rescue this. {@code HopperBlockEntityMixin} takes the
-	 * transfer-API route only {@code if (container == null)}, and a drawer is a {@code Container} on
-	 * purpose — that is what makes hoppers, droppers and pipes work with no code at all.
+	 * <p>Fabric's hopper patch does not rescue a container. {@code HopperBlockEntityMixin} takes the
+	 * transfer-API route only {@code if (container == null)} — which is exactly why a drawer stopped
+	 * being one.
 	 */
 	@GameTest
 	public void theHopperIgnoresTheContainersStackCeiling(GameTestHelper helper) {
@@ -76,7 +79,7 @@ public class StackCeilingGameTests {
 			throw helper.assertionException("the hopper now honours the container ceiling: it moved "
 					+ (32 - remainder.getCount()) + " into a slot the container said had room, "
 					+ "leaving the slot at " + container.getItem(0).getCount()
-					+ ". A stack upgrade may be possible again — see the README.");
+					+ ". The storage layer's premise has shifted — see the README.");
 		}
 
 		helper.succeed();
@@ -115,11 +118,11 @@ public class StackCeilingGameTests {
 	/**
 	 * A stack past the item's own limit does not survive {@code minecraft:container}.
 	 *
-	 * <p>This is the one that loses items, and it is why no amount of care on the insertion side
-	 * would have made a stack upgrade safe. Sturdy and reinforced drawers carry their contents
-	 * inside the dropped item through that component; reading it back goes through
-	 * {@code ItemStackTemplate#create}, which validates and returns {@code ItemStack.EMPTY} for
-	 * anything over-sized. The slot is gone, with a line in the log and nothing else.
+	 * <p>This is the one that loses items, and it is why the storage layer carries a slot's parked
+	 * count in a component of its own rather than in a bigger stack. Sturdy and reinforced drawers
+	 * carry their contents inside the dropped item through this component; reading it back goes
+	 * through {@code ItemStackTemplate#create}, which validates and returns {@code ItemStack.EMPTY}
+	 * for anything over-sized. The slot is gone, with a line in the log and nothing else.
 	 *
 	 * <p>Note the boundary: the item's own maximum, not the 99 the codecs allow. 65 cobblestone is
 	 * already destroyed. So the component cannot carry an over-stack of <em>any</em> size.
@@ -139,7 +142,7 @@ public class StackCeilingGameTests {
 			if (!back.isEmpty()) {
 				throw helper.assertionException("minecraft:container now carries " + count
 						+ " cobblestone, coming back as " + back.getCount()
-						+ ". A stack upgrade may be possible again — see the README.");
+						+ ". The storage layer's premise has shifted — see the README.");
 			}
 		}
 
@@ -154,8 +157,8 @@ public class StackCeilingGameTests {
 	 * encode fails, the problem reporter swallows it, and the slot is simply absent from the tag.
 	 * The drawer reloads a slot short and nothing anywhere says why.
 	 *
-	 * <p>So even granting the hopper and the component, a stack upgrade could only ever have
-	 * offered 99 against a normal 64 — and the hopper could never have filled the difference.
+	 * <p>So a count above a stack has to be saved apart from the stack, which is what the storage
+	 * layer's remainder table is.
 	 */
 	@GameTest
 	public void overNinetyNineIsSilentlyDroppedOnSave(GameTestHelper helper) {
@@ -169,7 +172,7 @@ public class StackCeilingGameTests {
 			if (!back.isEmpty()) {
 				throw helper.assertionException("a stack of " + count + " now survives a save, "
 						+ "coming back as " + back.getCount()
-						+ ". A stack upgrade may be possible again — see the README.");
+						+ ". The storage layer's premise has shifted — see the README.");
 			}
 		}
 
@@ -184,6 +187,7 @@ public class StackCeilingGameTests {
 	 * no item limit. One left click and the over-stack is loose: on the cursor, then in an
 	 * inventory or on the ground as an item entity. At that point it is past every check a drawer
 	 * could make, and over 99 it cannot be written at all, so it is destroyed by the next save.
+	 * The storage layer's answer is that a slot never holds more than a legal stack to take.
 	 */
 	@GameTest
 	public void anOverSizedStackEscapesASlotAndCannotBeSaved(GameTestHelper helper) {
@@ -210,7 +214,7 @@ public class StackCeilingGameTests {
 
 		if (encodable) {
 			throw helper.assertionException("an escaped stack of " + RAISED_CEILING
-					+ " can now be written to disk. A stack upgrade may be possible again — "
+					+ " can now be written to disk. The storage layer's premise has shifted — "
 					+ "see the README.");
 		}
 

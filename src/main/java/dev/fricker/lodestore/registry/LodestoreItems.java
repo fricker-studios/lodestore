@@ -38,6 +38,16 @@ public final class LodestoreItems {
 	public static final DrawerUpgradeItem VOID_UPGRADE = new DrawerUpgradeItem(
 			new Item.Properties().setId(VOID_UPGRADE_KEY), LodestoreDrawerUpgrades.VOID);
 
+	public static final ResourceKey<Item> STACK_UPGRADE_KEY = itemKey("stack_upgrade");
+	/**
+	 * Covered slots hold several stacks.
+	 *
+	 * <p>The one upgrade the slot-targeting design could not carry while a drawer was a vanilla
+	 * {@code Container}, and the reason Lodestore grew its own storage layer. See the README.
+	 */
+	public static final DrawerUpgradeItem STACK_UPGRADE = new DrawerUpgradeItem(
+			new Item.Properties().setId(STACK_UPGRADE_KEY), LodestoreDrawerUpgrades.STACK);
+
 	private LodestoreItems() {
 	}
 
@@ -47,6 +57,7 @@ public final class LodestoreItems {
 		Registry.register(BuiltInRegistries.ITEM, LOCK_UPGRADE_2_KEY, LOCK_UPGRADE_2);
 		Registry.register(BuiltInRegistries.ITEM, LOCK_UPGRADE_3_KEY, LOCK_UPGRADE_3);
 		Registry.register(BuiltInRegistries.ITEM, VOID_UPGRADE_KEY, VOID_UPGRADE);
+		Registry.register(BuiltInRegistries.ITEM, STACK_UPGRADE_KEY, STACK_UPGRADE);
 	}
 
 	private static ResourceKey<Item> itemKey(String name) {
