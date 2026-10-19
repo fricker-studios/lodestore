@@ -193,6 +193,7 @@ public class DrawerBlockEntity extends BlockEntity
 		@Override
 		public void setItem(int slot, ItemStack stack) {
 			upgrades.set(slot, stack);
+			onUpgradeInstalled(stack);
 			setChanged();
 		}
 
@@ -686,12 +687,42 @@ public class DrawerBlockEntity extends BlockEntity
 		for (int slot = 0; slot < upgradeSlots() && slot < upgrades.size(); slot++) {
 			if (upgrades.get(slot).isEmpty()) {
 				upgrades.set(slot, stack.copyWithCount(1));
+				onUpgradeInstalled(upgrades.get(slot));
 				setChanged();
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/**
+	 * A stack upgrade gathers the drawer's stacks the moment it goes in — the one time a player
+	 * has just asked for deeper slots and would expect the drawer to use them. Runs with the new
+	 * upgrade already installed, so the gathering sees the capacity it grants.
+	 */
+	private void onUpgradeInstalled(ItemStack upgrade) {
+		if (upgrade.getItem() instanceof DrawerUpgradeItem item
+				&& UpgradeBehaviour.STACK.grantedBy(resolveUpgrade(item.upgradeKey()))) {
+			contents.compact();
+		}
+	}
+
+	/**
+	 * Gathers the same item into as few slots as the capacity allows, on the player's request —
+	 * a right-click on the installed stack upgrade. Nothing without one: a plain drawer leaves its
+	 * stacks where they were put, as a chest does.
+	 *
+	 * @return whether the drawer has a stack upgrade, and so did anything at all
+	 */
+	public boolean compress() {
+		if (!stacks()) {
+			return false;
+		}
+
+		contents.compact();
+		setChanged();
+		return true;
 	}
 
 	/** Whether any installed upgrade destroys what this drawer has no room for. */

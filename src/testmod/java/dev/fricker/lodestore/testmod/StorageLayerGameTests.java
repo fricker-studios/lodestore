@@ -38,6 +38,7 @@ import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
 import dev.fricker.lodestore.api.drawer.UpgradeBehaviour;
 import dev.fricker.lodestore.block.DrawerBlockEntity;
+import dev.fricker.lodestore.menu.DrawerMenu;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
 import dev.fricker.lodestore.registry.LodestoreComponents;
 import dev.fricker.lodestore.registry.LodestoreItems;
@@ -428,6 +429,87 @@ public class StorageLayerGameTests {
 
 		if (drawer.total(1) != 30 || drawer.total(2) != 30) {
 			throw helper.assertionException("the drawer gathered stacks on its own: " + drawer.total(1) + " and " + drawer.total(2));
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * A stack upgrade gathers the drawer's stacks the moment it goes in, by either door.
+	 *
+	 * <p>The pair: a lock going in gathers nothing, so it is the stack upgrade and not installing
+	 * that does it. Only into slots already holding the item, so the dirt in slot 7 is untouched.
+	 */
+	@GameTest
+	public void installingTheStackUpgradeGathersStacks(GameTestHelper helper) {
+		DrawerBlockEntity byHand = place(helper, DRAWER, LodestoreBlocks.BASIC_DRAWER);
+		DrawerBlockEntity byMenu = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+		DrawerBlockEntity control = place(helper, new BlockPos(5, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+
+		for (DrawerBlockEntity drawer : List.of(byHand, byMenu, control)) {
+			drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, STACK));
+			drawer.contents().setItem(5, new ItemStack(Items.COBBLESTONE, STACK));
+			drawer.contents().setItem(7, new ItemStack(Items.DIRT, 10));
+			drawer.setChanged();
+		}
+
+		byHand.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE));
+
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		AbstractContainerMenu menu = open(helper, byMenu, player);
+		menu.setCarried(new ItemStack(LodestoreItems.STACK_UPGRADE));
+		menu.clicked(byMenu.storageSize(), 0, ContainerInput.PICKUP, player);
+
+		control.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+
+		for (DrawerBlockEntity drawer : List.of(byHand, byMenu)) {
+			if (drawer.upgrades().size() != 1 || drawer.total(0) != 2 * STACK || drawer.total(5) != 0 || drawer.total(7) != 10) {
+				throw helper.assertionException("installing the stack upgrade did not gather the cobblestone: "
+						+ drawer.upgrades().size() + " installed, slots hold " + drawer.total(0) + ", " + drawer.total(5)
+						+ " and " + drawer.total(7));
+			}
+		}
+
+		if (control.total(0) != STACK || control.total(5) != STACK) {
+			throw helper.assertionException("installing a lock gathered stacks: " + control.total(0) + " and " + control.total(5));
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * Right-clicking the installed stack upgrade gathers the stacks again, on request.
+	 *
+	 * <p>Goes through the menu's button packet, which is what the screen sends. The pair: a drawer
+	 * without a stack upgrade ignores the button and moves nothing.
+	 */
+	@GameTest
+	public void rightClickingTheStackUpgradeGathersStacks(GameTestHelper helper) {
+		DrawerBlockEntity stacked = stackedDrawer(helper, DRAWER, LodestoreBlocks.BASIC_DRAWER);
+		DrawerBlockEntity plain = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+
+		for (DrawerBlockEntity drawer : List.of(stacked, plain)) {
+			drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, STACK));
+			drawer.contents().setItem(5, new ItemStack(Items.COBBLESTONE, STACK));
+			drawer.setChanged();
+		}
+
+		// Put after the upgrade went in, so nothing has gathered them yet.
+		if (stacked.total(0) != STACK || stacked.total(5) != STACK) {
+			throw helper.assertionException("the drawer gathered stacks on its own before being asked");
+		}
+
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+
+		if (!open(helper, stacked, player).clickMenuButton(player, DrawerMenu.COMPRESS_BUTTON)
+				|| stacked.total(0) != 2 * STACK || stacked.total(5) != 0) {
+			throw helper.assertionException("the button did not gather the stacks: " + stacked.total(0) + " and " + stacked.total(5));
+		}
+
+		if (open(helper, plain, player).clickMenuButton(player, DrawerMenu.COMPRESS_BUTTON)
+				|| plain.total(0) != STACK || plain.total(5) != STACK) {
+			throw helper.assertionException("a drawer without a stack upgrade acted on the button: "
+					+ plain.total(0) + " and " + plain.total(5));
 		}
 
 		helper.succeed();

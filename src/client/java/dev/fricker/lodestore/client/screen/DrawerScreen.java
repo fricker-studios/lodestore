@@ -98,16 +98,25 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 				? drawer : null;
 	}
 
-	/** Which targetable behaviour an upgrade item owns, resolved against the synced registry. */
-	private @Nullable UpgradeBehaviour behaviourOf(ItemStack stack) {
+	/** What an upgrade item does, resolved against the synced registry; null for anything else. */
+	private @Nullable DrawerUpgrade upgradeOf(ItemStack stack) {
 		if (!(stack.getItem() instanceof DrawerUpgradeItem item) || minecraft == null || minecraft.level == null) {
 			return null;
 		}
 
-		DrawerUpgrade upgrade = minecraft.level.registryAccess()
+		return minecraft.level.registryAccess()
 				.lookup(LodestoreRegistries.DRAWER_UPGRADE)
 				.flatMap(registry -> registry.getOptional(item.upgradeKey()))
 				.orElse(DrawerUpgrade.FALLBACK);
+	}
+
+	/** Which targetable behaviour an upgrade item owns. */
+	private @Nullable UpgradeBehaviour behaviourOf(ItemStack stack) {
+		DrawerUpgrade upgrade = upgradeOf(stack);
+
+		if (upgrade == null) {
+			return null;
+		}
 
 		for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
 			if (behaviour.targetable() && behaviour.grantedBy(upgrade)) {
@@ -116,6 +125,10 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 		}
 
 		return null;
+	}
+
+	private static boolean stacks(@Nullable DrawerUpgrade upgrade) {
+		return upgrade != null && UpgradeBehaviour.STACK.grantedBy(upgrade);
 	}
 
 	@Override
@@ -228,6 +241,12 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 			hinted.add(Component.translatable("lodestore.upgrade.needed").withStyle(ChatFormatting.RED));
 		}
 
+		// The stack upgrade's right-click gathers the stacks; the lock's chooses slots. Each says so
+		// where the gesture works, since neither is one the game teaches.
+		if (stacks(upgradeOf(stack))) {
+			hinted.add(Component.translatable("lodestore.upgrade.compress").withStyle(ChatFormatting.GRAY));
+		}
+
 		UpgradeBehaviour behaviour = behaviourOf(stack);
 
 		if (behaviour == null) {
@@ -290,7 +309,8 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	}
 
 	/**
-	 * Right-click a lock to start choosing its slots; click storage slots to add or remove.
+	 * Right-click a lock to start choosing its slots; click storage slots to add or remove. Right-
+	 * click the stack upgrade to gather the drawer's stacks.
 	 *
 	 * <p>Shift-click acts on everything between the last slot clicked and this one, so a row or a
 	 * block of slots takes two clicks rather than nine.
@@ -300,6 +320,15 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 		DrawerMenu menu = getMenu();
 
 		if (slot != null && button == 1 && slotId >= menu.storageEnd() && slotId < menu.upgradeEnd()) {
+			if (stacks(upgradeOf(slot.getItem()))) {
+				// Rides the same validated button packet the lock's targeting does.
+				if (minecraft != null && minecraft.gameMode != null) {
+					minecraft.gameMode.handleInventoryButtonClick(menu.containerId, DrawerMenu.COMPRESS_BUTTON);
+				}
+
+				return;
+			}
+
 			UpgradeBehaviour behaviour = behaviourOf(slot.getItem());
 			selecting = behaviour == null || behaviour == selecting ? null : behaviour;
 			lastToggled = -1;

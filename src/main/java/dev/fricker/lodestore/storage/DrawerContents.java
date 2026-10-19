@@ -454,6 +454,53 @@ public final class DrawerContents implements Container {
 	}
 
 	/**
+	 * Merges every item into the earliest slots that hold it, as far as their capacity allows.
+	 *
+	 * <p>Only on request — when a stack upgrade goes in, or the player right-clicks it — never
+	 * after an ordinary change, because a drawer that gathered on its own followed a stack the
+	 * player had just moved with the rest of its slot. Only into slots that already hold the item,
+	 * which is also what keeps a lock's claim honest: an empty locked slot is never filled by this.
+	 * Totals are preserved exactly; a partial merge leaves the rest where it was.
+	 *
+	 * @return whether anything moved
+	 */
+	public boolean compact() {
+		boolean moved = false;
+
+		for (int target = 0; target < visible.size(); target++) {
+			ItemStack kind = kindOf(target);
+
+			if (kind.isEmpty()) {
+				continue;
+			}
+
+			for (int source = target + 1; source < visible.size(); source++) {
+				long room = room(target, kind);
+
+				if (room <= 0) {
+					break;
+				}
+
+				ItemStack other = kindOf(source);
+
+				if (other.isEmpty() || !ItemStack.isSameItemSameComponents(kind, other)) {
+					continue;
+				}
+
+				long amount = Math.min(room, total(source));
+
+				if (amount > 0) {
+					take(source, amount);
+					add(target, kind, amount);
+					moved = true;
+				}
+			}
+		}
+
+		return moved;
+	}
+
+	/**
 	 * Moves what a slot holds past its capacity into empty slots, as far as there are any.
 	 *
 	 * <p>What happens when the capacity under a slot drops: a stack upgrade taken out, a pack

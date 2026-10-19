@@ -46,6 +46,8 @@ public class DrawerMenu extends AbstractContainerMenu {
 
 	/** Button ids are a behaviour and a storage slot packed together; storage never exceeds 54. */
 	private static final int BUTTON_BEHAVIOUR_STRIDE = 256;
+	/** One id past every behaviour's range: gather the stacks, as a right-click on the stack upgrade asks. */
+	public static final int COMPRESS_BUTTON = UpgradeBehaviour.values().length * BUTTON_BEHAVIOUR_STRIDE;
 
 	private final Container storage;
 	private final @Nullable DrawerBlockEntity drawer;
@@ -159,6 +161,10 @@ public class DrawerMenu extends AbstractContainerMenu {
 	public boolean clickMenuButton(Player player, int id) {
 		if (id < 0 || drawer == null) {
 			return false;
+		}
+
+		if (id == COMPRESS_BUTTON) {
+			return drawer.compress();
 		}
 
 		UpgradeBehaviour behaviour = UpgradeBehaviour.byId(id / BUTTON_BEHAVIOUR_STRIDE);

@@ -334,10 +334,14 @@ same way to 64, 128 and 256. An item that does not stack holds `unstackable_per_
 32. The second number exists because four times one is a poor upgrade. Neither pools: the deepest
 installed level decides, so a level one beside a level three is a level three.
 
-Stacks stay where they are put. A version of this gathered the same item into one slot after every
-change, and it followed a stack a player had just moved with the rest of its slot, which is not what
-moving a stack means. The drawer never moves anything of its own accord except what a slot holds
-past its capacity: when the stack upgrade is taken out — or a pack lowers a level, or a broken
+Stacks stay where they are put, and are gathered on request: a stack upgrade going in gathers the
+same item into as few slots as the capacity allows — the one moment a player has just asked for
+deeper slots and expects the drawer to use them — and right-clicking the installed upgrade does it
+again, which its hover text says. A version of this gathered after every change instead, and it
+followed a stack a player had just moved with the rest of its slot, which is not what moving a
+stack means. Gathering only ever fills slots already holding the item, so an empty locked slot is
+never filled by it, and totals are exact. Otherwise the drawer never moves anything of its own
+accord except what a slot holds past its capacity: when the stack upgrade is taken out — or a pack lowers a level, or a broken
 drawer is placed without its upgrade — the parked items spread back out into legal stacks of their
 own, in empty slots, so the drawer looks as it would have without the upgrade. An upgrade the
 contents still need cannot be taken out: the slot refuses the pickup, on both sides, and its
@@ -594,8 +598,10 @@ refused; a swap onto a parked remainder is refused, and the same swap on a slot 
 goes through; shift-click in fills through the parked space, and out drains a slot stack by stack;
 the menu's slots enforce the lock and nesting, and let an empty drawer in; a basic drawer spills its parked items as legal
 stacks, and a sturdy one keeps them in both components and gives them back when placed; removing
-the upgrade spreads what was parked into legal stacks, cannot be taken out while the contents need
-it, and goes back in; a moved stack stays where it is put; an aborted insert leaves no trace; the
+the upgrade gathers the stacks when it goes in by either door and a lock does not, and again when
+right-clicked while a plain drawer ignores the button; it spreads what was parked into legal stacks
+when taken out, cannot be taken out while the contents need it, and goes back in; a moved stack
+stays where it is put; an aborted insert leaves no trace; the
 comparator measures each slot against its own capacity; the three levels give the right numbers to
 a block, a pearl and a sword, and the deepest decides; upgrades are refused as goods through both
 doors. Migration gets a pair of its own: a tag written in the old shape by hand
