@@ -14,6 +14,8 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
+import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
+import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 
@@ -125,6 +127,21 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 			context.getInput().setCursorPos(cursor[0], cursor[1]);
 			context.waitTicks(20);
 			LOGGER.info("[lodestore] tooltip screenshot -> {}", context.takeScreenshot("drawer-upgrade-tooltip"));
+
+			// A slot of a stacked drawer draws its real total, and the tooltip says out of how much.
+			// Both are things only a picture can check. Worth one of its own.
+			int[] stacked = context.computeOnClient(client -> {
+				double scale = client.getWindow().getGuiScale();
+				int left = (client.getWindow().getGuiScaledWidth() - (176 + 66)) / 2;
+				int top = (client.getWindow().getGuiScaledHeight() - (114 + 6 * 18)) / 2;
+
+				// Middle of storage slot 0.
+				return new int[] {(int) ((left + 8 + 8) * scale), (int) ((top + 18 + 8) * scale)};
+			});
+
+			context.getInput().setCursorPos(stacked[0], stacked[1]);
+			context.waitTicks(20);
+			LOGGER.info("[lodestore] stacked slot screenshot -> {}", context.takeScreenshot("drawer-stacked-slot-tooltip"));
 		}
 	}
 
@@ -137,9 +154,9 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 
 		int slot = 0;
 
-		while (amount > 0 && slot < drawer.getContainerSize()) {
+		while (amount > 0 && slot < drawer.storageSize()) {
 			int count = Math.min(amount, item.getDefaultMaxStackSize());
-			drawer.setItem(slot++, new ItemStack(item, count));
+			drawer.contents().setItem(slot++, new ItemStack(item, count));
 			amount -= count;
 		}
 
@@ -170,10 +187,10 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 		}
 
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
-		drawer.setItem(0, new ItemStack(item, 1));
+		drawer.contents().setItem(0, new ItemStack(item, 1));
 		drawer.setChanged();
 
-		drawer.setItem(0, ItemStack.EMPTY);
+		drawer.contents().setItem(0, ItemStack.EMPTY);
 		drawer.setChanged();
 	}
 
@@ -184,21 +201,23 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 			return;
 		}
 
-		drawer.setItem(0, new ItemStack(Items.OAK_LOG, 64));
-		drawer.setItem(1, new ItemStack(Items.IRON_INGOT, 32));
-		drawer.setItem(2, new ItemStack(Items.REDSTONE, 16));
-		drawer.setItem(3, new ItemStack(LodestoreBlocks.STURDY_DRAWER, 2));
+		drawer.contents().setItem(0, new ItemStack(Items.OAK_LOG, 64));
+		drawer.contents().setItem(1, new ItemStack(Items.IRON_INGOT, 32));
+		drawer.contents().setItem(2, new ItemStack(Items.REDSTONE, 16));
+		drawer.contents().setItem(3, new ItemStack(LodestoreBlocks.STURDY_DRAWER, 2));
 		drawer.setChanged();
 
-		// This is the drawer the GUI screenshot opens. A level-two lock reaches two rows and the
-		// void upgrade one, and the void's row is moved off the lock's so the two tints can be
-		// told apart — overlapping them would prove only that something was drawn.
+		// This is the drawer the GUI screenshot opens. A level-two lock reaches two rows, tinted
+		// gold; the void and stack upgrades cover the whole drawer and tint nothing.
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE_2));
 		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
+		drawer.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE));
 
-		for (int slot = 0; slot < 9; slot++) {
-			drawer.toggleTarget(false, slot);
-			drawer.toggleTarget(false, 18 + slot);
+		// Slot 0 is filled to its four stacks: the stacked-slot screenshot hovers it, and the slot
+		// should draw 256 where a plain one would draw 64, with the tooltip saying out of how much.
+		try (Transaction transaction = Transaction.openOuter()) {
+			drawer.storage().getSlot(0).insert(ItemVariant.of(Items.OAK_LOG), 192, transaction);
+			transaction.commit();
 		}
 	}
 

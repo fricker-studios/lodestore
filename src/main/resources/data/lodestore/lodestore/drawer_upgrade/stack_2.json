@@ -1,0 +1,5 @@
+{
+  "locks_contents": false,
+  "stacks_per_slot": 8,
+  "unstackable_per_slot": 16
+}

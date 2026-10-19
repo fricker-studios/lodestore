@@ -198,6 +198,26 @@ VOID_UPGRADE = plate([
     "NNNNNNNNNNNN",
 ])
 
+# The stack upgrade reads as a pile: three slabs, the middle one nudged out of line so it is a
+# stack of things rather than a grille. Green, because gold is the lock's and purple the void's,
+# and the three have to be told apart in a hotbar where a motif is twelve pixels wide.
+STACK_MOTIF = [
+    "NNNNNNNNNNNN",
+    "NNTTTTTTTTuN",
+    "NNUUUUUUUUuN",
+    "NNNNNNNNNNNN",
+    "NTTTTTTTTuNN",
+    "NUUUUUUUUuNN",
+    "NNNNNNNNNNNN",
+    "NNTTTTTTTTuN",
+    "NNUUUUUUUUuN",
+    "NNNNNNNNNNNN",
+]
+# Levels two and three are the same pile on a richer plate, exactly as the lock's levels are.
+STACK_UPGRADE = plate(STACK_MOTIF)
+STACK_UPGRADE_2 = plate(STACK_MOTIF, "j", "k", "l")
+STACK_UPGRADE_3 = plate(STACK_MOTIF, "n", "p", "q")
+
 # ------------------------------------------------------------------------ main
 
 BLOCKS = {
@@ -221,6 +241,9 @@ ITEMS = {
     "lock_upgrade_2": LOCK_UPGRADE_2,
     "lock_upgrade_3": LOCK_UPGRADE_3,
     "void_upgrade": VOID_UPGRADE,
+    "stack_upgrade": STACK_UPGRADE,
+    "stack_upgrade_2": STACK_UPGRADE_2,
+    "stack_upgrade_3": STACK_UPGRADE_3,
 }
 
 if __name__ == "__main__":

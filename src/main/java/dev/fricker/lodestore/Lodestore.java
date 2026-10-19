@@ -14,6 +14,7 @@ import dev.fricker.lodestore.api.drawer.DrawerTier;
 import dev.fricker.lodestore.api.drawer.DrawerUpgrade;
 import dev.fricker.lodestore.registry.LodestoreBlockEntities;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
+import dev.fricker.lodestore.registry.LodestoreComponents;
 import dev.fricker.lodestore.registry.LodestoreCreativeTab;
 import dev.fricker.lodestore.menu.LodestoreMenus;
 import dev.fricker.lodestore.registry.LodestoreItems;
@@ -35,6 +36,8 @@ public class Lodestore implements ModInitializer {
 		DynamicRegistries.registerSynced(LodestoreRegistries.DRAWER_TIER, DrawerTier.CODEC);
 		DynamicRegistries.registerSynced(LodestoreRegistries.DRAWER_UPGRADE, DrawerUpgrade.CODEC);
 
+		// Before the blocks: the drawer items declare the overflow component as a default.
+		LodestoreComponents.initialize();
 		LodestoreBlocks.initialize();
 		LodestoreItems.initialize();
 		LodestoreBlockEntities.initialize();

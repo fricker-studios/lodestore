@@ -22,6 +22,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # The pushed commit itself, not GitHub's ephemeral merge commit: the version derived
+          # below embeds the sha it was built from, and the merge commit's matches nothing anyone
+          # can see in the PR.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # Full history, so the version derived from the nearest tag can see the tags. A shallow
+          # checkout has none, and the jar would be named for no version at all.
+          fetch-depth: 0
 
       # gradle-wrapper.jar is a committed binary that executes on every runner
       # and contributor machine. This fails the build if it is not a known-good

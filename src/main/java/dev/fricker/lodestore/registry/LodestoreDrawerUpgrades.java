@@ -16,6 +16,11 @@ public final class LodestoreDrawerUpgrades {
 	public static final ResourceKey<DrawerUpgrade> LOCK_2 = key("lock_2");
 	public static final ResourceKey<DrawerUpgrade> LOCK_3 = key("lock_3");
 	public static final ResourceKey<DrawerUpgrade> VOID = key("void");
+	/** Every slot holds several stacks. The one upgrade that needed Lodestore's own storage layer. */
+	public static final ResourceKey<DrawerUpgrade> STACK = key("stack");
+	/** Levels differ only in how deep a slot goes; the behaviour is the same. */
+	public static final ResourceKey<DrawerUpgrade> STACK_2 = key("stack_2");
+	public static final ResourceKey<DrawerUpgrade> STACK_3 = key("stack_3");
 
 	private LodestoreDrawerUpgrades() {
 	}
