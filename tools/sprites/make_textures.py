@@ -85,7 +85,7 @@ PANEL_GRAIN = [
 
 
 def front(top_rows, bottom_rows, sides):
-    """Builds a drawer face: 2px frame, then a panel inset with a lit bottom-right."""
+    """Builds a crate face: 2px frame, then a panel inset with a lit bottom-right."""
     assert len(sides) == 12
     rows = list(top_rows)
     for i, (left, right) in enumerate(sides):
@@ -221,15 +221,15 @@ STACK_UPGRADE_3 = plate(STACK_MOTIF, "n", "p", "q")
 # ------------------------------------------------------------------------ main
 
 BLOCKS = {
-    "basic_drawer_front": BASIC_FRONT,
-    "basic_drawer_side": BASIC_SIDE,
-    "basic_drawer_top": BASIC_TOP,
-    "sturdy_drawer_front": STURDY_FRONT,
-    "sturdy_drawer_side": STURDY_SIDE,
-    "sturdy_drawer_top": STURDY_TOP,
-    "reinforced_drawer_front": REINFORCED_FRONT,
-    "reinforced_drawer_side": REINFORCED_SIDE,
-    "reinforced_drawer_top": REINFORCED_TOP,
+    "basic_crate_front": BASIC_FRONT,
+    "basic_crate_side": BASIC_SIDE,
+    "basic_crate_top": BASIC_TOP,
+    "sturdy_crate_front": STURDY_FRONT,
+    "sturdy_crate_side": STURDY_SIDE,
+    "sturdy_crate_top": STURDY_TOP,
+    "reinforced_crate_front": REINFORCED_FRONT,
+    "reinforced_crate_side": REINFORCED_SIDE,
+    "reinforced_crate_top": REINFORCED_TOP,
 }
 LOCK_UPGRADE = plate(LOCK_MOTIF)
 

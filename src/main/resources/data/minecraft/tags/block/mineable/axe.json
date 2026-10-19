@@ -1,7 +1,7 @@
 {
   "values": [
-    "lodestore:basic_drawer",
-    "lodestore:sturdy_drawer",
-    "lodestore:reinforced_drawer"
+    "lodestore:basic_crate",
+    "lodestore:sturdy_crate",
+    "lodestore:reinforced_crate"
   ]
 }

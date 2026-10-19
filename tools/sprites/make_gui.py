@@ -1,29 +1,29 @@
-"""Generates the side panel that sits beside the vanilla chest background in the drawer screen.
+"""Generates the side panel that sits beside the vanilla chest background in the crate screen.
 
 The screen blits `minecraft:textures/gui/container/generic_54.png` for its body, exactly as the
 vanilla chest screen does, and this panel for the upgrade slots and the lock's filter grid. Only
 the panel is ours, so only the panel is drawn here.
 
-The panel is two stacked bands, blitted independently so a drawer takes only what it needs: a cap
+The panel is two stacked bands, blitted independently so a crate takes only what it needs: a cap
 plus however many upgrade rows its tier has, then the bottom cap. Their heights are mirrored in
-DrawerScreen.
+CrateScreen.
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 from pixels import write_png
 
 SLOT = 18
-COLUMNS = 3               # DrawerMenu.UPGRADES_PER_ROW and FILTER_COLUMNS
-# Where the ITEM sits: DrawerMenu.PANEL_SLOT_X minus the 176-wide chest background.
+COLUMNS = 3               # CrateMenu.UPGRADES_PER_ROW and FILTER_COLUMNS
+# Where the ITEM sits: CrateMenu.PANEL_SLOT_X minus the 176-wide chest background.
 SLOT_INTERIOR_X = 8
 # Vanilla paints a slot's border one pixel up and left of the item it holds, so the 18x18 graphic
 # starts one short of the interior. Drawing it flush instead leaves every item sitting over the
 # slot's top-left edge with bare slot showing at the bottom right.
 SLOT_GRAPHIC_X = SLOT_INTERIOR_X - 1
 PANEL_WIDTH = SLOT_GRAPHIC_X + COLUMNS * SLOT + 5
-MAX_UPGRADE_ROWS = 2      # ceil(DrawerTier.MAX_UPGRADE_SLOTS / COLUMNS)
+MAX_UPGRADE_ROWS = 2      # ceil(CrateTier.MAX_UPGRADE_SLOTS / COLUMNS)
 
-# One short of DrawerMenu.FIRST_SLOT_Y, for the same reason SLOT_GRAPHIC_X is one short of the
+# One short of CrateMenu.FIRST_SLOT_Y, for the same reason SLOT_GRAPHIC_X is one short of the
 # interior: the border goes above the item, not on it.
 TOP_CAP = 17
 BOTTOM_CAP = 8

@@ -1,17 +1,17 @@
 {
-  "block.lodestore.basic_drawer": "Basic Drawer",
-  "block.lodestore.reinforced_drawer": "Reinforced Drawer",
-  "block.lodestore.sturdy_drawer": "Sturdy Drawer",
+  "block.lodestore.basic_crate": "Basic Crate",
+  "block.lodestore.reinforced_crate": "Reinforced Crate",
+  "block.lodestore.sturdy_crate": "Sturdy Crate",
   "item.lodestore.lock_upgrade": "Lock Upgrade",
   "item.lodestore.stack_upgrade": "Stack Upgrade",
   "item.lodestore.stack_upgrade_2": "Stack Upgrade II",
   "item.lodestore.stack_upgrade_3": "Stack Upgrade III",
   "item.lodestore.void_upgrade": "Void Upgrade",
   "itemGroup.lodestore.general": "Lodestore",
-  "lodestore.drawer.overflow": "Holds %s more than its stacks show",
+  "lodestore.crate.overflow": "Holds %s more than its stacks show",
   "lodestore.slot.stored": "%s of %s in this slot",
   "lodestore.upgrade.choose_display": "Right-click to choose the slot shown on the front",
-  "lodestore.upgrade.compress": "Right-click to sort the drawer",
+  "lodestore.upgrade.compress": "Right-click to sort the crate",
   "lodestore.upgrade.needed": "Holds too much to take this out",
   "lodestore.upgrade.selecting_display": "Click a slot to show its item, or the shown one to stop"
 }

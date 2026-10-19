@@ -12,10 +12,10 @@ import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 
 import dev.fricker.lodestore.Lodestore;
-import dev.fricker.lodestore.api.drawer.DrawerTier;
-import dev.fricker.lodestore.block.DrawerBlock;
-import dev.fricker.lodestore.item.DrawerBlockItem;
-import dev.fricker.lodestore.storage.DrawerOverflow;
+import dev.fricker.lodestore.api.crate.CrateTier;
+import dev.fricker.lodestore.block.CrateBlock;
+import dev.fricker.lodestore.item.CrateBlockItem;
+import dev.fricker.lodestore.storage.CrateOverflow;
 
 /**
  * Block registration.
@@ -24,30 +24,30 @@ import dev.fricker.lodestore.storage.DrawerOverflow;
  * {@code Properties.setId(...)} before registration — this is not optional.
  */
 public final class LodestoreBlocks {
-	public static final ResourceKey<Block> BASIC_DRAWER_KEY = blockKey("basic_drawer");
+	public static final ResourceKey<Block> BASIC_CRATE_KEY = blockKey("basic_crate");
 	/** Single chest. */
-	public static final DrawerBlock BASIC_DRAWER = drawer(BASIC_DRAWER_KEY, 3, LodestoreDrawerTiers.BASIC);
+	public static final CrateBlock BASIC_CRATE = crate(BASIC_CRATE_KEY, 3, LodestoreCrateTiers.BASIC);
 
-	public static final ResourceKey<Block> STURDY_DRAWER_KEY = blockKey("sturdy_drawer");
+	public static final ResourceKey<Block> STURDY_CRATE_KEY = blockKey("sturdy_crate");
 	/** Single chest, shulker-style: keeps its contents when broken. */
-	public static final DrawerBlock STURDY_DRAWER = drawer(STURDY_DRAWER_KEY, 3, LodestoreDrawerTiers.STURDY);
+	public static final CrateBlock STURDY_CRATE = crate(STURDY_CRATE_KEY, 3, LodestoreCrateTiers.STURDY);
 
-	public static final ResourceKey<Block> REINFORCED_DRAWER_KEY = blockKey("reinforced_drawer");
-	/** Double chest, shulker-style, and the only tier that may hold another drawer. */
-	public static final DrawerBlock REINFORCED_DRAWER = drawer(REINFORCED_DRAWER_KEY, 6, LodestoreDrawerTiers.REINFORCED);
+	public static final ResourceKey<Block> REINFORCED_CRATE_KEY = blockKey("reinforced_crate");
+	/** Double chest, shulker-style, and the only tier that may hold another crate. */
+	public static final CrateBlock REINFORCED_CRATE = crate(REINFORCED_CRATE_KEY, 6, LodestoreCrateTiers.REINFORCED);
 
 	private LodestoreBlocks() {
 	}
 
 	/** Forces class-loading and performs registration. */
 	public static void initialize() {
-		register(BASIC_DRAWER_KEY, BASIC_DRAWER);
-		register(STURDY_DRAWER_KEY, STURDY_DRAWER);
-		register(REINFORCED_DRAWER_KEY, REINFORCED_DRAWER);
+		register(BASIC_CRATE_KEY, BASIC_CRATE);
+		register(STURDY_CRATE_KEY, STURDY_CRATE);
+		register(REINFORCED_CRATE_KEY, REINFORCED_CRATE);
 	}
 
-	private static DrawerBlock drawer(ResourceKey<Block> key, int rows, ResourceKey<DrawerTier> tier) {
-		return new DrawerBlock(
+	private static CrateBlock crate(ResourceKey<Block> key, int rows, ResourceKey<CrateTier> tier) {
+		return new CrateBlock(
 				BlockBehaviour.Properties.of()
 						.setId(key)
 						.strength(2.5f)
@@ -65,15 +65,15 @@ public final class LodestoreBlocks {
 	 * Registers the block and its item.
 	 *
 	 * <p>The item carries an empty {@code minecraft:container} by default, which is not cosmetic.
-	 * Breaking a drawer copies the block entity's implicit components onto the dropped item, and
-	 * the drawer writes that component whether or not it held anything. Without the same component
-	 * on the item to begin with, a drawer that has been placed once carries a patch a never-placed
+	 * Breaking a crate copies the block entity's implicit components onto the dropped item, and
+	 * the crate writes that component whether or not it held anything. Without the same component
+	 * on the item to begin with, a crate that has been placed once carries a patch a never-placed
 	 * one does not, the two stop stacking in the inventory, and the player ends up with two piles
-	 * of identical drawers. Declaring it here makes the copied value equal the prototype, which
+	 * of identical crates. Declaring it here makes the copied value equal the prototype, which
 	 * {@code PatchedDataComponentMap} then drops instead of recording.
 	 *
 	 * <p>The overflow component — the counts parked behind full stacks — gets the same treatment
-	 * for the same reason, even though the drawer only writes it when there is something to say.
+	 * for the same reason, even though the crate only writes it when there is something to say.
 	 *
 	 * <p>Both go on every tier, not just the two that keep their contents: which tiers those are is
 	 * datapack-driven and the loot tables are data too, so the item side stays permissive rather
@@ -84,10 +84,10 @@ public final class LodestoreBlocks {
 		Registry.register(
 				BuiltInRegistries.ITEM,
 				key.identifier(),
-				new DrawerBlockItem(block, new Item.Properties()
+				new CrateBlockItem(block, new Item.Properties()
 						.setId(ResourceKey.create(Registries.ITEM, key.identifier()))
 						.component(DataComponents.CONTAINER, ItemContainerContents.EMPTY)
-						.component(LodestoreComponents.DRAWER_OVERFLOW, DrawerOverflow.EMPTY))
+						.component(LodestoreComponents.CRATE_OVERFLOW, CrateOverflow.EMPTY))
 		);
 	}
 }

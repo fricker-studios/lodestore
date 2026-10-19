@@ -10,8 +10,9 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.registry.DynamicRegistries;
 
 import dev.fricker.lodestore.api.LodestoreRegistries;
-import dev.fricker.lodestore.api.drawer.DrawerTier;
-import dev.fricker.lodestore.api.drawer.DrawerUpgrade;
+import dev.fricker.lodestore.api.crate.CrateTier;
+import dev.fricker.lodestore.api.crate.CrateUpgrade;
+import dev.fricker.lodestore.registry.LodestoreAliases;
 import dev.fricker.lodestore.registry.LodestoreBlockEntities;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
 import dev.fricker.lodestore.registry.LodestoreComponents;
@@ -33,16 +34,18 @@ public class Lodestore implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		// Synced, because the client needs capacities for the upcoming front-face count overlay.
-		DynamicRegistries.registerSynced(LodestoreRegistries.DRAWER_TIER, DrawerTier.CODEC);
-		DynamicRegistries.registerSynced(LodestoreRegistries.DRAWER_UPGRADE, DrawerUpgrade.CODEC);
+		DynamicRegistries.registerSynced(LodestoreRegistries.CRATE_TIER, CrateTier.CODEC);
+		DynamicRegistries.registerSynced(LodestoreRegistries.CRATE_UPGRADE, CrateUpgrade.CODEC);
 
-		// Before the blocks: the drawer items declare the overflow component as a default.
+		// Before the blocks: the crate items declare the overflow component as a default.
 		LodestoreComponents.initialize();
 		LodestoreBlocks.initialize();
 		LodestoreItems.initialize();
 		LodestoreBlockEntities.initialize();
 		LodestoreMenus.initialize();
 		LodestoreCreativeTab.initialize();
+		// Last, so every id it redirects to already exists.
+		LodestoreAliases.initialize();
 
 		// A container that never writes its contents fails silently — nothing throws and
 		// nothing looks wrong until a reload. Check once per server start, on both a

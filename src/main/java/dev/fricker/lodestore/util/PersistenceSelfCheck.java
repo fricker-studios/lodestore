@@ -21,22 +21,22 @@ import net.minecraft.world.level.storage.TagValueInput;
 
 import dev.fricker.lodestore.Lodestore;
 import dev.fricker.lodestore.storage.ContentsHolder;
-import dev.fricker.lodestore.storage.DrawerContents;
-import dev.fricker.lodestore.storage.DrawerOverflow;
+import dev.fricker.lodestore.storage.CrateContents;
+import dev.fricker.lodestore.storage.CrateOverflow;
 
 /**
  * Checks that every Lodestore container survives being written and read back.
  *
  * <p>Exists because a block entity that never writes its contents is completely silent: no
  * exception, no anomaly, nothing to log. It is only detectable by comparing across a save, which is
- * what this does. Drawer contents were lost this way once — {@code BaseContainerBlockEntity} saves
+ * what this does. Crate contents were lost this way once — {@code BaseContainerBlockEntity} saves
  * the custom name and lock but not the items, and every vanilla container writes its own.
  *
  * <p>Runs against whatever is registered, so a backpack or network cell added later is covered
  * without anyone remembering to extend it. Two kinds of thing are found: anything that is still a
- * vanilla {@code Container}, and anything holding Lodestore's own {@link DrawerContents} — a
- * drawer is deliberately not a container any more, and a check that only knew containers would
- * have skipped every drawer in silence, which is the exact failure it exists to catch. For the
+ * vanilla {@code Container}, and anything holding Lodestore's own {@link CrateContents} — a
+ * crate is deliberately not a container any more, and a check that only knew containers would
+ * have skipped every crate in silence, which is the exact failure it exists to catch. For the
  * latter the check also parks a remainder behind each stack, because that count is saved apart
  * from the stack and could be lost on its own.
  */
@@ -123,7 +123,7 @@ public final class PersistenceSelfCheck {
 	}
 
 	private static Optional<String> checkContents(EntityBlock entityBlock, BlockState state, Identifier id,
-			HolderLookup.Provider registries, BlockEntity original, DrawerContents contents) {
+			HolderLookup.Provider registries, BlockEntity original, CrateContents contents) {
 		if (contents.size() == 0) {
 			return Optional.of(id + ": its contents have no slots to check");
 		}
@@ -132,9 +132,9 @@ public final class PersistenceSelfCheck {
 		contents.setItem(0, new ItemStack(Items.DIAMOND, 7));
 		contents.setItem(last, new ItemStack(Items.EMERALD, 3));
 		// Remainders are saved apart from the stacks, so they get their own chance to go missing.
-		contents.applyOverflow(new DrawerOverflow(List.of(
-				new DrawerOverflow.Entry(0, FIRST_REMAINDER),
-				new DrawerOverflow.Entry(last, LAST_REMAINDER))), true);
+		contents.applyOverflow(new CrateOverflow(List.of(
+				new CrateOverflow.Entry(0, FIRST_REMAINDER),
+				new CrateOverflow.Entry(last, LAST_REMAINDER))), true);
 
 		long firstTotal = contents.total(0);
 		long lastTotal = contents.total(last);
@@ -145,7 +145,7 @@ public final class PersistenceSelfCheck {
 			return Optional.of(id + ": reloaded block entity does not hold contents");
 		}
 
-		DrawerContents restored = restoredHolder.contents();
+		CrateContents restored = restoredHolder.contents();
 
 		if (!restored.visible(0).is(Items.DIAMOND) || restored.total(0) != firstTotal) {
 			return Optional.of(id + ": first slot did not survive a save and load (expected "

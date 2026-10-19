@@ -4,8 +4,8 @@ import net.minecraft.core.Registry;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 
-import dev.fricker.lodestore.api.drawer.DrawerTier;
-import dev.fricker.lodestore.api.drawer.DrawerUpgrade;
+import dev.fricker.lodestore.api.crate.CrateTier;
+import dev.fricker.lodestore.api.crate.CrateUpgrade;
 
 /**
  * Registry keys for Lodestore's extensible content.
@@ -18,23 +18,23 @@ public final class LodestoreRegistries {
 	public static final String NAMESPACE = "lodestore";
 
 	/**
-	 * Datapack-driven drawer tiers.
+	 * Datapack-driven crate tiers.
 	 *
-	 * <p>Entries live at {@code data/<pack>/lodestore/drawer_tier/<name>.json} and are synced to
+	 * <p>Entries live at {@code data/<pack>/lodestore/crate_tier/<name>.json} and are synced to
 	 * clients, because capacity is needed client-side for the front-face count overlay.
 	 */
-	public static final ResourceKey<Registry<DrawerTier>> DRAWER_TIER =
-			ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(NAMESPACE, "drawer_tier"));
+	public static final ResourceKey<Registry<CrateTier>> CRATE_TIER =
+			ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(NAMESPACE, "crate_tier"));
 
 	/**
-	 * Datapack-driven drawer upgrades.
+	 * Datapack-driven crate upgrades.
 	 *
-	 * <p>Entries live at {@code data/<pack>/lodestore/drawer_upgrade/<name>.json} and are synced to
-	 * clients, because an upgrade changes how the drawer's front face reads and the renderer has
+	 * <p>Entries live at {@code data/<pack>/lodestore/crate_upgrade/<name>.json} and are synced to
+	 * clients, because an upgrade changes how the crate's front face reads and the renderer has
 	 * only the client's copy of the registry to resolve it against.
 	 */
-	public static final ResourceKey<Registry<DrawerUpgrade>> DRAWER_UPGRADE =
-			ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(NAMESPACE, "drawer_upgrade"));
+	public static final ResourceKey<Registry<CrateUpgrade>> CRATE_UPGRADE =
+			ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(NAMESPACE, "crate_upgrade"));
 
 	private LodestoreRegistries() {
 	}

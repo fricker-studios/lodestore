@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:chest",
+    "minecraft:iron_nugget"
+  ],
+  "result": {
+    "id": "lodestore:basic_crate"
+  },
+  "group": "basic_crate"
+}

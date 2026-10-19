@@ -21,7 +21,7 @@ import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
  * Development-only diagnostic. Lives in the test mod source set, so it is not present in the
  * published jar at all.
  *
- * <p>Exercises a drawer through {@link ItemStorage#SIDED} — the exact lookup a hopper, pipe, or
+ * <p>Exercises a crate through {@link ItemStorage#SIDED} — the exact lookup a hopper, pipe, or
  * third-party mod uses — so interop can be checked without relying on hoppers actually ticking.
  * They do not tick on a playerless dedicated server, which makes hopper-based verification
  * silently useless there.

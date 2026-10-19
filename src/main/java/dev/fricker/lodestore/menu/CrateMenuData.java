@@ -1,0 +1,30 @@
+package dev.fricker.lodestore.menu;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+
+/**
+ * What the client needs to rebuild a crate's menu, sent with the open packet.
+ *
+ * <p>Rows and the upgrade slot count are server-side facts the client cannot derive — one comes
+ * from the block, the other from the datapack-driven tier — and a client that guessed either would
+ * lay out the wrong number of slots.
+ *
+ * <p>The position is here so the screen can read the crate's own block entity for which slot its
+ * face shows. That state is already synced to every client near the block, so sending it again
+ * through the menu would be a second copy to keep in step with the first.
+ *
+ * @param rows         storage rows, nine slots each
+ * @param upgradeSlots how many upgrade slots this crate's tier offers
+ * @param pos          where the crate is, for reading the slot its face shows client-side
+ */
+public record CrateMenuData(int rows, int upgradeSlots, BlockPos pos) {
+	public static final StreamCodec<RegistryFriendlyByteBuf, CrateMenuData> STREAM_CODEC =
+			StreamCodec.composite(
+					ByteBufCodecs.VAR_INT, CrateMenuData::rows,
+					ByteBufCodecs.VAR_INT, CrateMenuData::upgradeSlots,
+					BlockPos.STREAM_CODEC, CrateMenuData::pos,
+					CrateMenuData::new);
+}
