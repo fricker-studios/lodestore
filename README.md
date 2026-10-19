@@ -248,10 +248,15 @@ Upgrades are kept outside the drawer's inventory. In it, they would be visible t
 the tiers whose contents ride inside the dropped item they would duplicate along with everything
 else. They drop as items when the drawer is broken, for every tier.
 
-The storage also refuses upgrades as goods, through both of its doors. That is what keeps an
-inventory sorter — which sees the upgrade column as more slots of the same container — from
-shuffling an installed upgrade into the grid: nothing in the container region will take it, so it
-stays where it is. A shift-clicked upgrade goes to the column, as it always did.
+The storage also refuses upgrades as goods, through both of its doors, and the upgrade slots are
+marked *fake* — a vanilla flag that changes only how the screen draws the item, and the first thing
+Inventory Profiles Next checks when it decides which slots make up a container's sortable area,
+read from its decompiled `AreaTypes`. The two together are what keep a sorter out of the column.
+Before them, a sort treated the column as more slots of the same chest, lifted the upgrade out,
+found nowhere in the grid that would take it, and left it on the cursor. A shift-clicked upgrade
+still goes to the column, as it always did. Should an IPN version stop honouring the flag, its
+`config/inventoryprofilesnext/SlotIntegrationHints.json` takes
+`{"dev.fricker.lodestore.menu.UpgradeSlot": {"ignore": true}}` and does the same by name.
 
 #### Choosing which slots a lock covers
 

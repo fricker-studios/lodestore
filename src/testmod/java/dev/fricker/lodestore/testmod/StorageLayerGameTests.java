@@ -621,6 +621,13 @@ public class StorageLayerGameTests {
 					+ drawer.upgrades().size() + " installed, slot 0 holds " + describe(drawer.contents().visible(0)));
 		}
 
+		// The column is marked fake, which is the flag Inventory Profiles Next leaves out of every
+		// sortable area; the grid is not, or it could not be sorted at all.
+		if (!menu.getSlot(drawer.storageSize()).isFake() || menu.getSlot(0).isFake()) {
+			throw helper.assertionException("the upgrade column should be the only fake slots: column "
+					+ menu.getSlot(drawer.storageSize()).isFake() + ", grid " + menu.getSlot(0).isFake());
+		}
+
 		helper.succeed();
 	}
 

@@ -42,4 +42,20 @@ public class UpgradeSlot extends Slot {
 	public int getMaxStackSize() {
 		return 1;
 	}
+
+	/**
+	 * Keeps inventory sorters out of the upgrade column.
+	 *
+	 * <p>In vanilla this flag changes one thing: the screen draws a fake slot's item without the
+	 * player as its model's owner, as it does the crafting result slot — nothing about clicks. It
+	 * is also the first thing Inventory Profiles Next checks when it decides which slots belong to
+	 * a container's sortable area, read from its decompiled {@code AreaTypes}: a fake slot is left
+	 * out of every area, so a sort, "move all" and the rest never pick an upgrade up. Without it,
+	 * a sort treated the column as more slots of the same chest, lifted the upgrade out, found
+	 * nowhere in the grid that would take it, and left it on the cursor.
+	 */
+	@Override
+	public boolean isFake() {
+		return true;
+	}
 }
