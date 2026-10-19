@@ -1,0 +1,53 @@
+"""Shared PNG writer + palette for Lodestore sprite generation."""
+import zlib, struct
+
+PALETTE = {
+    '.': (0, 0, 0, 0),
+    # oak
+    'H': (0xC9, 0xA6, 0x6E, 255),
+    'L': (0xB5, 0x8D, 0x55, 255),
+    'M': (0x9C, 0x76, 0x45, 255),
+    'D': (0x82, 0x60, 0x37, 255),
+    'K': (0x66, 0x4A, 0x2A, 255),
+    'S': (0x4C, 0x37, 0x1F, 255),
+    'X': (0x38, 0x28, 0x16, 255),
+    # spruce (sturdy frame)
+    'h': (0x8A, 0x66, 0x42, 255),
+    'm': (0x74, 0x55, 0x36, 255),
+    'd': (0x5C, 0x43, 0x2A, 255),
+    's': (0x45, 0x32, 0x1F, 255),
+    # iron
+    'W': (0xE8, 0xE8, 0xE8, 255),
+    'I': (0xC4, 0xC4, 0xC4, 255),
+    'N': (0x9E, 0x9E, 0x9E, 255),
+    'G': (0x74, 0x74, 0x74, 255),
+    'B': (0x4E, 0x4E, 0x4E, 255),
+    # gold (lock accent)
+    'Y': (0xF2, 0xC8, 0x52, 255),
+    'O': (0xC9, 0x97, 0x27, 255),
+    'o': (0x8E, 0x69, 0x18, 255),
+    # redstone (future upgrades)
+    'R': (0xE0, 0x4A, 0x3C, 255),
+    'r': (0x9E, 0x2A, 0x22, 255),
+}
+
+
+def write_png(path, grid):
+    for i, row in enumerate(grid):
+        assert len(row) == len(grid[0]), f"{path}: row {i} is {len(row)}, expected {len(grid[0])}"
+    h, w = len(grid), len(grid[0])
+    raw = b''.join(
+        b'\x00' + bytes(v for ch in row for v in PALETTE[ch])
+        for row in grid
+    )
+
+    def chunk(tag, data):
+        return (struct.pack('>I', len(data)) + tag + data
+                + struct.pack('>I', zlib.crc32(tag + data) & 0xFFFFFFFF))
+
+    png = (b'\x89PNG\r\n\x1a\n'
+           + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0))
+           + chunk(b'IDAT', zlib.compress(raw, 9))
+           + chunk(b'IEND', b''))
+    with open(path, 'wb') as fh:
+        fh.write(png)

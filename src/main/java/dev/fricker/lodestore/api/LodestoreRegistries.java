@@ -5,6 +5,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 
 import dev.fricker.lodestore.api.drawer.DrawerTier;
+import dev.fricker.lodestore.api.drawer.DrawerUpgrade;
 
 /**
  * Registry keys for Lodestore's extensible content.
@@ -24,6 +25,16 @@ public final class LodestoreRegistries {
 	 */
 	public static final ResourceKey<Registry<DrawerTier>> DRAWER_TIER =
 			ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(NAMESPACE, "drawer_tier"));
+
+	/**
+	 * Datapack-driven drawer upgrades.
+	 *
+	 * <p>Entries live at {@code data/<pack>/lodestore/drawer_upgrade/<name>.json} and are synced to
+	 * clients, because an upgrade changes how the drawer's front face reads and the renderer has
+	 * only the client's copy of the registry to resolve it against.
+	 */
+	public static final ResourceKey<Registry<DrawerUpgrade>> DRAWER_UPGRADE =
+			ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(NAMESPACE, "drawer_upgrade"));
 
 	private LodestoreRegistries() {
 	}

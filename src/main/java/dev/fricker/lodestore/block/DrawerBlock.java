@@ -6,9 +6,11 @@ import org.jspecify.annotations.Nullable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -21,6 +23,7 @@ import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.BlockHitResult;
 
 import dev.fricker.lodestore.api.drawer.DrawerTier;
+import dev.fricker.lodestore.item.DrawerUpgradeItem;
 
 /**
  * A drawer block. Structure (how many rows it opens) is fixed per block; behaviour (whether it
@@ -83,6 +86,39 @@ public class DrawerBlock extends Block implements EntityBlock {
 		}
 
 		return InteractionResult.PASS;
+	}
+
+	/**
+	 * Installs an upgrade held in hand, and otherwise gets out of the way.
+	 *
+	 * <p>This is the one exception to "right-clicking opens the drawer whatever is in hand".
+	 * Holding an upgrade is unambiguous — it does nothing else anywhere — whereas the rule exists
+	 * to stop a drawer reacting to the building blocks a player happens to be carrying.
+	 *
+	 * <p>Everything else returns {@code TRY_WITH_EMPTY_HAND}, which is the default's own return
+	 * value and the thing that routes the click on to {@link #useWithoutItem}. Returning
+	 * {@code PASS} here would swallow it and the drawer would stop opening.
+	 */
+	@Override
+	protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
+			Player player, InteractionHand hand, BlockHitResult hit) {
+		if (!(stack.getItem() instanceof DrawerUpgradeItem)
+				|| !(level.getBlockEntity(pos) instanceof DrawerBlockEntity drawer)) {
+			return InteractionResult.TRY_WITH_EMPTY_HAND;
+		}
+
+		if (level.isClientSide()) {
+			return InteractionResult.SUCCESS;
+		}
+
+		// Already installed, or no slots left. Fall through and open, rather than eating the
+		// click: a dead click gives the player nothing to tell the two cases apart by.
+		if (!drawer.installUpgrade(stack)) {
+			return InteractionResult.TRY_WITH_EMPTY_HAND;
+		}
+
+		stack.consume(1, player);
+		return InteractionResult.CONSUME;
 	}
 
 	@Override

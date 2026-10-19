@@ -2,5 +2,6 @@
   "block.lodestore.basic_drawer": "Basic Drawer",
   "block.lodestore.reinforced_drawer": "Reinforced Drawer",
   "block.lodestore.sturdy_drawer": "Sturdy Drawer",
+  "item.lodestore.lock_upgrade": "Lock Upgrade",
   "itemGroup.lodestore.general": "Lodestore"
 }

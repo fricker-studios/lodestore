@@ -1,11 +1,13 @@
 package dev.fricker.lodestore.registry;
 
 import net.minecraft.core.Registry;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -58,12 +60,30 @@ public final class LodestoreBlocks {
 		return ResourceKey.create(Registries.BLOCK, Lodestore.id(name));
 	}
 
+	/**
+	 * Registers the block and its item.
+	 *
+	 * <p>The item carries an empty {@code minecraft:container} by default, which is not cosmetic.
+	 * Breaking a drawer copies the block entity's implicit components onto the dropped item, and
+	 * {@link net.minecraft.world.level.block.entity.BaseContainerBlockEntity} writes that component
+	 * whether or not the drawer held anything. Without the same component on the item to begin
+	 * with, a drawer that has been placed once carries a patch a never-placed one does not, the two
+	 * stop stacking in the inventory, and the player ends up with two piles of identical drawers.
+	 * Declaring it here makes the copied value equal the prototype, which
+	 * {@code PatchedDataComponentMap} then drops instead of recording.
+	 *
+	 * <p>It goes on every tier, not just the two that keep their contents: which tiers those are is
+	 * datapack-driven and the loot tables are data too, so the item side stays permissive rather
+	 * than encoding an assumption a pack can change.
+	 */
 	private static void register(ResourceKey<Block> key, Block block) {
 		Registry.register(BuiltInRegistries.BLOCK, key, block);
 		Registry.register(
 				BuiltInRegistries.ITEM,
 				key.identifier(),
-				new BlockItem(block, new Item.Properties().setId(ResourceKey.create(Registries.ITEM, key.identifier())))
+				new BlockItem(block, new Item.Properties()
+						.setId(ResourceKey.create(Registries.ITEM, key.identifier()))
+						.component(DataComponents.CONTAINER, ItemContainerContents.EMPTY))
 		);
 	}
 }

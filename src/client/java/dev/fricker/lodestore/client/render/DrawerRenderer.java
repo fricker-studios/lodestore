@@ -31,7 +31,11 @@ public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, Dr
 	/** Half a block, plus a sliver, to sit just proud of the face without z-fighting. */
 	private static final float FACE_OFFSET = 0.5f + 0.01f;
 	private static final float ICON_SCALE = 0.45f;
+	/** The filter on an empty locked drawer is drawn smaller, so it reads as "not here yet". */
+	private static final float GHOST_SCALE = 0.72f;
 	private static final float TEXT_SCALE = 0.014f;
+	/** The gold from the lock upgrade's own sprite, so a locked count is recognisably its doing. */
+	private static final int LOCKED_COLOR = 0xFFF2C852;
 
 	private final ItemModelResolver itemModelResolver;
 	private final Font font;
@@ -52,7 +56,7 @@ public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, Dr
 
 		collector.submitText(poseStack, -font.width(label) / 2.0f, 0.0f,
 				Component.literal(label).getVisualOrderText(), true, Font.DisplayMode.POLYGON_OFFSET,
-				state.lightCoords, 0xFFFFFFFF, 0, 0);
+				state.lightCoords, state.locked ? LOCKED_COLOR : 0xFFFFFFFF, 0, 0);
 
 		poseStack.popPose();
 	}
@@ -84,7 +88,15 @@ public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, Dr
 
 		// The preview is synced on its own, so the client never holds the inventory.
 		ItemStack preview = drawer.previewItem();
-		state.blank = preview.isEmpty();
+		ItemStack locked = drawer.lockedItem();
+
+		// A locked drawer goes on showing its filter after the last item leaves. Without this an
+		// empty locked drawer is blank, which is exactly the drawer a player most needs labelled.
+		state.locked = !locked.isEmpty();
+		state.ghost = preview.isEmpty() && state.locked;
+
+		ItemStack shown = state.ghost ? locked : preview;
+		state.blank = shown.isEmpty();
 		state.amount = drawer.previewCount();
 
 		if (state.blank) {
@@ -102,7 +114,7 @@ public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, Dr
 
 		// FIXED is the in-world context. GUI assumes the inventory's own projection and
 		// renders black out here.
-		itemModelResolver.updateForTopItem(state.item, preview,
+		itemModelResolver.updateForTopItem(state.item, shown,
 				ItemDisplayContext.FIXED, drawer.getLevel(), null, 0);
 	}
 
@@ -125,7 +137,8 @@ public class DrawerRenderer implements BlockEntityRenderer<DrawerBlockEntity, Dr
 		// light as solid black.
 		poseStack.pushPose();
 		poseStack.translate(0.0f, 0.12f, 0.0f);
-		poseStack.scale(ICON_SCALE, ICON_SCALE, ICON_SCALE);
+		float scale = state.ghost ? ICON_SCALE * GHOST_SCALE : ICON_SCALE;
+		poseStack.scale(scale, scale, scale);
 		state.item.submit(poseStack, collector, state.lightCoords, OverlayTexture.NO_OVERLAY, 0);
 		poseStack.popPose();
 
