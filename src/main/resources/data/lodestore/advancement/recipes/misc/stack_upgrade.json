@@ -17,12 +17,12 @@
         ]
       }
     },
-    "has_basic_drawer": {
+    "has_basic_crate": {
       "trigger": "minecraft:inventory_changed",
       "conditions": {
         "items": [
           {
-            "items": "lodestore:basic_drawer"
+            "items": "lodestore:basic_crate"
           }
         ]
       }
@@ -32,7 +32,7 @@
     [
       "has_the_recipe",
       "has_chest",
-      "has_basic_drawer"
+      "has_basic_crate"
     ]
   ],
   "rewards": {

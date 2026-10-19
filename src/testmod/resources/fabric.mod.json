@@ -11,13 +11,13 @@
 			"dev.fricker.lodestore.testmod.LodestoreTestmod"
 		],
 		"fabric-gametest": [
-			"dev.fricker.lodestore.testmod.DrawerGameTests",
+			"dev.fricker.lodestore.testmod.CrateGameTests",
 			"dev.fricker.lodestore.testmod.StackCeilingGameTests",
 			"dev.fricker.lodestore.testmod.StorageLayerGameTests"
 		],
 		"fabric-client-gametest": [
-			"dev.fricker.lodestore.testmod.client.DrawerRenderClientTest",
-			"dev.fricker.lodestore.testmod.client.DrawerPersistenceClientTest"
+			"dev.fricker.lodestore.testmod.client.CrateRenderClientTest",
+			"dev.fricker.lodestore.testmod.client.CratePersistenceClientTest"
 		]
 	},
 	"depends": {

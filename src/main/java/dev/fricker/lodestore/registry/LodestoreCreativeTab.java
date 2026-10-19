@@ -24,11 +24,11 @@ public final class LodestoreCreativeTab {
 	public static void initialize() {
 		Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, KEY, FabricCreativeModeTab.builder()
 				.title(Component.translatable("itemGroup.lodestore.general"))
-				.icon(() -> new ItemStack(LodestoreBlocks.BASIC_DRAWER))
+				.icon(() -> new ItemStack(LodestoreBlocks.BASIC_CRATE))
 				.displayItems((context, entries) -> {
-					entries.accept(LodestoreBlocks.BASIC_DRAWER);
-					entries.accept(LodestoreBlocks.STURDY_DRAWER);
-					entries.accept(LodestoreBlocks.REINFORCED_DRAWER);
+					entries.accept(LodestoreBlocks.BASIC_CRATE);
+					entries.accept(LodestoreBlocks.STURDY_CRATE);
+					entries.accept(LodestoreBlocks.REINFORCED_CRATE);
 					entries.accept(LodestoreItems.LOCK_UPGRADE);
 					entries.accept(LodestoreItems.VOID_UPGRADE);
 					entries.accept(LodestoreItems.STACK_UPGRADE);

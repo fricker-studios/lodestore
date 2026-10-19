@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "lodestore:block/basic_crate"
+    },
+    "facing=east": {
+      "model": "lodestore:block/basic_crate",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "lodestore:block/basic_crate",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "lodestore:block/basic_crate",
+      "y": 270
+    }
+  }
+}

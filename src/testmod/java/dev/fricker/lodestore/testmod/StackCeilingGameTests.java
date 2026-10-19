@@ -30,7 +30,7 @@ import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
  * through vanilla's {@code Container} and abandoned there. These tests are what the measurement
  * found, kept as assertions rather than as prose, because every one of them is a limit in Minecraft
  * rather than in Lodestore. They are also the design constraints of the storage layer that was
- * built instead: a drawer is no longer a {@code Container}, holds each slot as a legal stack plus a
+ * built instead: a crate is no longer a {@code Container}, holds each slot as a legal stack plus a
  * parked count, and never constructs the over-sized stack these tests show cannot survive. If a
  * later version lifts one of them, the test goes red and someone gets to ask whether the layer
  * still needs to work the way it does.
@@ -38,11 +38,11 @@ import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
  * <p>The full argument is in the README under "Why the storage layer exists". The short version:
  * raising {@code Container#getMaxStackSize} works for the screen, for pipes and for the comparator,
  * and is ignored by the vanilla hopper and by the {@code minecraft:container} component that
- * carries a drawer's contents when it is broken. The second of those destroys items silently.
+ * carries a crate's contents when it is broken. The second of those destroys items silently.
  *
- * <p>Nothing here touches a drawer. That is deliberate: these are vanilla's rules, and a test that
- * went through a drawer would be measuring Lodestore's reaction to them instead of the rules
- * themselves. {@code StorageLayerGameTests} is where the drawer's reaction is measured.
+ * <p>Nothing here touches a crate. That is deliberate: these are vanilla's rules, and a test that
+ * went through a crate would be measuring Lodestore's reaction to them instead of the rules
+ * themselves. {@code StorageLayerGameTests} is where the crate's reaction is measured.
  */
 public class StackCeilingGameTests {
 	/** A ceiling well past any item's own, and past the 99 the codecs allow, so both walls show. */
@@ -54,11 +54,11 @@ public class StackCeilingGameTests {
 	 * <p>This is the finding that stops a stack upgrade on its own, and it is structural rather
 	 * than a matter of degree. {@code HopperBlockEntity.tryMoveInItem} computes the room in a slot
 	 * as {@code itemStack.getMaxStackSize() - current.getCount()} — the item's own limit, with the
-	 * container nowhere in the expression. So a drawer can tell the screen and the transfer API
+	 * container nowhere in the expression. So a crate can tell the screen and the transfer API
 	 * that a slot holds 256, and a hopper will still stop at 64 and then sit there full.
 	 *
 	 * <p>Fabric's hopper patch does not rescue a container. {@code HopperBlockEntityMixin} takes the
-	 * transfer-API route only {@code if (container == null)} — which is exactly why a drawer stopped
+	 * transfer-API route only {@code if (container == null)} — which is exactly why a crate stopped
 	 * being one.
 	 */
 	@GameTest
@@ -66,7 +66,7 @@ public class StackCeilingGameTests {
 		RaisedCeilingContainer container = new RaisedCeilingContainer(1);
 		container.setItem(0, new ItemStack(Items.COBBLESTONE, 64));
 
-		// Exactly what a hopper above a drawer runs, against a container that says 256 is fine.
+		// Exactly what a hopper above a crate runs, against a container that says 256 is fine.
 		ItemStack remainder = HopperBlockEntity.addItem(
 				null, container, new ItemStack(Items.COBBLESTONE, 32), Direction.DOWN);
 
@@ -90,8 +90,8 @@ public class StackCeilingGameTests {
 	 *
 	 * <p>{@code ContainerSlotWrapper#getCapacity} returns {@code container.getMaxStackSize(stack)},
 	 * so a pipe would happily fill a slot to 256 while the hopper bolted to the other side of the
-	 * same drawer refused to pass 64. Two kinds of automation would disagree about whether the
-	 * drawer is full, which is worse than neither of them over-stacking.
+	 * same crate refused to pass 64. Two kinds of automation would disagree about whether the
+	 * crate is full, which is worse than neither of them over-stacking.
 	 */
 	@GameTest
 	public void theTransferApiHonoursTheContainersStackCeiling(GameTestHelper helper) {
@@ -119,7 +119,7 @@ public class StackCeilingGameTests {
 	 * A stack past the item's own limit does not survive {@code minecraft:container}.
 	 *
 	 * <p>This is the one that loses items, and it is why the storage layer carries a slot's parked
-	 * count in a component of its own rather than in a bigger stack. Sturdy and reinforced drawers
+	 * count in a component of its own rather than in a bigger stack. Sturdy and reinforced crates
 	 * carry their contents inside the dropped item through this component; reading it back goes
 	 * through {@code ItemStackTemplate#create}, which validates and returns {@code ItemStack.EMPTY}
 	 * for anything over-sized. The slot is gone, with a line in the log and nothing else.
@@ -155,7 +155,7 @@ public class StackCeilingGameTests {
 	 * <p>{@code ContainerHelper.saveAllItems} writes through {@code ItemStack.MAP_CODEC}, whose
 	 * count field is {@code intRange(1, 99)}. A larger stack does not throw and does not clamp: the
 	 * encode fails, the problem reporter swallows it, and the slot is simply absent from the tag.
-	 * The drawer reloads a slot short and nothing anywhere says why.
+	 * The crate reloads a slot short and nothing anywhere says why.
 	 *
 	 * <p>So a count above a stack has to be saved apart from the stack, which is what the storage
 	 * layer's remainder table is.
@@ -180,12 +180,12 @@ public class StackCeilingGameTests {
 	}
 
 	/**
-	 * An over-sized stack would not have stayed in the drawer.
+	 * An over-sized stack would not have stayed in the crate.
 	 *
 	 * <p>{@code AbstractContainerMenu#doClick} takes a slot's whole contents onto the cursor with
 	 * {@code slot.tryRemove(clicked.getCount(), Integer.MAX_VALUE, player)} — no container ceiling,
 	 * no item limit. One left click and the over-stack is loose: on the cursor, then in an
-	 * inventory or on the ground as an item entity. At that point it is past every check a drawer
+	 * inventory or on the ground as an item entity. At that point it is past every check a crate
 	 * could make, and over 99 it cannot be written at all, so it is destroyed by the next save.
 	 * The storage layer's answer is that a slot never holds more than a legal stack to take.
 	 */

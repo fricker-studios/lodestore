@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "P": "#minecraft:planks",
+    "N": "minecraft:iron_nugget"
+  },
+  "pattern": [
+    "PPP",
+    "PNP",
+    "PPP"
+  ],
+  "result": {
+    "id": "lodestore:basic_crate"
+  },
+  "group": "basic_crate"
+}

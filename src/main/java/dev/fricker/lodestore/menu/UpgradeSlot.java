@@ -7,12 +7,12 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
-import dev.fricker.lodestore.item.DrawerUpgradeItem;
+import dev.fricker.lodestore.item.CrateUpgradeItem;
 
 /**
- * A slot that takes drawer upgrades.
+ * A slot that takes crate upgrades.
  *
- * <p>An upgrade the drawer's contents still need cannot be taken out. The drawer decides that and
+ * <p>An upgrade the crate's contents still need cannot be taken out. The crate decides that and
  * the menu syncs the answer, so the slot refuses the pickup on both sides and the screen can say
  * why; the alternative was contents stranded over capacity when a stack upgrade left.
  */
@@ -26,7 +26,7 @@ public class UpgradeSlot extends Slot {
 
 	@Override
 	public boolean mayPlace(ItemStack stack) {
-		return stack.getItem() instanceof DrawerUpgradeItem;
+		return stack.getItem() instanceof CrateUpgradeItem;
 	}
 
 	@Override

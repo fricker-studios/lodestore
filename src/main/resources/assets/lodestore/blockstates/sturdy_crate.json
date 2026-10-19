@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "lodestore:block/sturdy_crate"
+    },
+    "facing=east": {
+      "model": "lodestore:block/sturdy_crate",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "lodestore:block/sturdy_crate",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "lodestore:block/sturdy_crate",
+      "y": 270
+    }
+  }
+}

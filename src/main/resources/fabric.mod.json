@@ -3,7 +3,7 @@
 	"id": "lodestore",
 	"version": "${version}",
 	"name": "Lodestore",
-	"description": "Unified storage: backpacks, drawers, and networked storage built on Fabric's Storage<ItemVariant> transfer API.",
+	"description": "Unified storage: backpacks, crates, and networked storage built on Fabric's Storage<ItemVariant> transfer API.",
 	"authors": [
 		"alexfricker"
 	],
