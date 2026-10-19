@@ -155,16 +155,20 @@ for r, c in ((0, 0), (0, 13), (13, 0), (13, 13)):
 # ------------------------------------------------------------- upgrade sprites
 
 
-def plate(inner_rows):
-    """An iron carrier plate, bevelled light-to-dark, holding a 12x10 motif."""
+def plate(inner_rows, light="W", mid="N", dark="G"):
+    """A carrier plate, bevelled light-to-dark, holding a 12x10 motif.
+
+    The metal names the upgrade's level: iron, then copper, then diamond. Colour carries that at a
+    glance in a hotbar, where a numeral would be four pixels tall and unreadable.
+    """
     assert len(inner_rows) == 10
-    rows = ["." * 16, "." + "W" * 14 + ".", "." + "W" + "N" * 12 + "G" + "."]
-    rows += ["." + "W" + inner + "G" + "." for inner in inner_rows]
-    rows += ["." + "W" + "N" * 12 + "G" + ".", "." + "G" * 14 + ".", "." * 16]
+    rows = ["." * 16, "." + light * 14 + ".", "." + light + mid * 12 + dark + "."]
+    rows += ["." + light + inner.replace("N", mid) + dark + "." for inner in inner_rows]
+    rows += ["." + light + mid * 12 + dark + ".", "." + dark * 14 + ".", "." * 16]
     return rows
 
 
-LOCK_UPGRADE = plate([
+LOCK_MOTIF = [
     "NNNNooooNNNN",
     "NNNoYYYYoNNN",
     "NNNoYooYoNNN",
@@ -175,7 +179,7 @@ LOCK_UPGRADE = plate([
     "NoYYYBBYYYoN",
     "NoYYYYBYYYoN",
     "NooooooooooN",
-])
+]
 
 # The void reads as a hole rather than a symbol: a round aperture sunk through the
 # same iron plate the lock sits on, purple at the rim and near-black at the centre.
@@ -207,7 +211,17 @@ BLOCKS = {
     "reinforced_drawer_side": REINFORCED_SIDE,
     "reinforced_drawer_top": REINFORCED_TOP,
 }
-ITEMS = {"lock_upgrade": LOCK_UPGRADE, "void_upgrade": VOID_UPGRADE}
+# Levels two and three are the same padlock on a richer plate.
+LOCK_UPGRADE = plate(LOCK_MOTIF)
+LOCK_UPGRADE_2 = plate(LOCK_MOTIF, "j", "k", "l")
+LOCK_UPGRADE_3 = plate(LOCK_MOTIF, "n", "p", "q")
+
+ITEMS = {
+    "lock_upgrade": LOCK_UPGRADE,
+    "lock_upgrade_2": LOCK_UPGRADE_2,
+    "lock_upgrade_3": LOCK_UPGRADE_3,
+    "void_upgrade": VOID_UPGRADE,
+}
 
 if __name__ == "__main__":
     out = sys.argv[1]

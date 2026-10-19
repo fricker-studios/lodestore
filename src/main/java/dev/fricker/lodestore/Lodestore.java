@@ -15,6 +15,7 @@ import dev.fricker.lodestore.api.drawer.DrawerUpgrade;
 import dev.fricker.lodestore.registry.LodestoreBlockEntities;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
 import dev.fricker.lodestore.registry.LodestoreCreativeTab;
+import dev.fricker.lodestore.menu.LodestoreMenus;
 import dev.fricker.lodestore.registry.LodestoreItems;
 import dev.fricker.lodestore.util.PersistenceSelfCheck;
 
@@ -37,6 +38,7 @@ public class Lodestore implements ModInitializer {
 		LodestoreBlocks.initialize();
 		LodestoreItems.initialize();
 		LodestoreBlockEntities.initialize();
+		LodestoreMenus.initialize();
 		LodestoreCreativeTab.initialize();
 
 		// A container that never writes its contents fails silently — nothing throws and

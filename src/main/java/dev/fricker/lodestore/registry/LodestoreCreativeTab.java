@@ -30,6 +30,8 @@ public final class LodestoreCreativeTab {
 					entries.accept(LodestoreBlocks.STURDY_DRAWER);
 					entries.accept(LodestoreBlocks.REINFORCED_DRAWER);
 					entries.accept(LodestoreItems.LOCK_UPGRADE);
+					entries.accept(LodestoreItems.LOCK_UPGRADE_2);
+					entries.accept(LodestoreItems.LOCK_UPGRADE_3);
 					entries.accept(LodestoreItems.VOID_UPGRADE);
 				})
 				.build());

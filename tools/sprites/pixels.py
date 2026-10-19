@@ -30,10 +30,44 @@ PALETTE = {
     'P': (0x8A, 0x5C, 0xB8, 255),
     'V': (0x4A, 0x2E, 0x6B, 255),
     'v': (0x17, 0x10, 0x24, 255),
+    # copper and diamond, for the higher upgrade levels' carrier plates
+    'j': (0xF0, 0xA8, 0x78, 255),
+    'k': (0xC9, 0x7A, 0x4E, 255),
+    'l': (0x8E, 0x52, 0x30, 255),
+    'n': (0x7B, 0xE3, 0xDA, 255),
+    'p': (0x4F, 0xC3, 0xB8, 255),
+    'q': (0x2E, 0x8C, 0x85, 255),
+    # vanilla GUI greys, for screen backgrounds
+    'F': (0xFF, 0xFF, 0xFF, 255),  # lit bevel
+    'C': (0xC6, 0xC6, 0xC6, 255),  # panel face
+    'g': (0x8B, 0x8B, 0x8B, 255),  # slot interior
+    'e': (0x55, 0x55, 0x55, 255),  # shaded bevel
+    't': (0x37, 0x37, 0x37, 255),  # slot inset
     # redstone (future upgrades)
     'R': (0xE0, 0x4A, 0x3C, 255),
     'r': (0x9E, 0x2A, 0x22, 255),
 }
+
+
+def _assert_palette_unique():
+    """Fails loudly if two entries claim the same character.
+
+    PALETTE is a dict literal, so a duplicate key is kept silently and the earlier colour simply
+    disappears — repainting whichever sprites used it, in a way nothing else would report. Two
+    generators share this palette, so the clash is a question of when, not whether.
+    """
+    import re
+    declared = re.findall(r"^\s{4}'(.)':", open(__file__, encoding="utf-8").read(), re.M)
+    seen = set()
+
+    for char in declared:
+        assert char not in seen, f"palette character {char!r} is declared twice"
+        seen.add(char)
+
+    assert len(declared) == len(PALETTE), "palette entries did not survive parsing"
+
+
+_assert_palette_unique()
 
 
 def write_png(path, grid):

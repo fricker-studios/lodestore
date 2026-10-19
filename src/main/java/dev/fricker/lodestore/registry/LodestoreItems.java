@@ -19,6 +19,15 @@ public final class LodestoreItems {
 	public static final DrawerUpgradeItem LOCK_UPGRADE = new DrawerUpgradeItem(
 			new Item.Properties().setId(LOCK_UPGRADE_KEY), LodestoreDrawerUpgrades.LOCK);
 
+	public static final ResourceKey<Item> LOCK_UPGRADE_2_KEY = itemKey("lock_upgrade_2");
+	/** Reaches two rows where the first level reaches one. Same behaviour, more of it. */
+	public static final DrawerUpgradeItem LOCK_UPGRADE_2 = new DrawerUpgradeItem(
+			new Item.Properties().setId(LOCK_UPGRADE_2_KEY), LodestoreDrawerUpgrades.LOCK_2);
+
+	public static final ResourceKey<Item> LOCK_UPGRADE_3_KEY = itemKey("lock_upgrade_3");
+	public static final DrawerUpgradeItem LOCK_UPGRADE_3 = new DrawerUpgradeItem(
+			new Item.Properties().setId(LOCK_UPGRADE_3_KEY), LodestoreDrawerUpgrades.LOCK_3);
+
 	public static final ResourceKey<Item> VOID_UPGRADE_KEY = itemKey("void_upgrade");
 	/**
 	 * Locks a drawer and then destroys what will not fit, so a filling machine never backs up.
@@ -35,6 +44,8 @@ public final class LodestoreItems {
 	/** Forces class-loading and performs registration. */
 	public static void initialize() {
 		Registry.register(BuiltInRegistries.ITEM, LOCK_UPGRADE_KEY, LOCK_UPGRADE);
+		Registry.register(BuiltInRegistries.ITEM, LOCK_UPGRADE_2_KEY, LOCK_UPGRADE_2);
+		Registry.register(BuiltInRegistries.ITEM, LOCK_UPGRADE_3_KEY, LOCK_UPGRADE_3);
 		Registry.register(BuiltInRegistries.ITEM, VOID_UPGRADE_KEY, VOID_UPGRADE);
 	}
 
