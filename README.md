@@ -194,6 +194,11 @@ per upgrade.
 | Lock III | the same, further again | 27 slots |
 | Void | a covered slot discards what it has no room for | 9 slots |
 
+Both shipped upgrades change *what a covered slot accepts*. Neither changes *how much* it holds, and
+that is not an omission waiting to be filled in — see
+[Why there is no stack upgrade](#why-there-is-no-stack-upgrade). A behaviour flag can only ever be
+as good as the vanilla hook it is enforced through, and the per-slot capacity hook does not exist.
+
 **Levels are data, not code.** A level-two lock is a level-one lock with a larger number in its
 JSON. Capacity pools across everything installed, so two level-one locks reach exactly as far as one
 level-two, and two level-ones plus a level-two reach four rows. That arithmetic is the point: a
@@ -277,11 +282,78 @@ The mechanism is a single overflow slot past the end of the storage, and it is w
 - **`getContainerSize()` is therefore one larger than the storage.** Anything measuring fullness has
   to use `storageSize()` — the comparator does, which is why a full drawer reads 15 rather than 14.
 
+#### Why there is no stack upgrade
+
+A stack upgrade — covered slots holding more than a normal stack — was designed against the
+machinery above, measured, and abandoned. It is the one upgrade the slot-targeting design cannot
+carry, and the reasons are in Minecraft rather than in Lodestore. They are kept as assertions in
+`StackCeilingGameTests` rather than only as this section, so that a version which lifts one of them
+turns a test red instead of leaving a paragraph quietly wrong.
+
+**What governs a slot's capacity depends entirely on who is asking.** Raising
+`Container#getMaxStackSize` and its per-stack overload is obeyed by some paths and ignored by
+others, and the split is not a matter of degree:
+
+| Path | Asks | Honours the container? |
+|---|---|---|
+| The screen | `Slot#getMaxStackSize(ItemStack)` | yes |
+| Pipes, the transfer API | `ContainerSlotWrapper#getCapacity` → `Container#getMaxStackSize(stack)` | yes |
+| The comparator | `Container#getMaxStackSize(stack)` | yes |
+| **Hoppers, droppers** | `ItemStack#getMaxStackSize()`, inline | **no** |
+| **`minecraft:container` on break** | `ItemStackTemplate#create` → `ItemStack.validateStrict` | **no** |
+| **The save file** | `ItemStack.MAP_CODEC`, `count` is `intRange(1, 99)` | **no** |
+
+So there is no answer to "how full is this slot" that the screen, a hopper and a pipe would all
+give. That is the thing the feature would have had to deliver and the thing it cannot.
+
+Four findings, each measured rather than reasoned about:
+
+- **The vanilla hopper does not ask the container at all.** `HopperBlockEntity.tryMoveInItem`
+  computes the room in a slot as `itemStack.getMaxStackSize() - current.getCount()`, with the
+  container nowhere in the expression. A container claiming 256 gets a hopper that fills to 64 and
+  then sits there full. Fabric's hopper patch does not help: `HopperBlockEntityMixin` takes the
+  transfer-API route only `if (container == null)`, and a drawer is a `Container` on purpose —
+  being one is exactly what makes hoppers, pipes and droppers work with no code at all. Measured
+  both ways: a slot at 64 took nothing, and the same slot at 32 took exactly 32. Droppers are the
+  same path rather than a second one — `DropperBlock.dispenseFrom` calls the very
+  `HopperBlockEntity.addItem` the test calls — so one assertion covers both.
+- **`minecraft:container` destroys an over-sized stack.** Reading the component back goes through
+  `ItemStackTemplate#create`, which validates and returns `ItemStack.EMPTY` for anything past the
+  item's own maximum. 65 cobblestone is already gone — so the component cannot carry an over-stack
+  of any size, and that component is how sturdy and reinforced drawers keep their contents when
+  broken. The slot vanishes with one line in the log. This is the finding that settles it: no care
+  on the insertion side can make a feature safe whose contents evaporate when the block is mined.
+- **99 is a hard ceiling on disk.** `ContainerHelper.saveAllItems` writes through
+  `ItemStack.MAP_CODEC`, whose `count` is `intRange(1, 99)`. A stack of 100 does not throw and does
+  not clamp: the encode fails, the problem reporter swallows it, and the slot is simply absent —
+  `{Items:[]}`. The drawer reloads a slot short and nothing says why. Even granting the two findings
+  above, the feature could only ever have offered 99 against a normal 64, and the hopper could never
+  have filled the difference.
+- **An over-sized stack would not have stayed in the drawer.** `AbstractContainerMenu#doClick` takes
+  a slot's whole contents onto the cursor with `slot.tryRemove(clicked.getCount(), MAX_VALUE,
+  player)` — no container ceiling, no item limit. One left click and it is loose in an inventory or
+  on the ground, past every check a drawer could make, and above 99 it cannot be written at all, so
+  the next save destroys it.
+
+There is also a shape problem underneath the arithmetic. **`Container#getMaxStackSize(ItemStack)`
+takes no slot.** A stack upgrade covers *chosen* slots, but the only container-level hook is
+per-container, so pipes and the comparator would apply the raised ceiling to every slot in the
+drawer while the screen applied it only to the covered ones. The targeting that the lock and the
+void upgrade are built on cannot be expressed through `Container` at all.
+
+Doing it properly therefore means one of two things, both of which are larger than an upgrade:
+giving drawers a real `Storage<ItemVariant>` and giving up being a plain `Container` — which is what
+makes the current interop free — or mixing into `HopperBlockEntity` and into vanilla's item-stack
+validation, which is reckless in the second case because that validation is shared with bundles and
+crossbows. Neither is worth a stack upgrade on its own; both are worth revisiting when networked
+storage arrives and the `Storage<ItemVariant>` question has to be answered anyway.
+
 ### Not yet
 
-Grouping, sorting, and stack upgrades. Capacity is still the awkward one: container size is
-structural, decided before the level's registries are reachable, so a capacity upgrade cannot just
-be another flag in the registry the way lock levels are.
+Grouping, sorting, and stack upgrades — the last for the reasons set out above. Capacity is the
+awkward one in a second way too: container size is structural, decided before the level's registries
+are reachable, so even a plain *more slots* upgrade cannot just be another flag in the registry the
+way lock levels are.
 
 The front face shows whichever item the drawer holds most of, counted across every slot holding it.
 Choosing what a drawer displays, independently of what it is locked to, is not here.
@@ -325,6 +397,26 @@ nothing. Alongside those: that a full voiding drawer accepts and the count does 
 drawer with room still stores instead of voiding, and that a drawer voiding cobblestone refuses
 diamonds rather than destroying them. All of it was checked by disabling voiding and confirming the
 right tests — and only those — go red.
+
+`StackCeilingGameTests` is the odd one out: it asserts nothing about Lodestore. It pins the five
+vanilla limits that rule out a stack upgrade — that a hopper ignores the container's stack ceiling,
+that the transfer API honours it, that `minecraft:container` destroys an over-sized stack, that over
+99 is dropped on save, and that an over-sized stack escapes a slot whole and then cannot be written
+at all — so the reasoning in
+[Why there is no stack upgrade](#why-there-is-no-stack-upgrade) is checked against the game on every
+run rather than trusted. Each failure message says a stack upgrade may be possible again, because
+that is what a red one would mean. They go through a bare `Container` with a raised ceiling rather
+than through a drawer, deliberately: routed through a drawer they would be measuring Lodestore's
+reaction to the rules instead of the rules.
+
+Getting that container right is the whole measurement, and it is easy to get wrong. Overriding
+`getMaxStackSize()` alone changes nothing, because the default `getMaxStackSize(ItemStack)` is
+`min(getMaxStackSize(), stack.getMaxStackSize())` and the item's own limit still wins. The first run
+of this measurement overrode only the first and read the result as the hopper obeying the ceiling,
+when in truth nothing had been raised at all. The hopper test now asserts the ceiling really is
+raised before asserting that the hopper ignored it, and it was confirmed to measure the stack
+arithmetic rather than a blanket refusal by starting the slot below the item's own maximum and
+watching the hopper fill it to exactly 64 and stop.
 
 **Client gametests.** Two of them. One builds a row of drawers — one of each tier, plus a locked
 drawer with stock and a locked drawer that has been emptied — and screenshots it three times into
