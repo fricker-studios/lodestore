@@ -435,13 +435,14 @@ public class StorageLayerGameTests {
 	}
 
 	/**
-	 * A stack upgrade gathers the drawer's stacks the moment it goes in, by either door.
+	 * A stack upgrade sorts the drawer the moment it goes in, by either door.
 	 *
-	 * <p>The pair: a lock going in gathers nothing, so it is the stack upgrade and not installing
-	 * that does it. Only into slots already holding the item, so the dirt in slot 7 is untouched.
+	 * <p>Gathers the cobblestone into one slot and orders by item, so the dirt that was in slot 7
+	 * follows it into slot 1. The pair: a lock going in does none of this, so it is the stack
+	 * upgrade and not installing that does it.
 	 */
 	@GameTest
-	public void installingTheStackUpgradeGathersStacks(GameTestHelper helper) {
+	public void installingTheStackUpgradeSortsTheDrawer(GameTestHelper helper) {
 		DrawerBlockEntity byHand = place(helper, DRAWER, LodestoreBlocks.BASIC_DRAWER);
 		DrawerBlockEntity byMenu = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.BASIC_DRAWER);
 		DrawerBlockEntity control = place(helper, new BlockPos(5, 1, 1), LodestoreBlocks.BASIC_DRAWER);
@@ -463,53 +464,111 @@ public class StorageLayerGameTests {
 		control.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
 
 		for (DrawerBlockEntity drawer : List.of(byHand, byMenu)) {
-			if (drawer.upgrades().size() != 1 || drawer.total(0) != 2 * STACK || drawer.total(5) != 0 || drawer.total(7) != 10) {
-				throw helper.assertionException("installing the stack upgrade did not gather the cobblestone: "
-						+ drawer.upgrades().size() + " installed, slots hold " + drawer.total(0) + ", " + drawer.total(5)
-						+ " and " + drawer.total(7));
+			if (drawer.upgrades().size() != 1 || drawer.total(0) != 2 * STACK || !drawer.contents().visible(0).is(Items.COBBLESTONE)
+					|| drawer.total(1) != 10 || !drawer.contents().visible(1).is(Items.DIRT)
+					|| drawer.total(5) != 0 || drawer.total(7) != 0) {
+				throw helper.assertionException("installing the stack upgrade did not sort the drawer: "
+						+ drawer.upgrades().size() + " installed, slots hold " + describe(drawer.contents().visible(0)) + ", "
+						+ describe(drawer.contents().visible(1)) + ", " + drawer.total(5) + " and " + drawer.total(7));
 			}
 		}
 
-		if (control.total(0) != STACK || control.total(5) != STACK) {
-			throw helper.assertionException("installing a lock gathered stacks: " + control.total(0) + " and " + control.total(5));
+		if (control.total(0) != STACK || control.total(5) != STACK || control.total(7) != 10) {
+			throw helper.assertionException("installing a lock sorted the drawer: " + control.total(0) + ", "
+					+ control.total(5) + " and " + control.total(7));
 		}
 
 		helper.succeed();
 	}
 
 	/**
-	 * Right-clicking the installed stack upgrade gathers the stacks again, on request.
+	 * Right-clicking the installed stack upgrade sorts the drawer again, on request.
 	 *
-	 * <p>Goes through the menu's button packet, which is what the screen sends. The pair: a drawer
-	 * without a stack upgrade ignores the button and moves nothing.
+	 * <p>Goes through the menu's button packet, which is what the screen sends. Items are ordered
+	 * by id, cobblestone before oak logs, each gathered to one slot. The pair: a drawer without a
+	 * stack upgrade ignores the button and moves nothing — it is a chest, and a sorter's to sort,
+	 * which is why only the stacked drawer's grid is marked fake.
 	 */
 	@GameTest
-	public void rightClickingTheStackUpgradeGathersStacks(GameTestHelper helper) {
+	public void rightClickingTheStackUpgradeSortsTheDrawer(GameTestHelper helper) {
 		DrawerBlockEntity stacked = stackedDrawer(helper, DRAWER, LodestoreBlocks.BASIC_DRAWER);
 		DrawerBlockEntity plain = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.BASIC_DRAWER);
 
+		// Put after the upgrade went in, so nothing has sorted them yet.
 		for (DrawerBlockEntity drawer : List.of(stacked, plain)) {
-			drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, STACK));
-			drawer.contents().setItem(5, new ItemStack(Items.COBBLESTONE, STACK));
+			drawer.contents().setItem(0, new ItemStack(Items.OAK_LOG, STACK));
+			drawer.contents().setItem(3, new ItemStack(Items.COBBLESTONE, STACK));
+			drawer.contents().setItem(5, new ItemStack(Items.OAK_LOG, STACK));
+			drawer.contents().setItem(8, new ItemStack(Items.COBBLESTONE, 30));
 			drawer.setChanged();
 		}
 
-		// Put after the upgrade went in, so nothing has gathered them yet.
 		if (stacked.total(0) != STACK || stacked.total(5) != STACK) {
-			throw helper.assertionException("the drawer gathered stacks on its own before being asked");
+			throw helper.assertionException("the drawer sorted on its own before being asked");
 		}
 
 		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		AbstractContainerMenu menu = open(helper, stacked, player);
 
-		if (!open(helper, stacked, player).clickMenuButton(player, DrawerMenu.COMPRESS_BUTTON)
-				|| stacked.total(0) != 2 * STACK || stacked.total(5) != 0) {
-			throw helper.assertionException("the button did not gather the stacks: " + stacked.total(0) + " and " + stacked.total(5));
+		if (!menu.getSlot(0).isFake() || !menu.getSlot(26).isFake()) {
+			throw helper.assertionException("a stacked drawer's grid should be fake, to keep click-based sorters out");
 		}
 
-		if (open(helper, plain, player).clickMenuButton(player, DrawerMenu.COMPRESS_BUTTON)
-				|| plain.total(0) != STACK || plain.total(5) != STACK) {
-			throw helper.assertionException("a drawer without a stack upgrade acted on the button: "
-					+ plain.total(0) + " and " + plain.total(5));
+		if (!menu.clickMenuButton(player, DrawerMenu.SORT_BUTTON)
+				|| stacked.total(0) != STACK + 30 || !stacked.contents().visible(0).is(Items.COBBLESTONE)
+				|| stacked.total(1) != 2 * STACK || !stacked.contents().visible(1).is(Items.OAK_LOG)
+				|| stacked.total(3) != 0 || stacked.total(5) != 0 || stacked.total(8) != 0) {
+			throw helper.assertionException("the button did not sort the drawer: " + describe(stacked.contents().visible(0))
+					+ " (" + stacked.total(0) + "), " + describe(stacked.contents().visible(1)) + " (" + stacked.total(1) + ")");
+		}
+
+		AbstractContainerMenu plainMenu = open(helper, plain, player);
+
+		if (plainMenu.getSlot(0).isFake()) {
+			throw helper.assertionException("a plain drawer's grid should not be fake; a sorter can sort it");
+		}
+
+		if (plainMenu.clickMenuButton(player, DrawerMenu.SORT_BUTTON)
+				|| plain.total(0) != STACK || plain.total(3) != STACK || plain.total(5) != STACK) {
+			throw helper.assertionException("a drawer without a stack upgrade acted on the button");
+		}
+
+		helper.succeed();
+	}
+
+	/** Sorting leaves a locked slot exactly as it is, and lays the rest out around it. */
+	@GameTest
+	public void sortingLeavesLockedSlotsAlone(GameTestHelper helper) {
+		DrawerBlockEntity drawer = place(helper, DRAWER, LodestoreBlocks.STURDY_DRAWER);
+		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+
+		// The lock covers the first row by default; narrow it to slot 0, then let it claim oak logs.
+		for (int slot = 1; slot < 9; slot++) {
+			drawer.toggleTarget(UpgradeBehaviour.LOCK, slot);
+		}
+
+		drawer.contents().setItem(0, new ItemStack(Items.OAK_LOG, STACK));
+		drawer.contents().setItem(2, new ItemStack(Items.DIRT, 5));
+		drawer.contents().setItem(3, new ItemStack(Items.COBBLESTONE, STACK));
+		drawer.contents().setItem(5, new ItemStack(Items.OAK_LOG, STACK));
+		drawer.contents().setItem(8, new ItemStack(Items.COBBLESTONE, 30));
+		drawer.setChanged();
+
+		if (!drawer.isLockedSlot(0) || drawer.isLockedSlot(1) || !drawer.slotFilter(0).is(Items.OAK_LOG)) {
+			throw helper.assertionException("the lock is not set up as the test assumes: covers " + drawer.lockedSlots()
+					+ ", claims " + describe(drawer.slotFilter(0)));
+		}
+
+		// Installing sorts. The logs gather into the locked slot, which stays; the rest is ordered after it.
+		drawer.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE));
+
+		if (drawer.total(0) != 2 * STACK || !drawer.contents().visible(0).is(Items.OAK_LOG)
+				|| drawer.total(1) != STACK + 30 || !drawer.contents().visible(1).is(Items.COBBLESTONE)
+				|| drawer.total(2) != 5 || !drawer.contents().visible(2).is(Items.DIRT)
+				|| drawer.total(3) != 0 || drawer.total(5) != 0 || drawer.total(8) != 0) {
+			throw helper.assertionException("sorting around a locked slot went wrong: " + describe(drawer.contents().visible(0))
+					+ " (" + drawer.total(0) + "), " + describe(drawer.contents().visible(1)) + " (" + drawer.total(1) + "), "
+					+ describe(drawer.contents().visible(2)) + " (" + drawer.total(2) + ")");
 		}
 
 		helper.succeed();

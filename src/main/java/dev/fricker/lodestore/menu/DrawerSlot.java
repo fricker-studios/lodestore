@@ -50,6 +50,21 @@ public class DrawerSlot extends Slot {
 		return (int) Mth.clamp(room, 0, Integer.MAX_VALUE);
 	}
 
+	/**
+	 * A stacked drawer's grid is marked fake, which keeps Inventory Profiles Next out of it.
+	 *
+	 * <p>A sorter that simulates clicks on what the slots show cannot sort these slots: one refills
+	 * after it is picked up and takes more than a stack when filled, so the sorter's plan diverges
+	 * from what the server does and its leftovers land on the cursor. The server stays right —
+	 * nothing is lost or doubled — but the result is chaos, so the sorter is not offered the grid.
+	 * In vanilla the flag only changes the owner the screen hands the item model. A plain drawer
+	 * is a chest and sorts as one; a stacked drawer sorts by a right-click on its stack upgrade.
+	 */
+	@Override
+	public boolean isFake() {
+		return drawer != null && drawer.stacks();
+	}
+
 	@Override
 	public boolean mayPlace(ItemStack stack) {
 		if (drawer == null) {

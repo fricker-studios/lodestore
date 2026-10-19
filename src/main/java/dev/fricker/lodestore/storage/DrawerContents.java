@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import net.minecraft.core.NonNullList;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.Container;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.entity.player.Player;
@@ -498,6 +499,97 @@ public final class DrawerContents implements Container {
 		}
 
 		return moved;
+	}
+
+	/**
+	 * Gathers, then orders the drawer by item.
+	 *
+	 * <p>The drawer's own sort, for the case an inventory sorter cannot handle: one that simulates
+	 * clicks on what the slots show will plan against a slot that refills after it is emptied and
+	 * takes more than a stack when filled, and its leftovers end up on the cursor. This works on
+	 * the totals directly. Items are ordered by their id and laid out from the first slot, each
+	 * kind filling slots to capacity before the next begins, empties last.
+	 *
+	 * <p>Slots for which {@code fixed} is true — the locked ones — are left exactly as they are:
+	 * a lock's claim is a promise about that slot, and a sort that moved a different item into it
+	 * would break it. Everything else is collected and laid out again around them.
+	 */
+	public void sort(java.util.function.IntPredicate fixed) {
+		compact();
+
+		List<Integer> free = new ArrayList<>();
+		List<ItemStack> kinds = new ArrayList<>();
+		List<Long> totals = new ArrayList<>();
+
+		for (int slot = 0; slot < visible.size(); slot++) {
+			if (fixed.test(slot)) {
+				continue;
+			}
+
+			free.add(slot);
+			ItemStack kind = kindOf(slot);
+
+			if (kind.isEmpty()) {
+				continue;
+			}
+
+			int index = -1;
+
+			for (int i = 0; i < kinds.size(); i++) {
+				if (ItemStack.isSameItemSameComponents(kinds.get(i), kind)) {
+					index = i;
+					break;
+				}
+			}
+
+			if (index < 0) {
+				kinds.add(kind);
+				totals.add(total(slot));
+			} else {
+				totals.set(index, totals.get(index) + total(slot));
+			}
+
+			visible.set(slot, ItemStack.EMPTY);
+			remainder[slot] = 0;
+		}
+
+		List<Integer> order = new ArrayList<>();
+
+		for (int i = 0; i < kinds.size(); i++) {
+			order.add(i);
+		}
+
+		order.sort((a, b) -> {
+			int byItem = BuiltInRegistries.ITEM.getKey(kinds.get(a).getItem()).compareTo(
+					BuiltInRegistries.ITEM.getKey(kinds.get(b).getItem()));
+			return byItem != 0 ? byItem
+					: kinds.get(a).getComponentsPatch().toString().compareTo(kinds.get(b).getComponentsPatch().toString());
+		});
+
+		int next = 0;
+
+		for (int i : order) {
+			ItemStack kind = kinds.get(i);
+			long left = totals.get(i);
+
+			while (left > 0 && next < free.size()) {
+				int slot = free.get(next);
+				long chunk = Math.min(left, Math.max(1, rules.capacity(slot, kind)));
+				add(slot, kind, chunk);
+				left -= chunk;
+
+				if (left > 0) {
+					next++;
+				}
+			}
+
+			if (left > 0) {
+				// Cannot happen — the free slots held it all a moment ago — but parked rather than lost.
+				add(free.get(free.size() - 1), kind, left);
+			}
+
+			next++;
+		}
 	}
 
 	/**

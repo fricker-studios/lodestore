@@ -241,7 +241,7 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 			hinted.add(Component.translatable("lodestore.upgrade.needed").withStyle(ChatFormatting.RED));
 		}
 
-		// The stack upgrade's right-click gathers the stacks; the lock's chooses slots. Each says so
+		// The stack upgrade's right-click sorts the drawer; the lock's chooses slots. Each says so
 		// where the gesture works, since neither is one the game teaches.
 		if (stacks(upgradeOf(stack))) {
 			hinted.add(Component.translatable("lodestore.upgrade.compress").withStyle(ChatFormatting.GRAY));
@@ -314,7 +314,7 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 
 	/**
 	 * Right-click a lock to start choosing its slots; click storage slots to add or remove. Right-
-	 * click the stack upgrade to gather the drawer's stacks.
+	 * click the stack upgrade to sort the drawer.
 	 *
 	 * <p>Shift-click acts on everything between the last slot clicked and this one, so a row or a
 	 * block of slots takes two clicks rather than nine.
@@ -327,7 +327,7 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 			if (stacks(upgradeOf(slot.getItem()))) {
 				// Rides the same validated button packet the lock's targeting does.
 				if (minecraft != null && minecraft.gameMode != null) {
-					minecraft.gameMode.handleInventoryButtonClick(menu.containerId, DrawerMenu.COMPRESS_BUTTON);
+					minecraft.gameMode.handleInventoryButtonClick(menu.containerId, DrawerMenu.SORT_BUTTON);
 				}
 
 				return;

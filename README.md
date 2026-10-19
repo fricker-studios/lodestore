@@ -334,14 +334,21 @@ same way to 64, 128 and 256. An item that does not stack holds `unstackable_per_
 32. The second number exists because four times one is a poor upgrade. Neither pools: the deepest
 installed level decides, so a level one beside a level three is a level three.
 
-Stacks stay where they are put, and are gathered on request: a stack upgrade going in gathers the
-same item into as few slots as the capacity allows — the one moment a player has just asked for
-deeper slots and expects the drawer to use them — and right-clicking the installed upgrade does it
-again, which its hover text says. A version of this gathered after every change instead, and it
-followed a stack a player had just moved with the rest of its slot, which is not what moving a
-stack means. Gathering only ever fills slots already holding the item, so an empty locked slot is
-never filled by it, and totals are exact. Otherwise the drawer never moves anything of its own
-accord except what a slot holds past its capacity: when the stack upgrade is taken out — or a pack lowers a level, or a broken
+Stacks stay where they are put, and the drawer sorts itself on request: a stack upgrade going in
+sorts the drawer — gathers the same item into as few slots as the capacity allows, then orders by
+item id, empties last — the one moment a player has just asked for deeper slots and expects the
+drawer to use them — and right-clicking the installed upgrade does it again, which its hover text
+says. Locked slots stay exactly as they are; a lock's claim is a promise about that slot, and the
+rest is laid out around it. A version of this gathered after every change instead, and it followed
+a stack a player had just moved with the rest of its slot, which is not what moving a stack means.
+
+The drawer has a sort of its own because an inventory sorter cannot sort a stacked drawer: one that
+simulates clicks on what the slots show plans against a slot that refills after it is emptied and
+takes more than a stack when filled, and its leftovers land on the cursor. The server stays right —
+nothing is lost or doubled — but the result is chaos, so a stacked drawer's grid is marked fake and
+Inventory Profiles Next is not offered it; its container-side buttons do nothing there. A plain
+drawer is a chest and sorts as one. Otherwise the drawer never moves anything of its own accord
+except what a slot holds past its capacity: when the stack upgrade is taken out — or a pack lowers a level, or a broken
 drawer is placed without its upgrade — the parked items spread back out into legal stacks of their
 own, in empty slots, so the drawer looks as it would have without the upgrade. An upgrade the
 contents still need cannot be taken out: the slot refuses the pickup, on both sides, and its
@@ -598,8 +605,9 @@ refused; a swap onto a parked remainder is refused, and the same swap on a slot 
 goes through; shift-click in fills through the parked space, and out drains a slot stack by stack;
 the menu's slots enforce the lock and nesting, and let an empty drawer in; a basic drawer spills its parked items as legal
 stacks, and a sturdy one keeps them in both components and gives them back when placed; removing
-the upgrade gathers the stacks when it goes in by either door and a lock does not, and again when
-right-clicked while a plain drawer ignores the button; it spreads what was parked into legal stacks
+the upgrade sorts the drawer when it goes in by either door and a lock does not, and again when
+right-clicked while a plain drawer ignores the button, with a locked slot left as it is; a stacked
+drawer's grid is fake and a plain one's is not; it spreads what was parked into legal stacks
 when taken out, cannot be taken out while the contents need it, and goes back in; a moved stack
 stays where it is put; an aborted insert leaves no trace; the
 comparator measures each slot against its own capacity; the three levels give the right numbers to

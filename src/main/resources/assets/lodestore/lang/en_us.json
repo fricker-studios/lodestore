@@ -13,7 +13,7 @@
   "lodestore.drawer.overflow": "Holds %s more than its stacks show",
   "lodestore.slot.stored": "%s of %s in this slot",
   "lodestore.upgrade.adjust_locked": "Right-click to adjust locked slots",
-  "lodestore.upgrade.compress": "Right-click to gather stacks",
+  "lodestore.upgrade.compress": "Right-click to sort the drawer",
   "lodestore.upgrade.coverage": "Covering %s of %s slots",
   "lodestore.upgrade.needed": "Holds too much to take this out",
   "lodestore.upgrade.selecting": "Click a slot to add or remove, shift-click for a range"

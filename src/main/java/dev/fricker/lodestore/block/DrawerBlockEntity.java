@@ -697,30 +697,32 @@ public class DrawerBlockEntity extends BlockEntity
 	}
 
 	/**
-	 * A stack upgrade gathers the drawer's stacks the moment it goes in — the one time a player
-	 * has just asked for deeper slots and would expect the drawer to use them. Runs with the new
-	 * upgrade already installed, so the gathering sees the capacity it grants.
+	 * A stack upgrade sorts the drawer the moment it goes in — gathers the same item into as few
+	 * slots as the capacity allows and orders by item — the one time a player has just asked for
+	 * deeper slots and would expect the drawer to use them. Runs with the new upgrade already
+	 * installed, so the sort sees the capacity it grants. Locked slots stay as they are.
 	 */
 	private void onUpgradeInstalled(ItemStack upgrade) {
 		if (upgrade.getItem() instanceof DrawerUpgradeItem item
 				&& UpgradeBehaviour.STACK.grantedBy(resolveUpgrade(item.upgradeKey()))) {
-			contents.compact();
+			contents.sort(this::isLockedSlot);
 		}
 	}
 
 	/**
-	 * Gathers the same item into as few slots as the capacity allows, on the player's request —
-	 * a right-click on the installed stack upgrade. Nothing without one: a plain drawer leaves its
-	 * stacks where they were put, as a chest does.
+	 * Sorts the drawer — gathers the same item into as few slots as the capacity allows, then
+	 * orders by item — on the player's request: a right-click on the installed stack upgrade.
+	 * Locked slots stay as they are. Nothing without a stack upgrade: a plain drawer is a chest
+	 * and an inventory sorter handles it.
 	 *
 	 * @return whether the drawer has a stack upgrade, and so did anything at all
 	 */
-	public boolean compress() {
+	public boolean sortContents() {
 		if (!stacks()) {
 			return false;
 		}
 
-		contents.compact();
+		contents.sort(this::isLockedSlot);
 		setChanged();
 		return true;
 	}
