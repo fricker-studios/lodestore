@@ -81,8 +81,8 @@ Drawers are working containers with a GUI.
 | Tier | Behaves like | Size | Upgrade slots | On break | May contain |
 |---|---|---|---|---|---|
 | Basic | chest | 27 | 1 | contents spill | anything |
-| Sturdy | shulker box | 27 | 2 | contents stay inside | no drawers |
-| Reinforced | shulker box | 54 | 3 | contents stay inside | sturdy drawers only |
+| Sturdy | shulker box | 27 | 2 | contents stay inside | empty drawers |
+| Reinforced | shulker box | 54 | 3 | contents stay inside | empty drawers, and sturdy ones with contents |
 
 Drawers are wood, so an axe is the efficient tool, as it is for a chest or barrel. They still break
 without one, just slowly — no tool is required for them to drop.
@@ -114,7 +114,10 @@ drawer that was never filled and checks the drop against a fresh item.
 Nesting is blocked in `DrawerBlockEntity#canStore`, which both doors into a drawer ask — the
 storage's insert, which hoppers and pipes use, and the menu's slot, which the player does. A rule
 enforced only in the UI would be bypassed by piping one in; one enforced only on the storage, by a
-hand.
+hand. The rule is about contents: a drawer that keeps its contents refuses a drawer *with contents*
+of equal or higher rank, because that is what would let storage compound without limit. An empty
+drawer compounds nothing — it is a block item like any other — and every tier takes it. Contents
+means either component: stacks in `minecraft:container`, or counts parked in `drawer_overflow`.
 
 ### Sprites
 
@@ -579,7 +582,7 @@ extracts; a click takes one legal stack and the slot refills, with the cursor's 
 against the item codec; placing onto a stacked slot parks the excess, and onto a plain full one is
 refused; a swap onto a parked remainder is refused, and the same swap on a slot with nothing parked
 goes through; shift-click in fills through the parked space, and out drains a slot stack by stack;
-the menu's slots enforce the lock and nesting; a basic drawer spills its parked items as legal
+the menu's slots enforce the lock and nesting, and let an empty drawer in; a basic drawer spills its parked items as legal
 stacks, and a sturdy one keeps them in both components and gives them back when placed; removing
 the upgrade destroys nothing; an aborted insert leaves no trace; the comparator measures each slot
 against its own capacity; the three levels give the right numbers to a block, a pearl and a sword,

@@ -733,12 +733,25 @@ public class DrawerBlockEntity extends BlockEntity
 		}
 
 		// Stops a drawer that keeps its contents from holding another of equal or higher rank,
-		// which would otherwise let storage compound without limit.
-		if (stack.getItem() instanceof BlockItem blockItem && blockItem.getBlock() instanceof DrawerBlock other) {
+		// which would otherwise let storage compound without limit. An empty drawer compounds
+		// nothing — it is a block item like any other — so only one with contents is held to it.
+		if (stack.getItem() instanceof BlockItem blockItem && blockItem.getBlock() instanceof DrawerBlock other
+				&& hasContents(stack)) {
 			return self.canContain(resolve(other.tierKey()));
 		}
 
 		return true;
+	}
+
+	/** Whether a drawer item carries anything: stacks in {@code minecraft:container}, or parked counts. */
+	public static boolean hasContents(ItemStack stack) {
+		ItemContainerContents contents = stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY);
+
+		if (contents.nonEmptyItems().iterator().hasNext()) {
+			return true;
+		}
+
+		return !stack.getOrDefault(LodestoreComponents.DRAWER_OVERFLOW, DrawerOverflow.EMPTY).isEmpty();
 	}
 
 	/**

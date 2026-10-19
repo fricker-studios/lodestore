@@ -41,7 +41,9 @@ import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import dev.fricker.lodestore.api.drawer.UpgradeBehaviour;
 import dev.fricker.lodestore.block.DrawerBlockEntity;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
+import dev.fricker.lodestore.registry.LodestoreComponents;
 import dev.fricker.lodestore.registry.LodestoreItems;
+import dev.fricker.lodestore.storage.DrawerOverflow;
 import dev.fricker.lodestore.util.PersistenceSelfCheck;
 
 /**
@@ -187,25 +189,51 @@ public class DrawerGameTests {
 
 	// --- nesting -----------------------------------------------------------
 
+	/**
+	 * The rank rule applies to a drawer with contents. An empty drawer is a block item like any
+	 * other and compounds nothing, so every tier takes it.
+	 */
 	@GameTest
 	public void drawersRefuseToNestInsideThemselves(GameTestHelper helper) {
 		DrawerBlockEntity basic = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
 		DrawerBlockEntity sturdy = place(helper, new BlockPos(2, 1, 1), LodestoreBlocks.STURDY_DRAWER);
 		DrawerBlockEntity reinforced = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.REINFORCED_DRAWER);
 
-		ItemStack sturdyItem = new ItemStack(LodestoreBlocks.STURDY_DRAWER);
-		ItemStack reinforcedItem = new ItemStack(LodestoreBlocks.REINFORCED_DRAWER);
+		ItemStack sturdyItem = filledDrawer(LodestoreBlocks.STURDY_DRAWER);
+		ItemStack reinforcedItem = filledDrawer(LodestoreBlocks.REINFORCED_DRAWER);
 
-		expect(helper, sturdy.canStore(0, sturdyItem), false, "sturdy accepted a sturdy drawer");
-		expect(helper, sturdy.canStore(0, reinforcedItem), false, "sturdy accepted a reinforced drawer");
-		expect(helper, reinforced.canStore(0, sturdyItem), true, "reinforced rejected a sturdy drawer");
-		expect(helper, reinforced.canStore(0, reinforcedItem), false, "reinforced accepted a reinforced drawer");
+		expect(helper, sturdy.canStore(0, sturdyItem), false, "sturdy accepted a sturdy drawer with contents");
+		expect(helper, sturdy.canStore(0, reinforcedItem), false, "sturdy accepted a reinforced drawer with contents");
+		expect(helper, reinforced.canStore(0, sturdyItem), true, "reinforced rejected a sturdy drawer with contents");
+		expect(helper, reinforced.canStore(0, reinforcedItem), false, "reinforced accepted a reinforced drawer with contents");
 
 		// A basic drawer spills when broken, so nesting into it compounds nothing.
 		expect(helper, basic.canStore(0, reinforcedItem), true, "basic rejected a drawer");
 		expect(helper, sturdy.canStore(0, new ItemStack(Items.DIAMOND)), true, "sturdy rejected a plain item");
 
+		// Empty, every tier takes every tier.
+		for (DrawerBlockEntity drawer : List.of(basic, sturdy, reinforced)) {
+			for (Block block : List.of(LodestoreBlocks.BASIC_DRAWER, LodestoreBlocks.STURDY_DRAWER,
+					LodestoreBlocks.REINFORCED_DRAWER)) {
+				expect(helper, drawer.canStore(0, new ItemStack(block)), true,
+						drawer.tier() + " refused an empty " + block.getName().getString());
+			}
+		}
+
+		// Parked counts are contents too, even with the container component empty.
+		ItemStack parked = new ItemStack(LodestoreBlocks.REINFORCED_DRAWER);
+		parked.set(LodestoreComponents.DRAWER_OVERFLOW,
+				new DrawerOverflow(List.of(new DrawerOverflow.Entry(0, 100))));
+		expect(helper, reinforced.canStore(0, parked), false, "reinforced accepted a reinforced drawer with parked counts");
+
 		helper.succeed();
+	}
+
+	/** A drawer item holding five diamonds — what the rank rule is about. */
+	private static ItemStack filledDrawer(Block block) {
+		ItemStack stack = new ItemStack(block);
+		stack.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.DIAMOND, 5))));
+		return stack;
 	}
 
 	// --- tools ---------------------------------------------------------------
@@ -509,7 +537,7 @@ public class DrawerGameTests {
 		});
 	}
 
-	/** A hopper must not be able to pipe a drawer past the nesting rule. */
+	/** A hopper must not be able to pipe a drawer with contents past the nesting rule. */
 	@GameTest(maxTicks = 200)
 	public void hopperCannotNestSturdyIntoSturdy(GameTestHelper helper) {
 		BlockPos drawerPos = new BlockPos(1, 1, 1);
@@ -517,11 +545,30 @@ public class DrawerGameTests {
 		helper.setBlock(drawerPos.above(), Blocks.HOPPER.defaultBlockState());
 
 		HopperBlockEntity hopper = helper.getBlockEntity(drawerPos.above(), HopperBlockEntity.class);
-		hopper.setItem(0, new ItemStack(LodestoreBlocks.STURDY_DRAWER, 4));
+		hopper.setItem(0, filledDrawer(LodestoreBlocks.STURDY_DRAWER));
 
 		helper.runAtTickTime(180, () -> {
 			if (!drawer.isEmpty()) {
-				throw helper.assertionException("a hopper nested a sturdy drawer inside a sturdy drawer");
+				throw helper.assertionException("a hopper nested a sturdy drawer with contents inside a sturdy drawer");
+			}
+
+			helper.succeed();
+		});
+	}
+
+	/** The pair: the same hopper moves an empty sturdy drawer in, because empty ones nest anywhere. */
+	@GameTest(maxTicks = 200)
+	public void hopperNestsAnEmptyDrawerAnywhere(GameTestHelper helper) {
+		BlockPos drawerPos = new BlockPos(1, 1, 1);
+		DrawerBlockEntity drawer = place(helper, drawerPos, LodestoreBlocks.STURDY_DRAWER);
+		helper.setBlock(drawerPos.above(), Blocks.HOPPER.defaultBlockState());
+
+		HopperBlockEntity hopper = helper.getBlockEntity(drawerPos.above(), HopperBlockEntity.class);
+		hopper.setItem(0, new ItemStack(LodestoreBlocks.REINFORCED_DRAWER, 4));
+
+		helper.runAtTickTime(180, () -> {
+			if (total(drawer, LodestoreBlocks.REINFORCED_DRAWER.asItem()) == 0) {
+				throw helper.assertionException("a hopper could not put an empty reinforced drawer into a sturdy drawer");
 			}
 
 			helper.succeed();

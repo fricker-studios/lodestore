@@ -522,8 +522,15 @@ public class StorageLayerGameTests {
 			throw helper.assertionException("the menu's slot lets dirt into a slot locked to cobblestone");
 		}
 
-		if (menu.getSlot(20).mayPlace(new ItemStack(LodestoreBlocks.STURDY_DRAWER))) {
-			throw helper.assertionException("the menu's slot lets a sturdy drawer nest inside a sturdy drawer");
+		ItemStack filled = new ItemStack(LodestoreBlocks.STURDY_DRAWER);
+		filled.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.DIAMOND, 5))));
+
+		if (menu.getSlot(20).mayPlace(filled)) {
+			throw helper.assertionException("the menu's slot lets a sturdy drawer with contents nest inside a sturdy drawer");
+		}
+
+		if (!menu.getSlot(20).mayPlace(new ItemStack(LodestoreBlocks.STURDY_DRAWER))) {
+			throw helper.assertionException("the menu's slot refuses an empty sturdy drawer, which nests anywhere");
 		}
 
 		if (!menu.getSlot(20).mayPlace(new ItemStack(Items.DIRT))) {
