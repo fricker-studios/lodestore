@@ -177,6 +177,23 @@ LOCK_UPGRADE = plate([
     "NooooooooooN",
 ])
 
+# The void reads as a hole rather than a symbol: a round aperture sunk through the
+# same iron plate the lock sits on, purple at the rim and near-black at the centre.
+# A lock and a hole are not easily confused at inventory size, which matters when
+# one of the two destroys things.
+VOID_UPGRADE = plate([
+    "NNNNNNNNNNNN",
+    "NNNNVVVVNNNN",
+    "NNVVvvvvVVNN",
+    "NVvvvvvvvvVN",
+    "NVvvvvvvvvPN",
+    "NVvvvvvvvvPN",
+    "NVvvvvvvvvPN",
+    "NNVvvvvvvPNN",
+    "NNNNVPPPNNNN",
+    "NNNNNNNNNNNN",
+])
+
 # ------------------------------------------------------------------------ main
 
 BLOCKS = {
@@ -190,7 +207,7 @@ BLOCKS = {
     "reinforced_drawer_side": REINFORCED_SIDE,
     "reinforced_drawer_top": REINFORCED_TOP,
 }
-ITEMS = {"lock_upgrade": LOCK_UPGRADE}
+ITEMS = {"lock_upgrade": LOCK_UPGRADE, "void_upgrade": VOID_UPGRADE}
 
 if __name__ == "__main__":
     out = sys.argv[1]

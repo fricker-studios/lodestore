@@ -12,6 +12,7 @@ import dev.fricker.lodestore.api.drawer.DrawerUpgrade;
  */
 public final class LodestoreDrawerUpgrades {
 	public static final ResourceKey<DrawerUpgrade> LOCK = key("lock");
+	public static final ResourceKey<DrawerUpgrade> VOID = key("void");
 
 	private LodestoreDrawerUpgrades() {
 	}

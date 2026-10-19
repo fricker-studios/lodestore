@@ -15,6 +15,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -52,6 +53,34 @@ public class DrawerGameTests {
 		expectSize(helper, LodestoreBlocks.BASIC_DRAWER, 27);
 		expectSize(helper, LodestoreBlocks.STURDY_DRAWER, 27);
 		expectSize(helper, LodestoreBlocks.REINFORCED_DRAWER, 54);
+		helper.succeed();
+	}
+
+	/**
+	 * The container is one slot larger than the storage, and that slot is the overflow slot a
+	 * voiding drawer accepts into. The chest screen must not grow with it: the whole reason the
+	 * slot can exist at all is that {@code ChestMenu} checks a minimum and lays out exactly
+	 * {@code rows * 9}, so a drawer that handed back a menu sized from the container would put a
+	 * slot on screen that swallows whatever is dropped into it.
+	 */
+	@GameTest
+	public void theOverflowSlotIsOutsideTheStorage(GameTestHelper helper) {
+		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+
+		if (drawer.getContainerSize() != drawer.storageSize() + 1) {
+			throw helper.assertionException("expected exactly one slot past the storage, container is "
+					+ drawer.getContainerSize() + " against " + drawer.storageSize() + " stored");
+		}
+
+		if (drawer.overflowSlot() != drawer.storageSize()) {
+			throw helper.assertionException("the overflow slot should sit just past the storage, is "
+					+ drawer.overflowSlot());
+		}
+
+		// A drawer nobody has upgraded must not quietly eat things through it.
+		expect(helper, drawer.canPlaceItem(drawer.overflowSlot(), new ItemStack(Items.COBBLESTONE)), false,
+				"a drawer with no void upgrade accepted an item into its overflow slot");
+
 		helper.succeed();
 	}
 
@@ -254,6 +283,14 @@ public class DrawerGameTests {
 				gold, iron, gold,
 				ItemStack.EMPTY, iron, ItemStack.EMPTY)), "lock_upgrade", LodestoreItems.LOCK_UPGRADE);
 
+		// The void upgrade: obsidian around an iron ingot, over a second ingot — the lock's
+		// shape in a material that reads as destructive.
+		ItemStack obsidian = new ItemStack(Items.OBSIDIAN);
+		assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				ItemStack.EMPTY, obsidian, ItemStack.EMPTY,
+				obsidian, iron, obsidian,
+				ItemStack.EMPTY, iron, ItemStack.EMPTY)), "void_upgrade", LodestoreItems.VOID_UPGRADE);
+
 		helper.succeed();
 	}
 
@@ -289,7 +326,8 @@ public class DrawerGameTests {
 				"basic_drawer_from_chest", "decorations",
 				"sturdy_drawer", "decorations",
 				"reinforced_drawer", "decorations",
-				"lock_upgrade", "misc");
+				"lock_upgrade", "misc",
+				"void_upgrade", "misc");
 
 		for (Map.Entry<String, String> entry : recipes.entrySet()) {
 			String recipe = entry.getKey();
@@ -464,6 +502,15 @@ public class DrawerGameTests {
 
 		if (signal(helper, drawerPos) <= 0) {
 			throw helper.assertionException("drawer holds items but comparator still reads 0");
+		}
+
+		// The overflow slot must not count towards fullness. Measured over the container rather
+		// than the storage, a completely full drawer tops out at 14 and never reads full.
+		fillStorage(drawer, Items.COBBLESTONE);
+
+		if (signal(helper, drawerPos) != 15) {
+			throw helper.assertionException("a completely full drawer should read 15, reads "
+					+ signal(helper, drawerPos));
 		}
 
 		helper.succeed();
@@ -691,7 +738,237 @@ public class DrawerGameTests {
 		helper.succeed();
 	}
 
+
+	// --- voiding -----------------------------------------------------------
+
+	/**
+	 * The behaviour the upgrade exists for: a drawer with no room left takes the item anyway and
+	 * destroys it, rather than refusing it.
+	 *
+	 * <p>{@code Container#canPlaceItem} cannot express this — it only answers yes or no — so this
+	 * goes through {@code HopperBlockEntity.addItem}, the same entry point a hopper and a dropper
+	 * use, and asserts on what comes back rather than on any internal state.
+	 */
+	@GameTest
+	public void aFullVoidingDrawerAcceptsAndDiscards(GameTestHelper helper) {
+		DrawerBlockEntity drawer = voidingDrawerFullOf(helper, Items.COBBLESTONE);
+		long before = total(drawer, Items.COBBLESTONE);
+
+		ItemStack left = HopperBlockEntity.addItem(new SimpleContainer(1), drawer,
+				new ItemStack(Items.COBBLESTONE, 64), Direction.DOWN);
+
+		if (!left.isEmpty()) {
+			throw helper.assertionException("a full voiding drawer refused " + left.getCount()
+					+ " of the item it is voiding");
+		}
+
+		if (total(drawer, Items.COBBLESTONE) != before) {
+			throw helper.assertionException("the voided items were stored rather than destroyed: "
+					+ before + " before, " + total(drawer, Items.COBBLESTONE) + " after");
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * The point of voiding: the machine upstream keeps running. A hopper that backs up is the
+	 * failure this upgrade exists to prevent, and a hopper is the only way to test it — the
+	 * drawer looking full to {@code isFullContainer} is what makes one give up.
+	 */
+	@GameTest(maxTicks = 160)
+	public void aHopperKeepsDrainingIntoAFullVoidingDrawer(GameTestHelper helper) {
+		BlockPos drawerPos = new BlockPos(1, 1, 1);
+		DrawerBlockEntity drawer = voidingDrawerFullOf(helper, drawerPos, Items.COBBLESTONE);
+		long before = total(drawer, Items.COBBLESTONE);
+
+		HopperBlockEntity hopper = hopperAbove(helper, drawerPos, new ItemStack(Items.COBBLESTONE, 5));
+
+		helper.runAtTickTime(140, () -> {
+			if (!hopper.getItem(0).isEmpty()) {
+				throw helper.assertionException("the hopper backed up against a voiding drawer, "
+						+ hopper.getItem(0).getCount() + " still held");
+			}
+
+			if (total(drawer, Items.COBBLESTONE) != before) {
+				throw helper.assertionException("the drawer grew past full while voiding: " + before
+						+ " before, " + total(drawer, Items.COBBLESTONE) + " after");
+			}
+
+			helper.succeed();
+		});
+	}
+
+	/** The control for the test above: without the upgrade, a full drawer still backs a hopper up. */
+	@GameTest(maxTicks = 160)
+	public void aFullDrawerWithoutTheUpgradeStillRefuses(GameTestHelper helper) {
+		BlockPos drawerPos = new BlockPos(1, 1, 1);
+		DrawerBlockEntity drawer = place(helper, drawerPos, LodestoreBlocks.BASIC_DRAWER);
+		fillStorage(drawer, Items.COBBLESTONE);
+
+		HopperBlockEntity hopper = hopperAbove(helper, drawerPos, new ItemStack(Items.COBBLESTONE, 5));
+
+		helper.runAtTickTime(140, () -> {
+			if (hopper.getItem(0).getCount() != 5) {
+				throw helper.assertionException("a full drawer with no void upgrade swallowed "
+						+ (5 - hopper.getItem(0).getCount()) + " items");
+			}
+
+			helper.succeed();
+		});
+	}
+
+	/** Voiding is the last resort, not the first: a drawer with room still stores what arrives. */
+	@GameTest
+	public void aVoidingDrawerStoresWhileItHasRoom(GameTestHelper helper) {
+		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+		drawer.setItem(0, new ItemStack(Items.COBBLESTONE, 1));
+		drawer.setChanged();
+		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
+
+		ItemStack left = HopperBlockEntity.addItem(new SimpleContainer(1), drawer,
+				new ItemStack(Items.COBBLESTONE, 32), Direction.DOWN);
+
+		if (!left.isEmpty()) {
+			throw helper.assertionException("a drawer with room refused " + left.getCount());
+		}
+
+		if (total(drawer, Items.COBBLESTONE) != 33) {
+			throw helper.assertionException("a voiding drawer with room should have stored all 33, holds "
+					+ total(drawer, Items.COBBLESTONE));
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * Voiding only ever applies to the item the drawer is locked to. A misrouted item is refused
+	 * and backs the system up, which is recoverable; destroying it would not be.
+	 */
+	@GameTest
+	public void aVoidingDrawerRefusesWhatItIsNotLockedTo(GameTestHelper helper) {
+		DrawerBlockEntity drawer = voidingDrawerFullOf(helper, Items.COBBLESTONE);
+
+		ItemStack left = HopperBlockEntity.addItem(new SimpleContainer(1), drawer,
+				new ItemStack(Items.DIAMOND, 7), Direction.DOWN);
+
+		if (left.getCount() != 7) {
+			throw helper.assertionException("a drawer voiding cobblestone destroyed " + (7 - left.getCount())
+					+ " diamonds it was never locked to");
+		}
+
+		if (total(drawer, Items.DIAMOND) != 0) {
+			throw helper.assertionException("the diamonds ended up inside the drawer");
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * Upgrade state is outside the inventory, so {@code PersistenceSelfCheck} does not cover it.
+	 * This round-trips the drawer and then exercises the behaviour on the far side, because an
+	 * upgrade that reloads as an inert item would still pass a test that only counted upgrades.
+	 */
+	@GameTest
+	public void voidingSurvivesASaveAndLoad(GameTestHelper helper) {
+		BlockPos pos = new BlockPos(1, 1, 1);
+		DrawerBlockEntity drawer = voidingDrawerFullOf(helper, pos, Items.COBBLESTONE);
+
+		CompoundTag written = drawer.saveCustomOnly(helper.getLevel().registryAccess());
+
+		DrawerBlockEntity reloaded = new DrawerBlockEntity(
+				helper.absolutePos(pos), LodestoreBlocks.BASIC_DRAWER.defaultBlockState());
+		reloaded.loadWithComponents(TagValueInput.create(
+				ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), written));
+		// Without a level the upgrade registry is unreachable and every upgrade reads as inert,
+		// so the behaviour below would pass for the wrong reason.
+		reloaded.setLevel(helper.getLevel());
+
+		if (reloaded.upgrades().size() != 1 || !reloaded.upgrades().getFirst().is(LodestoreItems.VOID_UPGRADE)) {
+			throw helper.assertionException("the void upgrade did not survive a save and load, got "
+					+ reloaded.upgrades().size() + " upgrade(s)");
+		}
+
+		if (!reloaded.lockedItem().is(Items.COBBLESTONE)) {
+			throw helper.assertionException("the filter voiding depends on did not survive, got "
+					+ describe(reloaded.lockedItem()));
+		}
+
+		long before = total(reloaded, Items.COBBLESTONE);
+		ItemStack left = HopperBlockEntity.addItem(new SimpleContainer(1), reloaded,
+				new ItemStack(Items.COBBLESTONE, 64), Direction.DOWN);
+
+		if (!left.isEmpty() || total(reloaded, Items.COBBLESTONE) != before) {
+			throw helper.assertionException("a reloaded voiding drawer stopped voiding");
+		}
+
+		helper.succeed();
+	}
+
+	/** Lock and void are separate items, so a drawer may carry both. */
+	@GameTest
+	public void aDrawerTakesBothUpgradesAtOnce(GameTestHelper helper) {
+		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+
+		expect(helper, drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE)), true,
+				"the lock upgrade should install");
+		expect(helper, drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE)), true,
+				"the void upgrade should install alongside a lock");
+
+		if (drawer.upgrades().size() != 2) {
+			throw helper.assertionException("expected both upgrades, drawer holds " + drawer.upgrades().size());
+		}
+
+		helper.succeed();
+	}
+
 	// --- helpers -----------------------------------------------------------
+
+	private static DrawerBlockEntity voidingDrawerFullOf(GameTestHelper helper,
+			net.minecraft.world.item.Item item) {
+		return voidingDrawerFullOf(helper, new BlockPos(1, 1, 1), item);
+	}
+
+	/** A drawer filled to capacity, then given the void upgrade — the state voiding applies in. */
+	private static DrawerBlockEntity voidingDrawerFullOf(GameTestHelper helper, BlockPos pos,
+			net.minecraft.world.item.Item item) {
+		DrawerBlockEntity drawer = place(helper, pos, LodestoreBlocks.BASIC_DRAWER);
+		fillStorage(drawer, item);
+		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
+		return drawer;
+	}
+
+	/** Fills every storage slot to the brim, leaving the overflow slot alone. */
+	private static void fillStorage(DrawerBlockEntity drawer, net.minecraft.world.item.Item item) {
+		int max = new ItemStack(item).getMaxStackSize();
+
+		for (int slot = 0; slot < drawer.storageSize(); slot++) {
+			drawer.setItem(slot, new ItemStack(item, max));
+		}
+
+		drawer.setChanged();
+	}
+
+	/** Counts across the whole container, so anything stranded in the overflow slot shows up. */
+	private static long total(DrawerBlockEntity drawer, net.minecraft.world.item.Item item) {
+		long found = 0;
+
+		for (int slot = 0; slot < drawer.getContainerSize(); slot++) {
+			ItemStack stack = drawer.getItem(slot);
+
+			if (stack.is(item)) {
+				found += stack.getCount();
+			}
+		}
+
+		return found;
+	}
+
+	private static HopperBlockEntity hopperAbove(GameTestHelper helper, BlockPos drawerPos, ItemStack load) {
+		helper.setBlock(drawerPos.above(), Blocks.HOPPER.defaultBlockState());
+		HopperBlockEntity hopper = helper.getBlockEntity(drawerPos.above(), HopperBlockEntity.class);
+		hopper.setItem(0, load);
+		return hopper;
+	}
 
 	private static String describe(ItemStack stack) {
 		return stack.isEmpty() ? "nothing" : stack.getHoverName().getString();
@@ -723,9 +1000,9 @@ public class DrawerGameTests {
 	private static void expectSize(GameTestHelper helper, Block block, int expected) {
 		DrawerBlockEntity drawer = place(helper, new BlockPos(1, 1, 1), block);
 
-		if (drawer.getContainerSize() != expected) {
+		if (drawer.storageSize() != expected) {
 			throw helper.assertionException(block.getName().getString() + " has "
-					+ drawer.getContainerSize() + " slots, expected " + expected);
+					+ drawer.storageSize() + " storage slots, expected " + expected);
 		}
 	}
 

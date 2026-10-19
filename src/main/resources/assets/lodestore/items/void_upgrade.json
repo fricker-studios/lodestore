@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "lodestore:item/void_upgrade"
+  }
+}

@@ -9,7 +9,6 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
@@ -128,7 +127,10 @@ public class DrawerBlock extends Block implements EntityBlock {
 
 	@Override
 	protected int getAnalogOutputSignal(BlockState state, Level level, BlockPos pos, Direction direction) {
-		return AbstractContainerMenu.getRedstoneSignalFromBlockEntity(level.getBlockEntity(pos));
+		// Not the generic helper: it divides by the container size, which includes the overflow
+		// slot a voiding drawer uses and which never holds anything, so a full drawer would
+		// read 14 rather than 15.
+		return level.getBlockEntity(pos) instanceof DrawerBlockEntity drawer ? drawer.comparatorSignal() : 0;
 	}
 
 }

@@ -114,6 +114,11 @@ The middle of each front is a flat recessed panel on purpose. The renderer float
 across roughly the middle half of the face and draws the count just below it, so anything busy there
 competes with the icon and anything light there swallows the count.
 
+Upgrades share a carrier: both sit on the same bevelled iron plate, so they read as one family of
+hardware rather than two unrelated trinkets, and only the motif differs — a gold padlock against a
+dark aperture. The two are deliberately unlike at inventory size, which matters when one of them
+destroys things.
+
 | Where | What |
 |---|---|
 | `src/main/resources/assets/lodestore/textures/` | the 16×16 PNGs, which are the source of truth |
@@ -130,6 +135,7 @@ PNGs, so anything edited by hand afterwards has to go back into the script or it
 | Sturdy drawer | a basic drawer surrounded by planks |
 | Reinforced drawer | a sturdy drawer surrounded by iron ingots |
 | Lock upgrade | gold nuggets around an iron ingot, over a second ingot |
+| Void upgrade | obsidian around an iron ingot, over a second ingot |
 
 Each recipe ships an advancement that reveals it in the recipe book once you are holding any of its
 ingredients — planks or an iron nugget for a basic drawer, an iron ingot or a sturdy drawer for a
@@ -162,6 +168,7 @@ the `minecraft:container` component only carries the inventory, so nothing else 
 | Upgrade | Does |
 |---|---|
 | Lock | restricts the drawer to one kind of item |
+| Void | restricts the drawer to one kind of item, then destroys what will not fit |
 
 The lock locks to whatever the drawer already holds most of. On an empty drawer it has nothing to
 claim yet, so it takes the first item in — locking to "nothing" would make the drawer refuse
@@ -177,11 +184,65 @@ white, and once emptied it keeps showing its filter — drawn smaller, over a co
 an empty locked drawer is exactly the one that most needs labelling. That is the whole point of
 locking a drawer before the items arrive.
 
+#### Voiding
+
+A voiding drawer accepts the item it is full of and destroys the excess, so the machine filling it
+never backs up. That is the whole value of the upgrade: a cobble generator feeding a full drawer
+should keep running, not jam.
+
+**It voids only what it is locked to.** The shipped `void` entry sets `locks_contents` as well as
+`voids_overflow`, so one item is enough to set a drawer up, and the flag alone does nothing on a
+drawer with no filter. Voiding anything a drawer happened to be full of would make a misrouted
+stack of diamonds disappear silently; locking first means the drawer only ever destroys the one
+item a player explicitly named it for, and anything else is *refused*. The failure mode becomes a
+backed-up pipe, which is recoverable, instead of items that are simply gone. The two flags stay
+independent in the datapack — a pack can set either — and `voids_overflow` is optional, so entries
+written before voiding existed still decode.
+
+**Why it is not in `canPlaceItem`.** The lock lives there, and that hook can only accept or reject.
+Voiding has to *accept* an insert and throw the excess away, which it cannot express. Worse, a
+hopper never reaches it: `HopperBlockEntity.ejectItems` calls `isFullContainer` first and gives up
+before any per-slot check runs. That test passes only if some slot reports room, so a drawer that
+wants to keep draining a hopper must have one.
+
+So a drawer has one slot past its storage — the overflow slot. It always reads empty, so the drawer
+never looks full; whatever is written to it is discarded by `setChanged` on the same tick. It is
+offered only when the drawer is voiding and genuinely has nowhere else to put the item, so a drawer
+with room stores what arrives as usual.
+
+**One mechanism, not two.** The insertion paths agree because they all bottom out in the same
+place. Fabric's transfer API patches hoppers, but that hook begins by bailing out when vanilla
+already found a `Container` — which a drawer is — so hoppers use the vanilla path, and other mods'
+pipes arrive through `ItemStorage.SIDED`, whose automatic wrapper calls the very same
+`canPlaceItem` / `getItem` / `setItem`. Implementing voiding in the container makes it impossible
+for the two to disagree, rather than something to keep in sync. A dropper, which inserts without a
+direction, goes through the same slots.
+
+Two consequences worth knowing about, both deliberate:
+
+- **The chest screen cannot void.** The overflow slot is past the end of the grid the menu lays
+  out, so a player shift-clicking into a full voiding drawer is bounced, exactly as today. That
+  keeps the vanilla `ChestMenu` — the reason this works at all is that `checkContainerSize` is a
+  minimum and the menu adds exactly `rows * 9` slots, so no custom menu or screen was needed. It
+  also means voiding is something automation does, never something a player's own hands can do by
+  accident, which is the right side to err on for a feature that destroys items.
+- **`getContainerSize()` is one larger than the storage**, so anything measuring fullness has to
+  use `storageSize()` instead. The comparator does: left on the generic helper it divides by the
+  container size and a completely full drawer reads 14, never 15. A gametest pins that at 15.
+
+The slot has to be a real index below `getContainerSize()` rather than a virtual one past the end,
+because the transfer API's sided wrapper indexes a backing list sized from exactly that method and
+would throw on anything outside it.
+
 ### Not yet
 
-Voiding overflow, capacity limits, grouping and sorting. Capacity is the awkward one: size is
-structural, decided before the level's registries are reachable, so a capacity upgrade cannot just
-be another flag in the registry.
+Capacity limits, grouping and sorting. Capacity is the awkward one: size is structural, decided
+before the level's registries are reachable, so a capacity upgrade cannot just be another flag in
+the registry.
+
+Voiding is here, but only for automation — the chest screen bounces rather than voids, for the
+reasons above. Voiding by hand would need a custom menu, which the vanilla `ChestMenu` arrangement
+is worth more than.
 
 Single-item-type behaviour is partly here — a locked drawer is one — but choosing the displayed item
 independently of the filter is not.
@@ -216,6 +277,14 @@ swallow what it refuses. These need a real ticking world: a plain dedicated serv
 hoppers even in force-loaded chunks, so a hopper assertion there passes whether or not the code
 works.
 
+Voiding is tested against the same bar, in pairs rather than alone: a hopper feeding a full voiding
+drawer must empty itself, and the same hopper feeding a drawer *without* the upgrade must not, since
+either assertion on its own would pass for a drawer that silently ate everything or one that voided
+nothing. Alongside those: that a full voiding drawer accepts and the count does not grow, that a
+drawer with room still stores instead of voiding, and that a drawer voiding cobblestone refuses
+diamonds rather than destroying them. All of it was checked by disabling voiding and confirming the
+right tests — and only those — go red.
+
 **Client gametests.** Two of them. One builds a row of drawers — one of each tier, plus a locked
 drawer with stock and a locked drawer that has been emptied — and screenshots it three times into
 `build/clientGametest/screenshots/`: the row, a close-up of the tier sprites, and a close-up of the
@@ -249,6 +318,12 @@ can do generically. State that lives outside the inventory is invisible to it �
 and its lock filter are exactly that, and would be lost on reload just as silently. They have their
 own save-and-load round trip in `upgradeStateSurvivesASaveAndLoad` instead. Anything else added
 outside the inventory needs the same treatment, or it is not covered at all.
+
+`voidingSurvivesASaveAndLoad` goes one step further and exercises the behaviour on the far side of
+the round trip rather than only counting what came back, because an upgrade that reloads as an inert
+item still looks present. It has to put the level back on the reloaded block entity first: without
+one the upgrade registry is unreachable and every upgrade reads as doing nothing, so the test would
+pass for the wrong reason.
 
 ## Source sets
 
