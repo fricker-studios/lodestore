@@ -19,7 +19,6 @@ import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 
-import dev.fricker.lodestore.api.drawer.UpgradeBehaviour;
 import dev.fricker.lodestore.block.DrawerBlock;
 import dev.fricker.lodestore.block.DrawerBlockEntity;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
@@ -129,15 +128,15 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 			context.waitTicks(20);
 			LOGGER.info("[lodestore] tooltip screenshot -> {}", context.takeScreenshot("drawer-upgrade-tooltip"));
 
-			// A storage slot the stack upgrade covers shows one legal stack; the tooltip is the only
-			// thing on screen that says how much is really in it. Worth a picture of its own.
+			// A slot of a stacked drawer draws its real total, and the tooltip says out of how much.
+			// Both are things only a picture can check. Worth one of its own.
 			int[] stacked = context.computeOnClient(client -> {
 				double scale = client.getWindow().getGuiScale();
 				int left = (client.getWindow().getGuiScaledWidth() - (176 + 66)) / 2;
 				int top = (client.getWindow().getGuiScaledHeight() - (114 + 6 * 18)) / 2;
 
-				// Middle of storage slot 27: row three, first column.
-				return new int[] {(int) ((left + 8 + 8) * scale), (int) ((top + 18 + 3 * 18 + 8) * scale)};
+				// Middle of storage slot 0.
+				return new int[] {(int) ((left + 8 + 8) * scale), (int) ((top + 18 + 8) * scale)};
 			});
 
 			context.getInput().setCursorPos(stacked[0], stacked[1]);
@@ -208,24 +207,16 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 		drawer.contents().setItem(3, new ItemStack(LodestoreBlocks.STURDY_DRAWER, 2));
 		drawer.setChanged();
 
-		// This is the drawer the GUI screenshot opens. A level-two lock reaches two rows and the
-		// void and stack upgrades one each, and those rows are moved off the lock's so the three
-		// tints can be told apart — overlapping them would prove only that something was drawn.
+		// This is the drawer the GUI screenshot opens. A level-two lock reaches two rows, tinted
+		// gold; the void and stack upgrades cover the whole drawer and tint nothing.
 		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE_2));
 		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
 		drawer.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE));
 
-		for (int slot = 0; slot < 9; slot++) {
-			drawer.toggleTarget(UpgradeBehaviour.VOID, slot);
-			drawer.toggleTarget(UpgradeBehaviour.VOID, 18 + slot);
-			drawer.toggleTarget(UpgradeBehaviour.STACK, slot);
-			drawer.toggleTarget(UpgradeBehaviour.STACK, 27 + slot);
-		}
-
-		// Slot 27 is the one the stacked-slot tooltip screenshot hovers: more than a stack in it,
-		// so the slot shows 64 and the tooltip has something to add.
+		// Slot 0 is filled to its four stacks: the stacked-slot screenshot hovers it, and the slot
+		// should draw 256 where a plain one would draw 64, with the tooltip saying out of how much.
 		try (Transaction transaction = Transaction.openOuter()) {
-			drawer.storage().getSlot(27).insert(ItemVariant.of(Items.OAK_LOG), 200, transaction);
+			drawer.storage().getSlot(0).insert(ItemVariant.of(Items.OAK_LOG), 192, transaction);
 			transaction.commit();
 		}
 	}

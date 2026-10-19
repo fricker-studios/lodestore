@@ -34,6 +34,8 @@ public final class LodestoreCreativeTab {
 					entries.accept(LodestoreItems.LOCK_UPGRADE_3);
 					entries.accept(LodestoreItems.VOID_UPGRADE);
 					entries.accept(LodestoreItems.STACK_UPGRADE);
+					entries.accept(LodestoreItems.STACK_UPGRADE_2);
+					entries.accept(LodestoreItems.STACK_UPGRADE_3);
 				})
 				.build());
 	}

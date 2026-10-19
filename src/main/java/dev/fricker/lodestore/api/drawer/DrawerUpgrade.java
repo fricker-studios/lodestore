@@ -19,14 +19,22 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  *                      no room left, instead of refusing it. Has no effect on a drawer that is not
  *                      locked: voiding is only ever applied to the one item a drawer was explicitly
  *                      told it is for, so it cannot destroy something that merely passed through.
- * @param slotCapacity  how many storage slots this upgrade reaches; pools across what is installed
- * @param stacksPerSlot how many stacks a covered slot holds. One is a normal slot; anything above
- *                      it is what a stack upgrade grants, and is what Lodestore's own storage layer
- *                      exists to express, since vanilla's {@code Container} cannot. Does not pool:
- *                      the deepest installed upgrade decides, so two level-ones double the reach
- *                      and not the depth.
+ * @param slotCapacity       how many storage slots a <em>lock</em> reaches; pools across what is
+ *                           installed. The lock is the only behaviour that is targeted at slots —
+ *                           voiding and stacking apply to the whole drawer — so this means nothing
+ *                           on an upgrade that does not lock.
+ * @param stacksPerSlot      how many stacks every slot holds, for items that stack. One is a
+ *                           normal slot; anything above it is what a stack upgrade grants, and is
+ *                           what Lodestore's own storage layer exists to express, since vanilla's
+ *                           {@code Container} cannot. Does not pool: the deepest installed upgrade
+ *                           decides.
+ * @param unstackablePerSlot how many of an item that does not stack — a tool, a piece of armour —
+ *                           a slot holds. Kept apart from {@code stacks_per_slot} because four
+ *                           times one is a poor upgrade; the shipped levels give eight, sixteen
+ *                           and thirty-two.
  */
-public record DrawerUpgrade(boolean locksContents, boolean voidsOverflow, int slotCapacity, int stacksPerSlot) {
+public record DrawerUpgrade(boolean locksContents, boolean voidsOverflow, int slotCapacity, int stacksPerSlot,
+		int unstackablePerSlot) {
 	/**
 	 * The ceiling on {@code stacks_per_slot}. A thousand stacks of 64 is 65,536 of one item in one
 	 * slot, comfortably inside an {@code int}, which is what the menu's slot arithmetic runs in.
@@ -45,7 +53,9 @@ public record DrawerUpgrade(boolean locksContents, boolean voidsOverflow, int sl
 			// Optional for the same reason as voids_overflow: every upgrade written before the
 			// storage layer existed is a one-stack upgrade, and says so by saying nothing.
 			Codec.intRange(1, MAX_STACKS_PER_SLOT).optionalFieldOf("stacks_per_slot", 1)
-					.forGetter(DrawerUpgrade::stacksPerSlot)
+					.forGetter(DrawerUpgrade::stacksPerSlot),
+			Codec.intRange(1, MAX_STACKS_PER_SLOT).optionalFieldOf("unstackable_per_slot", 1)
+					.forGetter(DrawerUpgrade::unstackablePerSlot)
 	).apply(instance, DrawerUpgrade::new));
 
 	/**
@@ -53,10 +63,10 @@ public record DrawerUpgrade(boolean locksContents, boolean voidsOverflow, int sl
 	 * that silently locked a drawer would strand its contents behind a filter nobody set — and one
 	 * that silently voided would destroy them outright.
 	 */
-	public static final DrawerUpgrade FALLBACK = new DrawerUpgrade(false, false, 0, 1);
+	public static final DrawerUpgrade FALLBACK = new DrawerUpgrade(false, false, 0, 1, 1);
 
-	/** Whether this upgrade lets a covered slot hold more than one stack. */
+	/** Whether this upgrade lets a slot hold more than it otherwise would. */
 	public boolean stacks() {
-		return stacksPerSlot > 1;
+		return stacksPerSlot > 1 || unstackablePerSlot > 1;
 	}
 }

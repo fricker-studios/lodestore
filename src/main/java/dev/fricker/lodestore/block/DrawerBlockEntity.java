@@ -231,17 +231,20 @@ public class DrawerBlockEntity extends BlockEntity
 	private final NonNullList<ItemStack> slotFilters;
 
 	/**
-	 * How many stacks a covered slot holds, as the server last told this client.
+	 * How deep the slots go, as the server last told this client: the multiplier for items that
+	 * stack, and the count for items that do not.
 	 *
-	 * <p>The client never has the installed upgrades, so it cannot work the depth out; like the
-	 * covered sets, it is sent the answer.
+	 * <p>The client never has the installed upgrades, so it cannot work this out; like the covered
+	 * sets, it is sent the answer.
 	 */
-	private int syncedStackDepth = 1;
+	private int syncedStackMultiplier = 1;
+	private int syncedUnstackableDepth = 1;
 
 	/** What the client was last told, so a change worth sending can be spotted in setChanged. */
 	private List<ItemStack> broadcastFilters = List.of();
 	private final Map<UpgradeBehaviour, Set<Integer>> broadcastTargets = new EnumMap<>(UpgradeBehaviour.class);
-	private int broadcastStackDepth = 1;
+	private int broadcastStackMultiplier = 1;
+	private int broadcastUnstackableDepth = 1;
 	private DrawerOverflow broadcastOverflow = DrawerOverflow.EMPTY;
 
 	public DrawerBlockEntity(BlockPos pos, BlockState state) {
@@ -304,13 +307,24 @@ public class DrawerBlockEntity extends BlockEntity
 	// --- capacity ----------------------------------------------------------------
 
 	/**
-	 * How many of {@code stack} a slot may hold: the item's own stack size, times the depth a stack
-	 * upgrade grants the slot. The one place capacity is decided; the storage, the menu's slots and
-	 * the comparator all ask here, which is why none of them can disagree about how full a slot is.
+	 * How many of {@code stack} a slot may hold. The one place capacity is decided; the storage,
+	 * the menu's slots and the comparator all ask here, which is why none of them can disagree
+	 * about how full a slot is.
+	 *
+	 * <p>Without a stack upgrade it is the item's own stack size. With one, an item that stacks
+	 * holds its stack size times the upgrade's multiplier — 256, 512 and 1,024 of a 64-stack across
+	 * the shipped levels, and a 16-stack scales the same way to 64, 128 and 256 — and an item that
+	 * does not stack holds the upgrade's own count for those: 8, 16 and 32. Both numbers are data
+	 * on the upgrade, and the deepest installed upgrade's numbers are the drawer's.
 	 */
 	public int slotCapacity(int slot, ItemStack stack) {
 		int perStack = stack.isEmpty() ? NOMINAL_STACK : Math.max(1, stack.getMaxStackSize());
-		return perStack * (isStackedSlot(slot) ? stackDepth() : 1);
+
+		if (!isStackedSlot(slot)) {
+			return perStack;
+		}
+
+		return perStack == 1 ? unstackableDepth() : perStack * stackMultiplier();
 	}
 
 	/** How many more of a slot's item are parked behind its visible stack. */
@@ -323,20 +337,30 @@ public class DrawerBlockEntity extends BlockEntity
 		return slot >= 0 && slot < storageSize() ? contents.total(slot) : 0;
 	}
 
-	/**
-	 * How many stacks a covered slot holds. The deepest installed stack upgrade decides; depth does
-	 * not pool, so two level-ones double the reach and not the depth.
-	 */
-	public int stackDepth() {
-		if (isClient()) {
-			return syncedStackDepth;
-		}
+	/** Whether a stack upgrade is installed, so every slot holds more than it otherwise would. */
+	public boolean stacks() {
+		return stackMultiplier() > 1 || unstackableDepth() > 1;
+	}
 
+	/**
+	 * How many stacks a slot holds of an item that stacks. The deepest installed stack upgrade
+	 * decides; depth does not pool, so two level-ones are one level-one.
+	 */
+	public int stackMultiplier() {
+		return isClient() ? syncedStackMultiplier : deepest(DrawerUpgrade::stacksPerSlot);
+	}
+
+	/** How many a slot holds of an item that does not stack, from the deepest installed upgrade. */
+	public int unstackableDepth() {
+		return isClient() ? syncedUnstackableDepth : deepest(DrawerUpgrade::unstackablePerSlot);
+	}
+
+	private int deepest(java.util.function.ToIntFunction<DrawerUpgrade> number) {
 		int depth = 1;
 
 		for (ItemStack installed : upgrades) {
 			if (installed.getItem() instanceof DrawerUpgradeItem item) {
-				depth = Math.max(depth, resolveUpgrade(item.upgradeKey()).stacksPerSlot());
+				depth = Math.max(depth, number.applyAsInt(resolveUpgrade(item.upgradeKey())));
 			}
 		}
 
@@ -391,19 +415,10 @@ public class DrawerBlockEntity extends BlockEntity
 		return capacity(UpgradeBehaviour.LOCK);
 	}
 
-	/** Storage slots the installed void upgrades control. */
-	public int voidCapacity() {
-		return capacity(UpgradeBehaviour.VOID);
-	}
-
-	/** Storage slots the installed stack upgrades control. */
-	public int stackCapacity() {
-		return capacity(UpgradeBehaviour.STACK);
-	}
-
 	/**
 	 * Reach pools. Two level-one upgrades reach exactly as far as one level-two, because what
-	 * decides the reach is the total granted, not which upgrade granted it.
+	 * decides the reach is the total granted, not which upgrade granted it. Only the lock has a
+	 * reach; the other behaviours cover the whole drawer.
 	 */
 	public int capacity(UpgradeBehaviour behaviour) {
 		int total = 0;
@@ -421,8 +436,22 @@ public class DrawerBlockEntity extends BlockEntity
 		return total;
 	}
 
-	/** The storage slots a behaviour covers: those chosen, or the first {@code capacity} by default. */
+	/**
+	 * The storage slots a behaviour covers.
+	 *
+	 * <p>For the lock: those chosen, or the first {@code capacity} by default. For voiding and
+	 * stacking: every slot, once an upgrade granting it is installed. The client knows the lock's
+	 * answer from the sync tag and the stack's from the synced depth; it is never told about
+	 * voiding, which only the server acts on.
+	 */
 	public SortedSet<Integer> coveredSlots(UpgradeBehaviour behaviour) {
+		if (!behaviour.targetable()) {
+			boolean installed = behaviour == UpgradeBehaviour.STACK
+					? stacks()
+					: !isClient() && anyUpgrade(behaviour::grantedBy);
+			return installed ? covered(Collections.emptySortedSet(), storageSize()) : Collections.emptySortedSet();
+		}
+
 		SortedSet<Integer> chosen = targets.get(behaviour);
 		return isClient() ? Collections.unmodifiableSortedSet(chosen) : covered(chosen, capacity(behaviour));
 	}
@@ -471,14 +500,16 @@ public class DrawerBlockEntity extends BlockEntity
 	 * Adds or removes one storage slot from a behaviour's selection.
 	 *
 	 * <p>The first edit seeds the selection from the default, so clicking a tenth slot adds to
-	 * what the upgrade already covered rather than discarding it.
-	 *
-	 * <p>Un-targeting a slot that holds more than one stack destroys nothing: the slot is over
-	 * capacity, reports no room, and drains normally. Nothing in the drawer ever lowers a count.
+	 * what the upgrade already covered rather than discarding it. Only the lock can be edited;
+	 * the other behaviours cover the whole drawer and the packet is refused.
 	 *
 	 * @return {@code false} when the selection is already at capacity and nothing changed
 	 */
 	public boolean toggleTarget(UpgradeBehaviour behaviour, int storageSlot) {
+		if (!behaviour.targetable()) {
+			return false;
+		}
+
 		SortedSet<Integer> chosen = targets.get(behaviour);
 		int capacity = capacity(behaviour);
 
@@ -512,9 +543,9 @@ public class DrawerBlockEntity extends BlockEntity
 		return voidedSlots().contains(storageSlot);
 	}
 
-	/** Whether a stack upgrade covers this storage slot. */
+	/** Whether a stack upgrade covers this storage slot — every slot, once one is installed. */
 	public boolean isStackedSlot(int storageSlot) {
-		return stackedSlots().contains(storageSlot);
+		return stacks() && storageSlot >= 0 && storageSlot < storageSize();
 	}
 
 	/** What a locked slot has been locked to, or empty if it has not claimed anything yet. */
@@ -684,6 +715,13 @@ public class DrawerBlockEntity extends BlockEntity
 			return false;
 		}
 
+		// Upgrades are hardware, not goods, and the storage never holds them. This is also what
+		// keeps an inventory sorter from shuffling an installed upgrade into the grid: nothing in
+		// the container region will take it, so it stays where it was.
+		if (stack.getItem() instanceof DrawerUpgradeItem) {
+			return false;
+		}
+
 		if (isLockedSlot(slot) && !slotAccepts(slot, stack)) {
 			return false;
 		}
@@ -764,6 +802,12 @@ public class DrawerBlockEntity extends BlockEntity
 			return;
 		}
 
+		// With a stack upgrade, the same item spread over several slots is gathered into the first
+		// ones. After the rebalance the menu has done, before anything is measured or sent.
+		if (stacks()) {
+			contents.compact();
+		}
+
 		ItemStack previousItem = previewItem;
 		long previousCount = previewCount;
 		recomputePreview();
@@ -773,7 +817,8 @@ public class DrawerBlockEntity extends BlockEntity
 		captureSlotFilters();
 
 		List<ItemStack> currentFilters = lockedItems();
-		int currentDepth = stackDepth();
+		int currentMultiplier = stackMultiplier();
+		int currentUnstackable = unstackableDepth();
 		DrawerOverflow currentOverflow = contents.overflow();
 		boolean targetsChanged = false;
 
@@ -791,9 +836,11 @@ public class DrawerBlockEntity extends BlockEntity
 		// changing with it.
 		if (!ItemStack.isSameItemSameComponents(previousItem, previewItem) || previousCount != previewCount
 				|| !sameStacks(broadcastFilters, currentFilters) || targetsChanged
-				|| broadcastStackDepth != currentDepth || !broadcastOverflow.equals(currentOverflow)) {
+				|| broadcastStackMultiplier != currentMultiplier || broadcastUnstackableDepth != currentUnstackable
+				|| !broadcastOverflow.equals(currentOverflow)) {
 			broadcastFilters = currentFilters;
-			broadcastStackDepth = currentDepth;
+			broadcastStackMultiplier = currentMultiplier;
+			broadcastUnstackableDepth = currentUnstackable;
 			broadcastOverflow = currentOverflow;
 
 			for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
@@ -818,6 +865,10 @@ public class DrawerBlockEntity extends BlockEntity
 		// upgrades if they change. The sync tag carries the resolved answer, because the client
 		// has no upgrades to resolve it from.
 		for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
+			if (!behaviour.targetable()) {
+				continue;
+			}
+
 			Collection<Integer> slots = resolved ? coveredSlots(behaviour) : targets.get(behaviour);
 
 			if (!slots.isEmpty()) {
@@ -844,10 +895,15 @@ public class DrawerBlockEntity extends BlockEntity
 	private void loadTargeting(ValueInput data) {
 		slotFilters.clear();
 
+		// A save from when voiding was targeted carries void_targets; it is ignored, since voiding
+		// now covers the whole drawer.
 		for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
 			SortedSet<Integer> chosen = targets.get(behaviour);
 			chosen.clear();
-			data.getIntArray(targetKey(behaviour)).ifPresent(slots -> addAll(chosen, slots));
+
+			if (behaviour.targetable()) {
+				data.getIntArray(targetKey(behaviour)).ifPresent(slots -> addAll(chosen, slots));
+			}
 		}
 
 		int[] claimedSlots = data.getIntArray("claim_slots").orElse(new int[0]);
@@ -862,7 +918,7 @@ public class DrawerBlockEntity extends BlockEntity
 		}
 	}
 
-	/** {@code lock_targets} and {@code void_targets} predate the enum and keep their names. */
+	/** {@code lock_targets} predates the enum and keeps its name. */
 	private static String targetKey(UpgradeBehaviour behaviour) {
 		return behaviour.name().toLowerCase(java.util.Locale.ROOT) + "_targets";
 	}
@@ -922,7 +978,8 @@ public class DrawerBlockEntity extends BlockEntity
 		// A locked drawer draws its filter on the face even while empty, so this has to reach
 		// the client separately — an empty drawer has no preview to carry it.
 		saveTargeting(out, true);
-		out.putInt("stack_depth", stackDepth());
+		out.putInt("stack_multiplier", stackMultiplier());
+		out.putInt("stack_unstackable", unstackableDepth());
 
 		DrawerOverflow overflow = contents.overflow();
 
@@ -978,7 +1035,8 @@ public class DrawerBlockEntity extends BlockEntity
 		loadTargeting(data);
 		broadcastFilters = lockedItems();
 
-		syncedStackDepth = data.getIntOr("stack_depth", 1);
+		syncedStackMultiplier = data.getIntOr("stack_multiplier", 1);
+		syncedUnstackableDepth = data.getIntOr("stack_unstackable", 1);
 		data.read("synced_overflow", DrawerOverflow.CODEC)
 				.ifPresent(overflow -> contents.applyOverflow(overflow, false));
 

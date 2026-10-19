@@ -32,9 +32,13 @@ import dev.fricker.lodestore.menu.DrawerMenu;
  * the file and the player-inventory section from a fixed offset — so one texture serves any row
  * count and the drawer keeps looking like the chest it behaves as. Only the upgrade column is ours.
  *
- * <p>Right-clicking an installed upgrade turns on slot selection for it: the storage slots it
- * covers are tinted, and clicking one adds or removes it. Which slots an upgrade covers is read
- * straight off the drawer's own block entity, which every client near the block already has.
+ * <p>Right-clicking an installed lock turns on slot selection for it: the storage slots it covers
+ * are tinted, and clicking one adds or removes it. Which slots it covers is read straight off the
+ * drawer's own block entity, which every client near the block already has. Voiding and stacking
+ * cover the whole drawer and have nothing to choose.
+ *
+ * <p>With a stack upgrade a slot holds more than the one legal stack it shows, so the count drawn on
+ * it is the slot's real total rather than the stack's, scaled down when four digits would not fit.
  */
 public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	private static final Identifier CHEST_BACKGROUND =
@@ -61,15 +65,12 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	/** The vanilla chest's own arithmetic, so the player's inventory lands where it always does. */
 	private static final int CHROME_HEIGHT = 114;
 
-	/**
-	 * The lock's gold, the void upgrade's purple and the stack upgrade's green, so a tint names
-	 * the upgrade that put it there. Each is the colour of its sprite's motif.
-	 */
+	/** The lock's gold, the colour of its sprite's motif, on the slots it covers. */
 	private static final int LOCK_TINT = 0x55F2C852;
-	private static final int VOID_TINT = 0x553B1E6E;
-	private static final int STACK_TINT = 0x555FBF5F;
-	/** While choosing, the upgrade being edited is picked out more strongly than the others. */
+	/** While choosing, the upgrade being edited is picked out more strongly. */
 	private static final int SELECTING_TINT = 0x99FFFFFF;
+	/** A count is drawn no narrower than this, or it stops being legible at the usual GUI scale. */
+	private static final float MIN_COUNT_SCALE = 0.6F;
 
 	private final int rows;
 
@@ -97,7 +98,7 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 				? drawer : null;
 	}
 
-	/** Which kind of targeting an upgrade item owns, resolved against the synced registry. */
+	/** Which targetable behaviour an upgrade item owns, resolved against the synced registry. */
 	private @Nullable UpgradeBehaviour behaviourOf(ItemStack stack) {
 		if (!(stack.getItem() instanceof DrawerUpgradeItem item) || minecraft == null || minecraft.level == null) {
 			return null;
@@ -109,28 +110,12 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 				.orElse(DrawerUpgrade.FALLBACK);
 
 		for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
-			if (behaviour.grantedBy(upgrade)) {
+			if (behaviour.targetable() && behaviour.grantedBy(upgrade)) {
 				return behaviour;
 			}
 		}
 
 		return null;
-	}
-
-	private static int tint(UpgradeBehaviour behaviour) {
-		return switch (behaviour) {
-			case LOCK -> LOCK_TINT;
-			case VOID -> VOID_TINT;
-			case STACK -> STACK_TINT;
-		};
-	}
-
-	private static String adjustKey(UpgradeBehaviour behaviour) {
-		return switch (behaviour) {
-			case LOCK -> "lodestore.upgrade.adjust_locked";
-			case VOID -> "lodestore.upgrade.adjust_voided";
-			case STACK -> "lodestore.upgrade.adjust_stacked";
-		};
 	}
 
 	@Override
@@ -158,7 +143,7 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	}
 
 	/**
-	 * Tints the storage slots each upgrade covers.
+	 * Tints the storage slots the lock covers.
 	 *
 	 * <p>Drawn here rather than over the slots: this runs before them and in the same menu-local
 	 * coordinates, so the tint sits under the items instead of washing them out.
@@ -173,16 +158,15 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 			return;
 		}
 
+		Set<Integer> lockSlots = drawer.lockedSlots();
 		Set<Integer> chosenSlots = selecting == null ? Set.of() : drawer.coveredSlots(selecting);
 
 		for (int slot = 0; slot < getMenu().storageEnd(); slot++) {
 			int x = 8 + (slot % 9) * 18;
 			int y = DrawerMenu.FIRST_SLOT_Y + (slot / 9) * 18;
 
-			for (UpgradeBehaviour behaviour : UpgradeBehaviour.values()) {
-				if (drawer.coveredSlots(behaviour).contains(slot)) {
-					graphics.fill(x, y, x + 16, y + 16, tint(behaviour));
-				}
+			if (lockSlots.contains(slot)) {
+				graphics.fill(x, y, x + 16, y + 16, LOCK_TINT);
 			}
 
 			if (chosenSlots.contains(slot)) {
@@ -198,14 +182,14 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	/**
 	 * Two tooltips of ours.
 	 *
-	 * <p>On an upgrade: what right-clicking it does. The gesture is not one anything else in the
-	 * game teaches, and an upgrade whose reach can be changed looks exactly like one whose reach
-	 * cannot. The hint goes here rather than on the item so it appears where the gesture works, and
-	 * the covered count comes with it because "how far does this one actually reach" is the
-	 * question the tint is answering.
+	 * <p>On a lock: what right-clicking it does. The gesture is not one anything else in the game
+	 * teaches, and an upgrade whose reach can be changed looks exactly like one whose reach cannot.
+	 * The hint goes here rather than on the item so it appears where the gesture works, and the
+	 * covered count comes with it because "how far does this one actually reach" is the question
+	 * the tint is answering.
 	 *
-	 * <p>On a storage slot a stack upgrade covers: how much is really in it. The slot shows one
-	 * legal stack, and nothing else on screen says there are more behind it.
+	 * <p>On a storage slot of a stacked drawer: how much is in it, out of how much it could hold.
+	 * The count drawn on the slot says the first; only this says the second.
 	 */
 	@Override
 	protected List<Component> getTooltipFromContainerItem(ItemStack stack) {
@@ -221,7 +205,7 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 		if (hoveredSlot.index < menu.storageEnd()) {
 			int slot = hoveredSlot.index;
 
-			if (drawer == null || (!drawer.isStackedSlot(slot) && drawer.remainder(slot) == 0)) {
+			if (drawer == null || (!drawer.stacks() && drawer.remainder(slot) == 0)) {
 				return tooltip;
 			}
 
@@ -243,7 +227,7 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 		}
 
 		List<Component> hinted = new ArrayList<>(tooltip);
-		hinted.add(Component.translatable(adjustKey(behaviour)).withStyle(ChatFormatting.GRAY));
+		hinted.add(Component.translatable("lodestore.upgrade.adjust_locked").withStyle(ChatFormatting.GRAY));
 
 		if (drawer != null) {
 			int covered = drawer.coveredSlots(behaviour).size();
@@ -259,7 +243,47 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	}
 
 	/**
-	 * Right-click an upgrade to start choosing its slots; click storage slots to add or remove.
+	 * Draws a stacked drawer's slots with their real totals.
+	 *
+	 * <p>Vanilla draws the stack's own count, which is at most one legal stack — the slot's whole
+	 * point is that there can be more behind it. This runs vanilla's own drawing with the total as
+	 * the count text, and when the text is wider than the slot, draws it itself scaled down to
+	 * fit, anchored where vanilla anchors a count. The drag-split preview is left to vanilla: it
+	 * is predicting a placement, and the count it shows is the prediction.
+	 */
+	@Override
+	protected void extractSlot(GuiGraphicsExtractor graphics, Slot slot, int mouseX, int mouseY) {
+		DrawerBlockEntity drawer = drawer();
+		ItemStack stack = slot.getItem();
+
+		if (drawer == null || isQuickCrafting || slot.index >= getMenu().storageEnd()
+				|| stack.isEmpty() || drawer.remainder(slot.index) == 0) {
+			super.extractSlot(graphics, slot, mouseX, mouseY);
+			return;
+		}
+
+		String total = String.valueOf(stack.getCount() + drawer.remainder(slot.index));
+		int width = font.width(total);
+		int seed = slot.x + slot.y * imageWidth;
+		graphics.item(stack, slot.x, slot.y, seed);
+
+		if (width <= 16) {
+			graphics.itemDecorations(font, stack, slot.x, slot.y, total);
+			return;
+		}
+
+		// Bar and cooldown as vanilla draws them, with an empty count; then the count, shrunk.
+		graphics.itemDecorations(font, stack, slot.x, slot.y, "");
+		float scale = Math.max(MIN_COUNT_SCALE, 16.0F / width);
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(slot.x + 17 - width * scale, slot.y + 9 + (font.lineHeight - 1) * (1.0F - scale));
+		graphics.pose().scale(scale, scale);
+		graphics.text(font, total, 0, 0, -1, true);
+		graphics.pose().popMatrix();
+	}
+
+	/**
+	 * Right-click a lock to start choosing its slots; click storage slots to add or remove.
 	 *
 	 * <p>Shift-click acts on everything between the last slot clicked and this one, so a row or a
 	 * block of slots takes two clicks rather than nine.

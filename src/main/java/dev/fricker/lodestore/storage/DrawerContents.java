@@ -454,6 +454,57 @@ public final class DrawerContents implements Container {
 	}
 
 	/**
+	 * Merges every item into the earliest slots that hold it, as far as their capacity allows.
+	 *
+	 * <p>What a stack upgrade is for: with slots that hold several stacks, the same item spread
+	 * over several slots is clutter, so the drawer gathers it after every change. Only into slots
+	 * that already hold the item, which is also what keeps a lock's claim honest — an empty locked
+	 * slot is never filled by this. Totals are preserved exactly; a partial merge leaves the rest
+	 * where it was.
+	 *
+	 * <p>Safe to run from the menu's {@code setChanged}: vanilla reads a slot afresh each time it
+	 * looks, and the one stack it holds across a call — the one it is moving out — is always the
+	 * source of that move, never something this would take from.
+	 *
+	 * @return whether anything moved
+	 */
+	public boolean compact() {
+		boolean moved = false;
+
+		for (int target = 0; target < visible.size(); target++) {
+			ItemStack kind = kindOf(target);
+
+			if (kind.isEmpty()) {
+				continue;
+			}
+
+			for (int source = target + 1; source < visible.size(); source++) {
+				long room = room(target, kind);
+
+				if (room <= 0) {
+					break;
+				}
+
+				ItemStack other = kindOf(source);
+
+				if (other.isEmpty() || !ItemStack.isSameItemSameComponents(kind, other)) {
+					continue;
+				}
+
+				long amount = Math.min(room, total(source));
+
+				if (amount > 0) {
+					take(source, amount);
+					add(target, kind, amount);
+					moved = true;
+				}
+			}
+		}
+
+		return moved;
+	}
+
+	/**
 	 * Empties the drawer into a list of legal stacks, remainders split into as many stacks as they
 	 * need. For spilling on break — destructive, so nothing can be dropped twice.
 	 */

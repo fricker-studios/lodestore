@@ -316,6 +316,18 @@ public class DrawerGameTests {
 				chest, iron, chest,
 				ItemStack.EMPTY, iron, ItemStack.EMPTY)), "stack_upgrade", LodestoreItems.STACK_UPGRADE);
 
+		// Levels two and three: the previous level in copper, then in diamond, as the lock's are.
+		ItemStack copper = new ItemStack(Items.COPPER_INGOT);
+		ItemStack diamond = new ItemStack(Items.DIAMOND);
+		assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				ItemStack.EMPTY, copper, ItemStack.EMPTY,
+				copper, new ItemStack(LodestoreItems.STACK_UPGRADE), copper,
+				ItemStack.EMPTY, copper, ItemStack.EMPTY)), "stack_upgrade_2", LodestoreItems.STACK_UPGRADE_2);
+		assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				ItemStack.EMPTY, diamond, ItemStack.EMPTY,
+				diamond, new ItemStack(LodestoreItems.STACK_UPGRADE_2), diamond,
+				ItemStack.EMPTY, diamond, ItemStack.EMPTY)), "stack_upgrade_3", LodestoreItems.STACK_UPGRADE_3);
+
 		helper.succeed();
 	}
 
@@ -345,15 +357,19 @@ public class DrawerGameTests {
 	 */
 	@GameTest
 	public void everyRecipeHasAnUnlockAdvancement(GameTestHelper helper) {
-		// Folder per recipe: the drawers are decorations, the upgrade is not.
-		Map<String, String> recipes = Map.of(
-				"basic_drawer", "decorations",
-				"basic_drawer_from_chest", "decorations",
-				"sturdy_drawer", "decorations",
-				"reinforced_drawer", "decorations",
-				"lock_upgrade", "misc",
-				"void_upgrade", "misc",
-				"stack_upgrade", "misc");
+		// Folder per recipe: the drawers are decorations, the upgrades are not.
+		Map<String, String> recipes = Map.ofEntries(
+				Map.entry("basic_drawer", "decorations"),
+				Map.entry("basic_drawer_from_chest", "decorations"),
+				Map.entry("sturdy_drawer", "decorations"),
+				Map.entry("reinforced_drawer", "decorations"),
+				Map.entry("lock_upgrade", "misc"),
+				Map.entry("lock_upgrade_2", "misc"),
+				Map.entry("lock_upgrade_3", "misc"),
+				Map.entry("void_upgrade", "misc"),
+				Map.entry("stack_upgrade", "misc"),
+				Map.entry("stack_upgrade_2", "misc"),
+				Map.entry("stack_upgrade_3", "misc"));
 
 		for (Map.Entry<String, String> entry : recipes.entrySet()) {
 			String recipe = entry.getKey();

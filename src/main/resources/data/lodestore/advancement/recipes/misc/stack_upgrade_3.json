@@ -1,0 +1,32 @@
+{
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_the_recipe": {
+      "trigger": "minecraft:recipe_unlocked",
+      "conditions": {
+        "recipe": "lodestore:stack_upgrade_3"
+      }
+    },
+    "has_previous_level": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "lodestore:stack_upgrade_2"
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "has_the_recipe",
+      "has_previous_level"
+    ]
+  ],
+  "rewards": {
+    "recipes": [
+      "lodestore:stack_upgrade_3"
+    ]
+  }
+}

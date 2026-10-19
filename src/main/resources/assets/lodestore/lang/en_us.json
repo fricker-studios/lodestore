@@ -6,13 +6,13 @@
   "item.lodestore.lock_upgrade_2": "Lock Upgrade II",
   "item.lodestore.lock_upgrade_3": "Lock Upgrade III",
   "item.lodestore.stack_upgrade": "Stack Upgrade",
+  "item.lodestore.stack_upgrade_2": "Stack Upgrade II",
+  "item.lodestore.stack_upgrade_3": "Stack Upgrade III",
   "item.lodestore.void_upgrade": "Void Upgrade",
   "itemGroup.lodestore.general": "Lodestore",
   "lodestore.drawer.overflow": "Holds %s more than its stacks show",
   "lodestore.slot.stored": "%s of %s in this slot",
   "lodestore.upgrade.adjust_locked": "Right-click to adjust locked slots",
-  "lodestore.upgrade.adjust_stacked": "Right-click to adjust stacked slots",
-  "lodestore.upgrade.adjust_voided": "Right-click to adjust voided slots",
   "lodestore.upgrade.coverage": "Covering %s of %s slots",
   "lodestore.upgrade.selecting": "Click a slot to add or remove, shift-click for a range"
 }

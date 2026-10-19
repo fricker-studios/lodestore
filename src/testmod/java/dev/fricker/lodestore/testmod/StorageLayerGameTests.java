@@ -51,9 +51,13 @@ import dev.fricker.lodestore.storage.DrawerOverflow;
  * clicks and shift-clicks — and never escapes by any path: no over-sized stack is ever handed to a
  * cursor, a save or a dropped item, and no count is ever lowered by anything but a withdrawal.
  *
- * <p>In pairs where a single assertion would pass for broken code: a stacked slot against the same
- * slot without the upgrade, a parked remainder against a slot with none, an aborted transaction
+ * <p>In pairs where a single assertion would pass for broken code: a stacked drawer against the same
+ * drawer without the upgrade, a parked remainder against a slot with none, an aborted transaction
  * against a committed one.
+ *
+ * <p>A stack upgrade covers the whole drawer and gathers the same item into its first slots after
+ * every change, so a setup that spreads one item over several slots of a stacked drawer will not
+ * stay spread; the tests here use different items where slots must stay apart.
  */
 public class StorageLayerGameTests {
 	private static final BlockPos DRAWER = new BlockPos(1, 1, 1);
@@ -329,7 +333,8 @@ public class StorageLayerGameTests {
 	public void aSwapOntoAParkedRemainderIsRefused(GameTestHelper helper) {
 		DrawerBlockEntity drawer = stackedDrawer(helper, LodestoreBlocks.BASIC_DRAWER);
 		park(helper, drawer, 0, Items.COBBLESTONE, STACK + 100);
-		drawer.contents().setItem(1, new ItemStack(Items.COBBLESTONE, STACK));
+		// A different item, or the drawer would gather it into slot 0 before the test looked.
+		drawer.contents().setItem(1, new ItemStack(Items.OAK_LOG, STACK));
 		drawer.setChanged();
 
 		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
@@ -351,7 +356,7 @@ public class StorageLayerGameTests {
 		// Nothing parked in slot 1, so the ordinary swap is allowed there.
 		menu.clicked(1, 0, ContainerInput.PICKUP, player);
 
-		if (!menu.getCarried().is(Items.COBBLESTONE) || menu.getCarried().getCount() != STACK) {
+		if (!menu.getCarried().is(Items.OAK_LOG) || menu.getCarried().getCount() != STACK) {
 			throw helper.assertionException("the swap on a slot with nothing parked was refused; cursor holds "
 					+ describe(menu.getCarried()));
 		}
@@ -364,29 +369,110 @@ public class StorageLayerGameTests {
 		helper.succeed();
 	}
 
-	/** Shift-click into a drawer reaches the parked space; the same gesture into a plain one does not. */
+	/** Shift-click into a stacked drawer reaches the parked space; into a plain one it takes the next slot. */
 	@GameTest
 	public void shiftClickingInFillsThroughTheParkedSpace(GameTestHelper helper) {
 		DrawerBlockEntity stacked = stackedDrawer(helper, DRAWER, LodestoreBlocks.BASIC_DRAWER);
 		DrawerBlockEntity plain = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.BASIC_DRAWER);
 
 		for (DrawerBlockEntity drawer : List.of(stacked, plain)) {
-			for (int slot = 0; slot < drawer.storageSize(); slot++) {
-				drawer.contents().setItem(slot, new ItemStack(Items.COBBLESTONE, STACK));
-			}
-
+			drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, STACK));
 			drawer.setChanged();
 		}
 
 		long moved = shiftClickIn(helper, stacked, new ItemStack(Items.COBBLESTONE, STACK));
 
-		if (moved != STACK || stacked.total(0) != 2 * STACK) {
+		if (moved != STACK || stacked.total(0) != 2 * STACK || stacked.total(1) != 0) {
 			throw helper.assertionException("shift-click moved " + moved + " into a stacked drawer; slot 0 holds "
-					+ stacked.total(0));
+					+ stacked.total(0) + " and slot 1 " + stacked.total(1));
 		}
 
-		if (shiftClickIn(helper, plain, new ItemStack(Items.COBBLESTONE, STACK)) != 0) {
-			throw helper.assertionException("shift-click moved items into a drawer that was already full");
+		moved = shiftClickIn(helper, plain, new ItemStack(Items.COBBLESTONE, STACK));
+
+		if (moved != STACK || plain.total(0) != STACK || plain.total(1) != STACK) {
+			throw helper.assertionException("shift-click into a plain drawer should fill the next slot: moved "
+					+ moved + ", slot 0 holds " + plain.total(0) + " and slot 1 " + plain.total(1));
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * With a stack upgrade, the same item spread over several slots is gathered into the first.
+	 *
+	 * <p>The drawer does this after every change, into slots that already hold the item and only as
+	 * far as they have room, so a full slot takes nothing and a partial merge leaves the rest where
+	 * it was. A plain drawer leaves everything where it was put, as a chest would.
+	 */
+	@GameTest
+	public void aStackUpgradeGathersAnItemIntoOneSlot(GameTestHelper helper) {
+		DrawerBlockEntity stacked = stackedDrawer(helper, DRAWER, LodestoreBlocks.BASIC_DRAWER);
+		DrawerBlockEntity plain = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.BASIC_DRAWER);
+
+		for (DrawerBlockEntity drawer : List.of(stacked, plain)) {
+			drawer.contents().setItem(0, new ItemStack(Items.COBBLESTONE, STACK));
+			drawer.contents().setItem(5, new ItemStack(Items.COBBLESTONE, STACK));
+			drawer.contents().setItem(7, new ItemStack(Items.DIRT, 10));
+			drawer.setChanged();
+		}
+
+		if (stacked.total(0) != 2 * STACK || stacked.total(5) != 0) {
+			throw helper.assertionException("a stacked drawer did not gather its cobblestone: slot 0 holds "
+					+ stacked.total(0) + ", slot 5 " + stacked.total(5));
+		}
+
+		if (stacked.total(7) != 10 || !stacked.contents().visible(7).is(Items.DIRT)) {
+			throw helper.assertionException("gathering touched an unrelated item in slot 7");
+		}
+
+		if (plain.total(0) != STACK || plain.total(5) != STACK) {
+			throw helper.assertionException("a plain drawer gathered items it should have left alone: slot 0 holds "
+					+ plain.total(0) + ", slot 5 " + plain.total(5));
+		}
+
+		// Fill slot 0 to the brim; a stack put elsewhere now has nowhere to go and stays.
+		park(helper, stacked, 0, Items.COBBLESTONE, STACK * DEPTH - 2 * STACK);
+		stacked.contents().setItem(5, new ItemStack(Items.COBBLESTONE, STACK));
+		stacked.setChanged();
+
+		if (stacked.total(0) != STACK * DEPTH || stacked.total(5) != STACK) {
+			throw helper.assertionException("a full slot took items it had no room for: slot 0 holds "
+					+ stacked.total(0) + ", slot 5 " + stacked.total(5));
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * Upgrades are hardware, not goods: the storage refuses them through both doors.
+	 *
+	 * <p>This is also what keeps an inventory sorter from shuffling an installed upgrade into the
+	 * grid — nothing in the container region will take it. A shift-clicked upgrade goes to the
+	 * upgrade column, as it always did.
+	 */
+	@GameTest
+	public void upgradesAreNotGoodsThroughEitherDoor(GameTestHelper helper) {
+		DrawerBlockEntity drawer = place(helper, DRAWER, LodestoreBlocks.BASIC_DRAWER);
+
+		if (insert(drawer, LodestoreItems.LOCK_UPGRADE, 1) != 0) {
+			throw helper.assertionException("the storage accepted an upgrade as goods");
+		}
+
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		AbstractContainerMenu menu = open(helper, drawer, player);
+
+		if (menu.getSlot(0).mayPlace(new ItemStack(LodestoreItems.LOCK_UPGRADE))) {
+			throw helper.assertionException("the menu's slot accepted an upgrade as goods");
+		}
+
+		if (!menu.getSlot(0).mayPlace(new ItemStack(Items.DIRT)) || insert(drawer, Items.DIRT, 1) != 1) {
+			throw helper.assertionException("the drawer refuses plain items; the test is measuring the wrong thing");
+		}
+
+		if (shiftClickIn(helper, drawer, new ItemStack(LodestoreItems.LOCK_UPGRADE)) != 1
+				|| drawer.upgrades().size() != 1 || !drawer.contents().visible(0).is(Items.DIRT)) {
+			throw helper.assertionException("a shift-clicked upgrade did not land in the upgrade column: "
+					+ drawer.upgrades().size() + " installed, slot 0 holds " + describe(drawer.contents().visible(0)));
 		}
 
 		helper.succeed();
@@ -607,11 +693,11 @@ public class StorageLayerGameTests {
 	}
 
 	/**
-	 * A stack in every slot fills a plain drawer and does not fill a stacked one.
+	 * Twenty-seven stacks fill a plain drawer and leave a stacked one a quarter full.
 	 *
-	 * <p>Every slot is filled rather than one, because one slot in twenty-seven is below the
-	 * comparator's granularity — any non-zero fill reads at least 1, so a single slot at a quarter
-	 * and a single slot full would read the same and prove nothing.
+	 * <p>The whole drawer is filled rather than one slot, because one slot in twenty-seven is below
+	 * the comparator's granularity — any non-zero fill reads at least 1, so a single slot at a
+	 * quarter and a single slot full would read the same and prove nothing.
 	 */
 	@GameTest
 	public void theComparatorMeasuresEachSlotAgainstItsCapacity(GameTestHelper helper) {
@@ -619,12 +705,17 @@ public class StorageLayerGameTests {
 		DrawerBlockEntity stacked = stackedDrawer(helper, DRAWER, LodestoreBlocks.BASIC_DRAWER);
 		DrawerBlockEntity plain = place(helper, plainPos, LodestoreBlocks.BASIC_DRAWER);
 
-		for (DrawerBlockEntity drawer : List.of(stacked, plain)) {
-			for (int slot = 0; slot < drawer.storageSize(); slot++) {
-				drawer.contents().setItem(slot, new ItemStack(Items.COBBLESTONE, STACK));
-			}
+		// Twenty-seven stacks each: a plain drawer is full; a stacked one gathers them into seven
+		// slots and is a quarter full.
+		for (int slot = 0; slot < plain.storageSize(); slot++) {
+			plain.contents().setItem(slot, new ItemStack(Items.COBBLESTONE, STACK));
+		}
 
-			drawer.setChanged();
+		plain.setChanged();
+		long stacks = (long) stacked.storageSize() * STACK;
+
+		if (insert(stacked, Items.COBBLESTONE, stacks) != stacks) {
+			throw helper.assertionException("the stacked drawer did not take " + stacks + " cobblestone");
 		}
 
 		int stackedSignal = signal(helper, DRAWER);
@@ -635,12 +726,14 @@ public class StorageLayerGameTests {
 		}
 
 		if (stackedSignal >= plainSignal || stackedSignal <= 0) {
-			throw helper.assertionException("a stacked drawer with a stack in every slot reads " + stackedSignal
-					+ "; it has room in nine slots and should read below 15");
+			throw helper.assertionException("a stacked drawer holding the same reads " + stackedSignal
+					+ "; it is a quarter full and should read below 15");
 		}
 
-		for (int slot = 0; slot < 9; slot++) {
-			park(helper, stacked, slot, Items.COBBLESTONE, STACK * DEPTH - STACK);
+		long rest = (long) stacked.storageSize() * STACK * DEPTH - stacks;
+
+		if (insert(stacked, Items.COBBLESTONE, rest) != rest) {
+			throw helper.assertionException("the stacked drawer did not take the " + rest + " that fill it");
 		}
 
 		if (signal(helper, DRAWER) != 15) {
@@ -653,45 +746,57 @@ public class StorageLayerGameTests {
 
 	// --- the upgrade's reach and depth ---------------------------------------------
 
-	/** Reach pools like every other upgrade's; depth is the deepest installed, not the sum. */
+	/**
+	 * Every slot, three levels, two classes of item.
+	 *
+	 * <p>A stack upgrade covers the whole drawer rather than chosen slots. An item that stacks holds
+	 * its stack size times the level's multiplier — 256, 512 and 1,024 of a 64-stack, and a 16-stack
+	 * scales the same way — and an item that does not stack holds the level's own count: 8, 16 and
+	 * 32. The deepest installed level decides; nothing pools.
+	 */
 	@GameTest
-	public void stackReachPoolsAndDepthDoesNot(GameTestHelper helper) {
+	public void stackLevelsScaleByItemClass(GameTestHelper helper) {
 		DrawerBlockEntity drawer = place(helper, DRAWER, LodestoreBlocks.REINFORCED_DRAWER);
-		drawer.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE));
-
-		if (drawer.stackCapacity() != 9 || drawer.stackDepth() != DEPTH || drawer.stackedSlots().size() != 9) {
-			throw helper.assertionException("one stack upgrade should reach 9 slots at depth " + DEPTH + ", reaches "
-					+ drawer.stackCapacity() + " at " + drawer.stackDepth());
-		}
+		ItemStack cobble = new ItemStack(Items.COBBLESTONE);
+		ItemStack pearl = new ItemStack(Items.ENDER_PEARL);
+		ItemStack sword = new ItemStack(Items.IRON_SWORD);
 
 		drawer.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE));
+		expectCapacity(helper, drawer, cobble, 256);
+		expectCapacity(helper, drawer, pearl, 64);
+		expectCapacity(helper, drawer, sword, 8);
 
-		if (drawer.stackCapacity() != 18 || drawer.stackDepth() != DEPTH) {
-			throw helper.assertionException("two stack upgrades should reach 18 slots at depth " + DEPTH + ", reach "
-					+ drawer.stackCapacity() + " at " + drawer.stackDepth());
+		if (drawer.stackedSlots().size() != drawer.storageSize() || !drawer.isStackedSlot(drawer.storageSize() - 1)) {
+			throw helper.assertionException("a stack upgrade should cover every slot, covers " + drawer.stackedSlots().size());
 		}
 
-		if (drawer.slotCapacity(0, new ItemStack(Items.COBBLESTONE)) != STACK * DEPTH
-				|| drawer.slotCapacity(20, new ItemStack(Items.COBBLESTONE)) != STACK) {
-			throw helper.assertionException("capacity does not follow the covered slots: "
-					+ drawer.slotCapacity(0, new ItemStack(Items.COBBLESTONE)) + " at 0, "
-					+ drawer.slotCapacity(20, new ItemStack(Items.COBBLESTONE)) + " at 20");
+		if (drawer.toggleTarget(UpgradeBehaviour.STACK, 0)) {
+			throw helper.assertionException("stacking accepted a slot choice; it covers the whole drawer");
 		}
 
-		// Items with a smaller stack size get the same depth, not the same count.
-		if (drawer.slotCapacity(0, new ItemStack(Items.ENDER_PEARL)) != 16 * DEPTH) {
-			throw helper.assertionException("ender pearls should stack to " + (16 * DEPTH) + " in a covered slot, got "
-					+ drawer.slotCapacity(0, new ItemStack(Items.ENDER_PEARL)));
-		}
+		drawer.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE_3));
+		expectCapacity(helper, drawer, cobble, 1024);
+		expectCapacity(helper, drawer, pearl, 256);
+		expectCapacity(helper, drawer, sword, 32);
 
-		if (!drawer.toggleTarget(UpgradeBehaviour.STACK, 0) || drawer.isStackedSlot(0)) {
-			throw helper.assertionException("un-targeting slot 0 for stacking did not take");
-		}
+		// A shallower level alongside changes nothing: the deepest decides, and nothing adds up.
+		drawer.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE_2));
+		expectCapacity(helper, drawer, cobble, 1024);
+		expectCapacity(helper, drawer, sword, 32);
 
 		helper.succeed();
 	}
 
-	/** The client gets the resolved stack targeting, the depth and the parked counts. */
+	private static void expectCapacity(GameTestHelper helper, DrawerBlockEntity drawer, ItemStack stack, int expected) {
+		for (int slot : new int[] {0, drawer.storageSize() - 1}) {
+			if (drawer.slotCapacity(slot, stack) != expected) {
+				throw helper.assertionException(describe(stack) + " should have a capacity of " + expected
+						+ " in slot " + slot + ", has " + drawer.slotCapacity(slot, stack));
+			}
+		}
+	}
+
+	/** The client gets the stack upgrade's two numbers and the parked counts. */
 	@GameTest
 	public void theSyncTagCarriesStackingForTheClient(GameTestHelper helper) {
 		DrawerBlockEntity drawer = stackedDrawer(helper, LodestoreBlocks.BASIC_DRAWER);
@@ -699,7 +804,8 @@ public class StorageLayerGameTests {
 
 		CompoundTag sync = drawer.getUpdateTag(helper.getLevel().registryAccess());
 
-		if (!sync.contains("stack_targets") || sync.getIntOr("stack_depth", 0) != DEPTH || !sync.contains("synced_overflow")) {
+		if (sync.getIntOr("stack_multiplier", 0) != DEPTH || sync.getIntOr("stack_unstackable", 0) != 8
+				|| !sync.contains("synced_overflow")) {
 			throw helper.assertionException("the sync tag is missing stacking state: " + sync);
 		}
 
