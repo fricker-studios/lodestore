@@ -274,15 +274,19 @@ public class DrawerScreen extends AbstractContainerScreen<DrawerMenu> {
 	 * <p>Vanilla draws the stack's own count, which is at most one legal stack — the slot's whole
 	 * point is that there can be more behind it. This runs vanilla's own drawing with the total as
 	 * the count text, and when the text is wider than the slot, draws it itself scaled down to
-	 * fit, anchored where vanilla anchors a count. The drag-split preview is left to vanilla: it
-	 * is predicting a placement, and the count it shows is the prediction.
+	 * fit, anchored where vanilla anchors a count. A slot in the drag-split preview is left to
+	 * vanilla: it is predicting a placement, and the count it shows is the prediction. Only those
+	 * slots, though — vanilla is in drag mode from the moment the button goes down on any slot
+	 * with something carried, and handing every slot back to it for that moment made the whole
+	 * drawer drop to plain counts until the release.
 	 */
 	@Override
 	protected void extractSlot(GuiGraphicsExtractor graphics, Slot slot, int mouseX, int mouseY) {
 		DrawerBlockEntity drawer = drawer();
 		ItemStack stack = slot.getItem();
+		boolean dragging = isQuickCrafting && quickCraftSlots.contains(slot);
 
-		if (drawer == null || isQuickCrafting || slot.index >= getMenu().storageEnd()
+		if (drawer == null || dragging || slot.index >= getMenu().storageEnd()
 				|| stack.isEmpty() || drawer.remainder(slot.index) == 0) {
 			super.extractSlot(graphics, slot, mouseX, mouseY);
 			return;
