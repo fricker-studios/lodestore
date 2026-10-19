@@ -662,9 +662,10 @@ public class StorageLayerGameTests {
 			throw helper.assertionException("the upgrade did not go back in; cursor holds " + describe(menu.getCarried()));
 		}
 
+		// Going back in gathers the two stacks it had spread, as any installation does.
 		if (drawer.slotCapacity(0, new ItemStack(Items.COBBLESTONE)) != STACK * DEPTH
-				|| drawer.total(0) != STACK || drawer.total(1) != 100 - STACK) {
-			throw helper.assertionException("putting the upgrade back changed the contents or not the capacity: "
+				|| drawer.total(0) != 100 || drawer.total(1) != 0) {
+			throw helper.assertionException("putting the upgrade back did not deepen the slots and gather the 100: "
 					+ drawer.total(0) + " and " + drawer.total(1) + " at " + drawer.slotCapacity(0, new ItemStack(Items.COBBLESTONE)));
 		}
 
