@@ -231,15 +231,10 @@ BLOCKS = {
     "reinforced_drawer_side": REINFORCED_SIDE,
     "reinforced_drawer_top": REINFORCED_TOP,
 }
-# Levels two and three are the same padlock on a richer plate.
 LOCK_UPGRADE = plate(LOCK_MOTIF)
-LOCK_UPGRADE_2 = plate(LOCK_MOTIF, "j", "k", "l")
-LOCK_UPGRADE_3 = plate(LOCK_MOTIF, "n", "p", "q")
 
 ITEMS = {
     "lock_upgrade": LOCK_UPGRADE,
-    "lock_upgrade_2": LOCK_UPGRADE_2,
-    "lock_upgrade_3": LOCK_UPGRADE_3,
     "void_upgrade": VOID_UPGRADE,
     "stack_upgrade": STACK_UPGRADE,
     "stack_upgrade_2": STACK_UPGRADE_2,

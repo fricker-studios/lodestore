@@ -52,7 +52,7 @@ class DrawerUpgradeCodecTest {
 
 	@Test
 	void theLockUpgradeActuallyLocks() throws IOException {
-		assertEquals(new DrawerUpgrade(true, false, 9, 1, 1), decode("lock"),
+		assertEquals(new DrawerUpgrade(true, false, 1, 1), decode("lock"),
 				"the shipped lock upgrade must set locks_contents, or it is an inert item");
 	}
 
@@ -60,13 +60,12 @@ class DrawerUpgradeCodecTest {
 	 * The void upgrade voids without locking.
 	 *
 	 * <p>It used to have to lock as well, because voiding was a drawer-wide switch and the filter
-	 * was the only thing keeping it from destroying whatever arrived. Voiding is now scoped by the
-	 * slots it targets, and only ever applies to what one of those slots already holds or has
-	 * claimed, so the lock flag is no longer what makes it safe.
+	 * was the only thing keeping it from destroying whatever arrived. Voiding now only ever applies
+	 * to what the drawer already holds, so the lock flag is no longer what makes it safe.
 	 */
 	@Test
 	void theVoidUpgradeVoidsWithoutLocking() throws IOException {
-		assertEquals(new DrawerUpgrade(false, true, 0, 1, 1), decode("void"),
+		assertEquals(new DrawerUpgrade(false, true, 1, 1), decode("void"),
 				"the shipped void upgrade must void, and no longer needs to lock to be safe");
 	}
 
@@ -77,7 +76,7 @@ class DrawerUpgradeCodecTest {
 	 */
 	@Test
 	void theStackUpgradeStacks() throws IOException {
-		assertEquals(new DrawerUpgrade(false, false, 0, 4, 8), decode("stack"),
+		assertEquals(new DrawerUpgrade(false, false, 4, 8), decode("stack"),
 				"the shipped stack upgrade must set stacks_per_slot above one, or it is an inert item");
 		assertTrue(decode("stack").stacks());
 		assertFalse(decode("lock").stacks(), "a lock written without stacks_per_slot must read as depth one");
@@ -98,32 +97,18 @@ class DrawerUpgradeCodecTest {
 		assertEquals(32, three.unstackablePerSlot());
 	}
 
-	/** Levels are data: the same behaviour, reaching further. */
-	@Test
-	void lockLevelsReachFurtherThanOneAnother() throws IOException {
-		int one = decode("lock").slotCapacity();
-		int two = decode("lock_2").slotCapacity();
-		int three = decode("lock_3").slotCapacity();
-
-		assertTrue(one < two && two < three,
-				() -> "lock levels should reach further in turn, got " + one + ", " + two + ", " + three);
-
-		assertEquals(two, one * 2,
-				"two level-one locks must reach exactly as far as one level-two, or the arithmetic "
-						+ "a player does in their head is wrong");
-	}
-
 	/**
-	 * An upgrade that does not say how far it reaches reaches nothing. Defaulting to some
-	 * non-zero number would hand a pack's half-written entry control of slots nobody granted it.
+	 * The lock covers the whole drawer, so it has no reach to state, and a pack written when it
+	 * did must still load: the old {@code slot_capacity} is ignored rather than rejected.
 	 */
 	@Test
-	void anUpgradeWithoutACapacityReachesNothing() {
-		DrawerUpgrade parsed = DrawerUpgrade.CODEC
-				.parse(JsonOps.INSTANCE, JsonParser.parseString("{\"locks_contents\":true}"))
-				.getOrThrow();
+	void anOldLockWithAReachStillDecodes() {
+		DataResult<DrawerUpgrade> parsed = DrawerUpgrade.CODEC.parse(JsonOps.INSTANCE,
+				JsonParser.parseString("{\"locks_contents\":true,\"slot_capacity\":9}"));
 
-		assertEquals(0, parsed.slotCapacity());
+		assertTrue(parsed.isSuccess(), () -> "an old lock entry failed to decode: "
+				+ parsed.error().map(Object::toString).orElse("?"));
+		assertEquals(new DrawerUpgrade(true, false, 1, 1), parsed.getOrThrow());
 	}
 
 	/**
@@ -146,8 +131,8 @@ class DrawerUpgradeCodecTest {
 				"an unresolved upgrade must not lock a drawer the player never locked");
 		assertFalse(DrawerUpgrade.FALLBACK.voidsOverflow(),
 				"an unresolved upgrade must not destroy items the player never asked it to");
-		assertEquals(0, DrawerUpgrade.FALLBACK.slotCapacity(),
-				"an unresolved upgrade must not reach any slots");
+		assertFalse(DrawerUpgrade.FALLBACK.stacks(),
+				"an unresolved upgrade must not deepen any slots");
 	}
 
 	@Test

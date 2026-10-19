@@ -12,13 +12,13 @@ import net.minecraft.network.codec.StreamCodec;
  * from the block, the other from the datapack-driven tier — and a client that guessed either would
  * lay out the wrong number of slots.
  *
- * <p>The position is here so the screen can read the drawer's own block entity for which slots the
- * upgrades target. That state is already synced to every client near the block, so sending it
- * again through the menu would be a second copy to keep in step with the first.
+ * <p>The position is here so the screen can read the drawer's own block entity for which slot its
+ * face shows. That state is already synced to every client near the block, so sending it again
+ * through the menu would be a second copy to keep in step with the first.
  *
  * @param rows         storage rows, nine slots each
  * @param upgradeSlots how many upgrade slots this drawer's tier offers
- * @param pos          where the drawer is, for reading its targeting client-side
+ * @param pos          where the drawer is, for reading the slot its face shows client-side
  */
 public record DrawerMenuData(int rows, int upgradeSlots, BlockPos pos) {
 	public static final StreamCodec<RegistryFriendlyByteBuf, DrawerMenuData> STREAM_CODEC =

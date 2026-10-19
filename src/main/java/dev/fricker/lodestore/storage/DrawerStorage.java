@@ -74,8 +74,8 @@ public final class DrawerStorage extends SnapshotParticipant<Boolean> implements
 			}
 		}
 
-		// Voiding is the last resort, not the first, and only for an item a voided slot has
-		// claimed or already holds. Accepting the rest without storing it is the destruction.
+		// Voiding is the last resort, not the first, and only for an item the drawer already
+		// holds. Accepting the rest without storing it is the destruction.
 		if (inserted < maxAmount && contents.rules().voids(variant.toStack())) {
 			return maxAmount;
 		}

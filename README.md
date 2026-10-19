@@ -161,8 +161,6 @@ hotbar.
 | Sturdy drawer | a basic drawer surrounded by planks |
 | Reinforced drawer | a sturdy drawer surrounded by iron ingots |
 | Lock upgrade | gold nuggets around an iron ingot, over a second ingot |
-| Lock upgrade II | a lock upgrade ringed with copper ingots |
-| Lock upgrade III | a lock upgrade II ringed with diamonds |
 | Void upgrade | obsidian around an iron ingot, over a second ingot |
 
 Each recipe ships an advancement that reveals it in the recipe book once you are holding any of its
@@ -201,18 +199,16 @@ and the slot refills. On a slot a stack upgrade covers, the tooltip says how muc
 ### Upgrades
 
 Upgrades are datapack-driven, the same way tiers are. An entry at
-`data/<pack>/lodestore/drawer_upgrade/<name>.json` is a set of behaviour flags plus a
-`slot_capacity` (how many slots a lock reaches) and two depths, `stacks_per_slot` and
-`unstackable_per_slot` (how much a slot holds with a stack upgrade; one unless written), and an item
-carries the key of the entry it installs. A pack adds an upgrade by
+`data/<pack>/lodestore/drawer_upgrade/<name>.json` is a set of behaviour flags plus two depths,
+`stacks_per_slot` and `unstackable_per_slot` (how much a slot holds with a stack upgrade; one unless
+written), and an item carries the key of the entry it installs. An entry from when the lock was
+aimed at slots may still carry a `slot_capacity`; it is ignored rather than rejected. A pack adds an upgrade by
 pairing a new item with a new entry; it never names an implementation, so the mod ships no branch
 per upgrade.
 
 | Upgrade | Does | Covers |
 |---|---|---|
-| Lock | a covered slot takes one kind of item and nothing else | 9 slots |
-| Lock II | the same, further | 18 slots |
-| Lock III | the same, further again | 27 slots |
+| Lock | the drawer takes only what it held when the lock went on, or the first item in if it was empty | the whole drawer |
 | Void | the drawer discards what it has no room for | the whole drawer |
 | Stack | a slot holds 4 stacks; an item that does not stack, 8 | the whole drawer |
 | Stack II | 8 stacks, or 16 of an unstackable | the whole drawer |
@@ -223,18 +219,16 @@ holds*, and it is the one upgrade that could not be another flag enforced throug
 because vanilla has no per-slot capacity hook. It needed [the storage layer](#the-storage-layer),
 and [Why the storage layer exists](#why-the-storage-layer-exists) is the evidence for that.
 
-Only the lock is aimed at particular slots. Voiding and stacking are properties of the drawer: a
+No upgrade is aimed at particular slots. Voiding and stacking are properties of the drawer: a
 drawer either discards its overflow or it does not, and either holds deep stacks or it does not, and
 a version where a player chose which rows did either turned out to be a thing to configure for no
-reason to want to.
+reason to want to. The lock went the same way: it claims what the whole drawer holds, rather than
+what a chosen few slots held.
 
-**Levels are data, not code.** A level-two lock is a level-one lock with a larger number in its
-JSON. Capacity pools across everything installed, so two level-one locks reach exactly as far as one
-level-two, and two level-ones plus a level-two reach four rows. That arithmetic is the point: a
-player can work out what they have without consulting a table.
-
-Duplicates are therefore allowed, which is a reversal — a drawer used to refuse a second upgrade of
-the same kind. Refusing one now would make the pooling impossible to express.
+**Levels are data, not code.** A level-two stack upgrade is a level-one with larger numbers in its
+JSON. The lock used to come in three levels too, reaching one, two and three rows; those went when
+it stopped being aimed at slots, since with the whole drawer covered a higher level would have
+nothing left to add.
 
 How many upgrades a drawer holds at once is its tier's business, not the upgrade's: one for basic,
 two for sturdy, three for reinforced.
@@ -258,63 +252,67 @@ still goes to the column, as it always did. Should an IPN version stop honouring
 `config/inventoryprofilesnext/SlotIntegrationHints.json` takes
 `{"dev.fricker.lodestore.menu.UpgradeSlot": {"ignore": true}}` and does the same by name.
 
-#### Choosing which slots a lock covers
+#### Choosing the slot the face shows
 
-Right-click an installed lock to start choosing. Covered slots are tinted the lock's gold, and the
-lock being edited outlines its own. Click a storage slot to add or remove it; shift-click to act on
-everything between the last slot clicked and this one. The lock's tooltip says so, because the
-gesture is not one anything else in the game teaches.
-
-**Choosing nothing covers the first rows, not none of them.** An upgrade that did nothing until its
-owner had clicked nine slots would simply look broken, so an empty selection means "as far as this
-upgrade reaches, from the start" — one row for a level-one lock, two for a level-two, and so on.
-There is no error state for having chosen nothing, because nothing is a valid answer.
-
-Capacity caps the selection rather than growing it: a level-one lock covers nine slots, so taking a
-tenth means giving one up first.
+The lock covers the whole drawer, so it has no slots to choose. What it chooses instead is the one
+slot the front face shows. Right-click an installed lock, then click a storage slot holding
+something: that slot is tinted the lock's gold and its item goes on the face. Click the same slot
+again to go back to the default. Picking ends the mode, since there is only ever one. The lock's
+tooltip says so, because the gesture is not one anything else in the game teaches.
 
 The gesture rides vanilla's container-button packet rather than a payload of our own, because that
 path is already validated against the container the player actually has open — exactly the check a
 bespoke packet would have to reimplement.
 
-Targeting is sent to the client **resolved**. The client deliberately never receives the installed
-upgrades, so it cannot work out how far they reach; it is sent the answer instead. The disk keeps
-what was actually chosen, so "nothing chosen" stays a default and follows the upgrades if they
-change.
+The choice lasts as long as the lock: taking the lock off forgets it.
 
 #### Locking
 
-A covered slot claims the item it holds, or the first one put into it, and refuses anything else
-afterwards. The claim is stored rather than read back from the contents, so it survives the slot
-being emptied: an empty locked slot still says what belongs in it, which is the whole reason to lock
-a drawer before the items arrive.
+The lock covers the whole drawer. When it goes on it claims every kind of item the drawer already
+holds, however many that is — or, if the drawer is empty, the first item put in — and refuses
+anything else afterwards, in every slot. The claim is stored rather than read back from the
+contents, so it survives the drawer being emptied: an empty locked drawer still says what belongs in
+it, which is the whole reason to lock a drawer before the items arrive. Taking the lock off forgets
+the claim, so a lock put back on claims afresh from whatever is inside by then.
 
 It is enforced in `DrawerBlockEntity#canStore`, next to the nesting rule and for the same reason: a
 filter applied only by the screen would be bypassed by piping items in. Both doors into a drawer ask
 it — the storage's insert, which is what hoppers, droppers and pipes reach, and the menu's
 `DrawerSlot`, which is what a hand reaches — so one rule covers all of them.
 
-Scoping cuts both ways, and that is deliberate: past an upgrade's reach a hopper may still fill the
-drawer with anything. A level-one lock on a 27-slot drawer locks nine slots, not twenty-seven.
+**"The first item in" has to hold within a single transfer.** The drawer's storage reports a
+change once per outer transaction, on commit, so that is when the claim is made — which is right for
+a pipe that *simulates* an insert and aborts, since claiming earlier would lock an empty drawer to an
+item that never arrived. It also means a pipe can insert several kinds before anything is claimed.
+So until the lock has claimed something, the contents stand in for the claim, and only the first
+kind in gets in.
 
-The front face draws a locked drawer's claims, cycling through them when there are several, and
-tints its count in the lock's gold.
+The front face shows one item and holds it still, rather than cycling through the claim. By default
+that is whatever the drawer holds most of; with a slot chosen through the lock, it is that slot's
+item, counted across the whole drawer. The face follows the slot rather than the item, so putting
+something else in that slot changes what it shows. Once the drawer is emptied the face keeps naming
+the chosen item — or, with nothing chosen, the first one claimed — drawn smaller, and a locked
+drawer's count is tinted in the lock's gold.
+
+A drawer saved while the lock was aimed at slots carries the slots it covered and a claim per slot.
+The slots are dropped on load; the claims are kept, joined by whatever else the drawer holds, which
+is what a lock going on today would have claimed. So a locked slot that had been emptied goes on
+saying what belongs in the drawer.
 
 #### Voiding
 
 The drawer discards what it has no room for, rather than backing the system up — but only an item
-it already holds somewhere, or a lock has claimed. A misrouted item is refused and backs the system
-up, which is recoverable; destroying it would not be.
+it already holds somewhere. A misrouted item is refused and backs the system up, which is
+recoverable; destroying it would not be.
 
 Voiding used to require the lock flag, when the filter was the only thing standing between it and
-destroying whatever arrived. Being limited to what the drawer holds or has claimed is what makes it
-safe now, so the shipped void upgrade does not lock. It briefly had a reach of its own, like the
+destroying whatever arrived. Being limited to what the drawer holds is what makes it safe now, so
+the shipped void upgrade does not lock. It briefly had a reach of its own, like the
 lock's; it covers the whole drawer again, because a drawer that voided some rows and not others was
 a thing to configure with no reason to want to.
 
 The mechanism is the storage's own `insert`: it fills what has room, and if anything is left over
-and a voided slot has claimed or holds that item, it reports the whole amount accepted and changes
-nothing. That is the destruction. It is the last resort, not the first — a drawer with room stores.
+and the drawer holds that item, it reports the whole amount accepted and changes nothing. That is the destruction. It is the last resort, not the first — a drawer with room stores.
 
 It used to be a fake slot. While a drawer was a vanilla `Container`, `canPlaceItem` could only
 answer yes or no, and `HopperBlockEntity.ejectItems` gave up at `isFullContainer` before asking any
@@ -338,8 +336,8 @@ Stacks stay where they are put, and the drawer sorts itself on request: a stack 
 sorts the drawer — gathers the same item into as few slots as the capacity allows, then orders by
 item id, empties last — the one moment a player has just asked for deeper slots and expects the
 drawer to use them — and right-clicking the installed upgrade does it again, which its hover text
-says. Locked slots stay exactly as they are; a lock's claim is a promise about that slot, and the
-rest is laid out around it. A version of this gathered after every change instead, and it followed
+says. The slot the face shows stays exactly as it is; choosing it is a promise about where that item
+is, and the rest is laid out around it. A version of this gathered after every change instead, and it followed
 a stack a player had just moved with the rest of its slot, which is not what moving a stack means.
 
 The drawer has a sort of its own because an inventory sorter cannot sort a stacked drawer: one that
@@ -430,8 +428,8 @@ Four findings, each measured rather than reasoned about:
 There is also a shape problem underneath the arithmetic. **`Container#getMaxStackSize(ItemStack)`
 takes no slot.** A stack upgrade covers *chosen* slots, but the only container-level hook is
 per-container, so pipes and the comparator would apply the raised ceiling to every slot in the
-drawer while the screen applied it only to the covered ones. The targeting that the lock and the
-void upgrade are built on cannot be expressed through `Container` at all.
+drawer while the screen applied it only to the covered ones. Slot targeting of any kind cannot be
+expressed through `Container` at all.
 
 #### The decision: Lodestore gets its own storage layer
 
@@ -550,11 +548,11 @@ which the drawer now does itself: vanilla's default spill fires only for a `Cont
 Grouping and sorting.
 
 A *more slots* upgrade. Container size is structural, decided before the level's registries are
-reachable, so it cannot just be another flag in the registry the way lock levels and stack depth
-are. The storage layer answers how much a slot holds, not how many slots there are.
+reachable, so it cannot just be another flag in the registry the way stack depth is. The storage layer answers how much a slot holds, not how many slots there are.
 
-The front face shows whichever item the drawer holds most of, counted across every slot holding it.
-Choosing what a drawer displays, independently of what it is locked to, is not here.
+The front face shows whichever item the drawer holds most of, counted across every slot holding it,
+unless a slot has been chosen through the lock. Choosing what a drawer displays without a lock
+installed is not here.
 
 That preview is synced on its own — one stack and a count — rather than by broadcasting the
 inventory, so the payload is the same whether the drawer holds one item or fifty-four stacks, and a
@@ -575,16 +573,16 @@ Three layers, in increasing cost and decreasing frequency.
 renamed field or out-of-range value does not throw at runtime — the registry entry is silently
 dropped and drawers fall back — so this is checked in CI rather than discovered in a world. For the
 lock the fallback is inert by design, which means a dropped entry turns a drawer the player believes
-is filtered into one that quietly accepts anything. The level arithmetic is checked here too: two
-level-one locks must reach exactly as far as one level-two, because that is the sum a player does in
-their head.
+is filtered into one that quietly accepts anything. An old lock entry that still names a
+`slot_capacity` must keep decoding, since packs written for it exist.
 
 **Server gametests.** Persistence, hopper interop, comparator output, drop-on-break, that a broken
-drawer still stacks with a fresh one, that upgrade slots and lock capacity rise with the tier and
-the level, that capacity pools across duplicates, that an unchosen selection covers the first rows
-and a chosen one is capped, and the lock:
-that it claims the right item, refuses everything else, cannot be bypassed by a hopper, and does not
-swallow what it refuses. These need a real ticking world: a plain dedicated server never block-ticks
+drawer still stacks with a fresh one, that upgrade slots rise with the tier, and the lock: that it
+claims everything already inside or else the first item in, refuses everything else in every slot,
+cannot be bypassed by a hopper or slipped past by two kinds in one transfer, is not claimed by a
+simulated insert, forgets its claim when it comes off, and voids only what it claimed alongside a
+void upgrade; and the face: that the slot chosen through the lock beats the most numerous item,
+needs a lock and an item, survives a reload, and is still named once the drawer is emptied. These need a real ticking world: a plain dedicated server never block-ticks
 hoppers even in force-loaded chunks, so a hopper assertion there passes whether or not the code
 works.
 
@@ -606,14 +604,15 @@ goes through; shift-click in fills through the parked space, and out drains a sl
 the menu's slots enforce the lock and nesting, and let an empty drawer in; a basic drawer spills its parked items as legal
 stacks, and a sturdy one keeps them in both components and gives them back when placed; removing
 the upgrade sorts the drawer when it goes in by either door and a lock does not, and again when
-right-clicked while a plain drawer ignores the button, with a locked slot left as it is; a stacked
+right-clicked while a plain drawer ignores the button, with the slot the face shows left as it is; a stacked
 drawer's grid is fake and a plain one's is not; it spreads what was parked into legal stacks
 when taken out, cannot be taken out while the contents need it, and goes back in; a moved stack
 stays where it is put; an aborted insert leaves no trace; the
 comparator measures each slot against its own capacity; the three levels give the right numbers to
 a block, a pearl and a sword, and the deepest decides; upgrades are refused as goods through both
 doors. Migration gets a pair of its own: a tag written in the old shape by hand
-loads unchanged, and the same tag with a remainder table restores the count. And one assertion
+loads unchanged, its per-slot lock claim carried over to the whole drawer, and the same tag with a
+remainder table restores the count; and an old claim on a slot since emptied survives the move. And one assertion
 guards the premise — the block entity is not a `Container`, and a hopper finds nothing at it.
 
 `StackCeilingGameTests` is the odd one out: it asserts nothing about Lodestore. It pins the five

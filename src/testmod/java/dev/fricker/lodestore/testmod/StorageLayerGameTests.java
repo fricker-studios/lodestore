@@ -36,7 +36,6 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
-import dev.fricker.lodestore.api.drawer.UpgradeBehaviour;
 import dev.fricker.lodestore.block.DrawerBlockEntity;
 import dev.fricker.lodestore.menu.DrawerMenu;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
@@ -536,37 +535,35 @@ public class StorageLayerGameTests {
 		helper.succeed();
 	}
 
-	/** Sorting leaves a locked slot exactly as it is, and lays the rest out around it. */
+	/**
+	 * Sorting leaves the slot the face shows exactly as it is, and lays the rest out around it.
+	 *
+	 * <p>Oak logs sort last by id, so a sort that ignored the choice would put cobblestone in slot 0;
+	 * the logs ending up there is the choice being kept, not the order happening to agree.
+	 */
 	@GameTest
-	public void sortingLeavesLockedSlotsAlone(GameTestHelper helper) {
+	public void sortingLeavesTheShownSlotAlone(GameTestHelper helper) {
 		DrawerBlockEntity drawer = place(helper, DRAWER, LodestoreBlocks.STURDY_DRAWER);
-		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
-
-		// The lock covers the first row by default; narrow it to slot 0, then let it claim oak logs.
-		for (int slot = 1; slot < 9; slot++) {
-			drawer.toggleTarget(UpgradeBehaviour.LOCK, slot);
-		}
-
 		drawer.contents().setItem(0, new ItemStack(Items.OAK_LOG, STACK));
 		drawer.contents().setItem(2, new ItemStack(Items.DIRT, 5));
 		drawer.contents().setItem(3, new ItemStack(Items.COBBLESTONE, STACK));
 		drawer.contents().setItem(5, new ItemStack(Items.OAK_LOG, STACK));
 		drawer.contents().setItem(8, new ItemStack(Items.COBBLESTONE, 30));
 		drawer.setChanged();
+		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
 
-		if (!drawer.isLockedSlot(0) || drawer.isLockedSlot(1) || !drawer.slotFilter(0).is(Items.OAK_LOG)) {
-			throw helper.assertionException("the lock is not set up as the test assumes: covers " + drawer.lockedSlots()
-					+ ", claims " + describe(drawer.slotFilter(0)));
+		if (!drawer.chooseDisplaySlot(0) || drawer.displaySlot() != 0) {
+			throw helper.assertionException("the face would not take slot 0, shows slot " + drawer.displaySlot());
 		}
 
-		// Installing sorts. The logs gather into the locked slot, which stays; the rest is ordered after it.
+		// Installing sorts. The logs gather into the shown slot, which stays; the rest is ordered after it.
 		drawer.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE));
 
 		if (drawer.total(0) != 2 * STACK || !drawer.contents().visible(0).is(Items.OAK_LOG)
 				|| drawer.total(1) != STACK + 30 || !drawer.contents().visible(1).is(Items.COBBLESTONE)
 				|| drawer.total(2) != 5 || !drawer.contents().visible(2).is(Items.DIRT)
 				|| drawer.total(3) != 0 || drawer.total(5) != 0 || drawer.total(8) != 0) {
-			throw helper.assertionException("sorting around a locked slot went wrong: " + describe(drawer.contents().visible(0))
+			throw helper.assertionException("sorting around the shown slot went wrong: " + describe(drawer.contents().visible(0))
 					+ " (" + drawer.total(0) + "), " + describe(drawer.contents().visible(1)) + " (" + drawer.total(1) + "), "
 					+ describe(drawer.contents().visible(2)) + " (" + drawer.total(2) + ")");
 		}
@@ -801,21 +798,27 @@ public class StorageLayerGameTests {
 	/** The rules reach the menu's slots too, not only the storage: lock and nesting. */
 	@GameTest
 	public void theMenusSlotsEnforceTheLockAndNesting(GameTestHelper helper) {
-		DrawerBlockEntity sturdy = place(helper, DRAWER, LodestoreBlocks.STURDY_DRAWER);
-		sturdy.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
-		sturdy.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 4));
-		sturdy.setChanged();
+		DrawerBlockEntity locked = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.STURDY_DRAWER);
+		locked.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+		locked.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 4));
+		locked.setChanged();
 
 		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		AbstractContainerMenu lockedMenu = open(helper, locked, player);
+
+		if (!lockedMenu.getSlot(20).mayPlace(new ItemStack(Items.COBBLESTONE))) {
+			throw helper.assertionException("an empty slot of a drawer locked to cobblestone refuses cobblestone");
+		}
+
+		if (lockedMenu.getSlot(0).mayPlace(new ItemStack(Items.DIRT))
+				|| lockedMenu.getSlot(20).mayPlace(new ItemStack(Items.DIRT))) {
+			throw helper.assertionException("the menu's slots let dirt into a drawer locked to cobblestone");
+		}
+
+		// Nesting on a drawer of its own: with a lock on as well, the lock would refuse the drawer
+		// items first and the nesting rule would never be what was tested.
+		DrawerBlockEntity sturdy = place(helper, DRAWER, LodestoreBlocks.STURDY_DRAWER);
 		AbstractContainerMenu menu = open(helper, sturdy, player);
-
-		if (!menu.getSlot(0).mayPlace(new ItemStack(Items.COBBLESTONE))) {
-			throw helper.assertionException("the claimed slot refuses the item it claimed");
-		}
-
-		if (menu.getSlot(0).mayPlace(new ItemStack(Items.DIRT))) {
-			throw helper.assertionException("the menu's slot lets dirt into a slot locked to cobblestone");
-		}
 
 		ItemStack filled = new ItemStack(LodestoreBlocks.STURDY_DRAWER);
 		filled.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.DIAMOND, 5))));
@@ -829,7 +832,7 @@ public class StorageLayerGameTests {
 		}
 
 		if (!menu.getSlot(20).mayPlace(new ItemStack(Items.DIRT))) {
-			throw helper.assertionException("an uncovered slot refuses dirt; the test is measuring the wrong thing");
+			throw helper.assertionException("an unlocked drawer refuses dirt; the test is measuring the wrong thing");
 		}
 
 		helper.succeed();
@@ -1035,10 +1038,6 @@ public class StorageLayerGameTests {
 			throw helper.assertionException("a stack upgrade should cover every slot, covers " + drawer.stackedSlots().size());
 		}
 
-		if (drawer.toggleTarget(UpgradeBehaviour.STACK, 0)) {
-			throw helper.assertionException("stacking accepted a slot choice; it covers the whole drawer");
-		}
-
 		drawer.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE_3));
 		expectCapacity(helper, drawer, cobble, 1024);
 		expectCapacity(helper, drawer, pearl, 256);
@@ -1095,7 +1094,7 @@ public class StorageLayerGameTests {
 	 * A drawer saved before the storage layer existed loads with nothing lost.
 	 *
 	 * <p>The old block entity wrote {@code Items} through {@code ContainerHelper}, its upgrades,
-	 * its targeting and claims, and the name and lock it inherited. This writes that shape by hand,
+	 * the slots its lock covered and what each had claimed, and the name and lock it inherited. This writes that shape by hand,
 	 * rather than through the current code, and loads it into a fresh drawer. The pair is the same
 	 * tag with a remainder table added: a loader that ignored the table would pass the first and
 	 * fail the second.
@@ -1124,9 +1123,15 @@ public class StorageLayerGameTests {
 			throw helper.assertionException("the installed lock did not survive, got " + reloaded.upgrades().size() + " upgrade(s)");
 		}
 
-		if (!reloaded.lockedSlots().contains(5) || !reloaded.slotFilter(0).is(Items.COBBLESTONE)) {
-			throw helper.assertionException("targeting or the claim did not survive: covers " + reloaded.lockedSlots()
-					+ ", claim " + describe(reloaded.slotFilter(0)));
+		// The old lock covered slots 0 and 5 and claimed cobblestone in slot 0. It covers the whole
+		// drawer now, so what it claims is the old claim and everything else the drawer held.
+		if (!claims(reloaded, Items.COBBLESTONE) || !claims(reloaded, Items.DIAMOND) || reloaded.lockedItems().size() != 2) {
+			throw helper.assertionException("the old claim did not carry over: claims "
+					+ reloaded.lockedItems().stream().map(StorageLayerGameTests::describe).toList());
+		}
+
+		if (reloaded.canStore(10, new ItemStack(Items.DIRT))) {
+			throw helper.assertionException("a migrated lock lets in dirt it never claimed");
 		}
 
 		if (reloaded.getCustomName() == null || !"Spares".equals(reloaded.getCustomName().getString())) {
@@ -1134,6 +1139,33 @@ public class StorageLayerGameTests {
 		}
 
 		helper.succeed();
+	}
+
+	/**
+	 * An old claim survives even where the slot it was made in has since been emptied, which is
+	 * the point of a claim: the migration keeps it rather than rebuilding from the contents alone.
+	 */
+	@GameTest
+	public void anOldLocksEmptiedClaimCarriesOver(GameTestHelper helper) {
+		TagValueOutput out = oldShapeTag(helper);
+		out.putIntArray("claim_slots", new int[] {5});
+		out.store("claim_items", ItemStack.CODEC.listOf(), List.of(new ItemStack(Items.REDSTONE)));
+		DrawerBlockEntity reloaded = reload(helper, out.buildResult());
+
+		if (!claims(reloaded, Items.REDSTONE)) {
+			throw helper.assertionException("an emptied slot's old claim was lost: claims "
+					+ reloaded.lockedItems().stream().map(StorageLayerGameTests::describe).toList());
+		}
+
+		if (!reloaded.canStore(5, new ItemStack(Items.REDSTONE))) {
+			throw helper.assertionException("a migrated lock refuses the redstone it claimed");
+		}
+
+		helper.succeed();
+	}
+
+	private static boolean claims(DrawerBlockEntity drawer, net.minecraft.world.item.Item item) {
+		return drawer.lockedItems().stream().anyMatch(stack -> stack.is(item));
 	}
 
 	/** The pair: the same old-shaped tag with a remainder table restores the parked count. */

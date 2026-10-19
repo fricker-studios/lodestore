@@ -12,9 +12,6 @@ import dev.fricker.lodestore.item.DrawerUpgradeItem;
 /**
  * A slot that takes drawer upgrades.
  *
- * <p>Duplicates are allowed: the lock's capacity pools, so two level-one locks reach as far as one
- * level-two, and refusing a second of the same upgrade would make that impossible to express.
- *
  * <p>An upgrade the drawer's contents still need cannot be taken out. The drawer decides that and
  * the menu syncs the answer, so the slot refuses the pickup on both sides and the screen can say
  * why; the alternative was contents stranded over capacity when a stack upgrade left.

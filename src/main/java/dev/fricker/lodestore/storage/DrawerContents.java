@@ -460,8 +460,8 @@ public final class DrawerContents implements Container {
 	 * <p>Only on request — when a stack upgrade goes in, or the player right-clicks it — never
 	 * after an ordinary change, because a drawer that gathered on its own followed a stack the
 	 * player had just moved with the rest of its slot. Only into slots that already hold the item,
-	 * which is also what keeps a lock's claim honest: an empty locked slot is never filled by this.
-	 * Totals are preserved exactly; a partial merge leaves the rest where it was.
+	 * so an empty slot is never filled by this. Totals are preserved exactly; a partial merge leaves
+	 * the rest where it was.
 	 *
 	 * @return whether anything moved
 	 */
@@ -510,9 +510,9 @@ public final class DrawerContents implements Container {
 	 * the totals directly. Items are ordered by their id and laid out from the first slot, each
 	 * kind filling slots to capacity before the next begins, empties last.
 	 *
-	 * <p>Slots for which {@code fixed} is true — the locked ones — are left exactly as they are:
-	 * a lock's claim is a promise about that slot, and a sort that moved a different item into it
-	 * would break it. Everything else is collected and laid out again around them.
+	 * <p>Slots for which {@code fixed} is true — the one the front face shows — are left exactly as
+	 * they are: choosing it is a promise about where that item is, and a sort that moved a different
+	 * item into it would break it. Everything else is collected and laid out again around them.
 	 */
 	public void sort(java.util.function.IntPredicate fixed) {
 		compact();

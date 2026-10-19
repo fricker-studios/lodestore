@@ -61,7 +61,8 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 				}
 
 				// One of each tier, left to right, so the three sprites can be compared directly.
-				// The front face previews the most common item, so the mixed one shows its logs.
+				// The mixed one is locked and shows the slot chosen for its face — iron, though it
+				// holds far more logs — so it proves the choice beats the most-common default.
 				single(level, new BlockPos(-4, Y, 0), LodestoreBlocks.BASIC_DRAWER, Items.COBBLESTONE, 320);
 				single(level, new BlockPos(-2, Y, 0), LodestoreBlocks.STURDY_DRAWER, Items.DIAMOND, 128);
 				mixed(level, new BlockPos(0, Y, 0), LodestoreBlocks.REINFORCED_DRAWER);
@@ -111,8 +112,8 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 			LOGGER.info("[lodestore] gui screenshot -> {}", context.takeScreenshot("drawer-gui-open"));
 
 			// Hover the first upgrade so its help text is in the shot. Right-clicking an upgrade
-			// to change its reach is not a gesture anything else in the game teaches, so the hint
-			// is the only thing that makes it discoverable — worth a picture of its own.
+			// to choose the face's slot is not a gesture anything else in the game teaches, so the
+			// hint is the only thing that makes it discoverable — worth a picture of its own.
 			int[] cursor = context.computeOnClient(client -> {
 				// The reinforced drawer's screen: 176 of chest plus a 66-wide panel, and the
 				// vanilla chest's own height for six rows.
@@ -207,9 +208,12 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 		drawer.contents().setItem(3, new ItemStack(LodestoreBlocks.STURDY_DRAWER, 2));
 		drawer.setChanged();
 
-		// This is the drawer the GUI screenshot opens. A level-two lock reaches two rows, tinted
-		// gold; the void and stack upgrades cover the whole drawer and tint nothing.
-		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE_2));
+		// This is the drawer the GUI screenshot opens. The lock's gold marks the one slot the face
+		// shows; the lock, void and stack upgrades all cover the whole drawer and tint nothing else.
+		// The face points at the logs while the stack upgrade sorts, so the sort leaves them in
+		// slot 0 for the stacked-slot shot.
+		drawer.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+		drawer.chooseDisplaySlot(0);
 		drawer.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
 		drawer.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE));
 
@@ -218,6 +222,14 @@ public class DrawerRenderClientTest implements FabricClientGameTest {
 		try (Transaction transaction = Transaction.openOuter()) {
 			drawer.storage().getSlot(0).insert(ItemVariant.of(Items.OAK_LOG), 192, transaction);
 			transaction.commit();
+		}
+
+		// Then at the iron, wherever the sort put it, so the face shows 32 iron over 256 logs.
+		for (int slot = 0; slot < drawer.storageSize(); slot++) {
+			if (drawer.contents().visible(slot).is(Items.IRON_INGOT)) {
+				drawer.chooseDisplaySlot(slot);
+				break;
+			}
 		}
 	}
 

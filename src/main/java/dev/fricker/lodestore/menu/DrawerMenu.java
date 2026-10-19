@@ -15,7 +15,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
 import dev.fricker.lodestore.api.drawer.DrawerTier;
-import dev.fricker.lodestore.api.drawer.UpgradeBehaviour;
 import dev.fricker.lodestore.block.DrawerBlockEntity;
 import dev.fricker.lodestore.item.DrawerUpgradeItem;
 
@@ -44,10 +43,10 @@ public class DrawerMenu extends AbstractContainerMenu {
 	public static final int DATA_REMOVABLE = 1;
 	public static final int DATA_COUNT = 2;
 
-	/** Button ids are a behaviour and a storage slot packed together; storage never exceeds 54. */
-	private static final int BUTTON_BEHAVIOUR_STRIDE = 256;
-	/** One id past every behaviour's range: sort the drawer, as a right-click on the stack upgrade asks. */
-	public static final int SORT_BUTTON = UpgradeBehaviour.values().length * BUTTON_BEHAVIOUR_STRIDE;
+	/** Button ids below this name a storage slot for the face to show; storage never exceeds 54. */
+	private static final int DISPLAY_BUTTONS = 256;
+	/** One id past the display range: sort the drawer, as a right-click on the stack upgrade asks. */
+	public static final int SORT_BUTTON = DISPLAY_BUTTONS;
 
 	private final Container storage;
 	private final @Nullable DrawerBlockEntity drawer;
@@ -59,7 +58,7 @@ public class DrawerMenu extends AbstractContainerMenu {
 	/**
 	 * Client side. The containers are stand-ins: the server owns the real contents and streams
 	 * them into these slots, so they only have to be the right shape. The drawer is the client's
-	 * copy of the block entity, which carries the synced targeting, depth and remainders the slots
+	 * copy of the block entity, which carries the synced claim, depth and remainders the slots
 	 * need to predict what the server will allow.
 	 */
 	public DrawerMenu(int containerId, Inventory playerInventory, DrawerMenuData data) {
@@ -145,13 +144,14 @@ public class DrawerMenu extends AbstractContainerMenu {
 		return storageEnd() + upgradeSlots;
 	}
 
-	/** Packs a targeting click into the one int vanilla's button path carries. */
-	public static int targetButton(UpgradeBehaviour behaviour, int storageSlot) {
-		return behaviour.ordinal() * BUTTON_BEHAVIOUR_STRIDE + storageSlot;
+	/** The button a click on a storage slot sends while the lock is choosing what the face shows. */
+	public static int displayButton(int storageSlot) {
+		return storageSlot;
 	}
 
 	/**
-	 * Toggles a storage slot in an upgrade's selection.
+	 * Sorts the drawer, as a right-click on the stack upgrade asks, or chooses the storage slot
+	 * whose item the front face shows, as a click after right-clicking the lock asks.
 	 *
 	 * <p>Rides vanilla's container-button packet rather than a payload of our own: that path is
 	 * already validated against the container the player actually has open, which is exactly the
@@ -167,14 +167,11 @@ public class DrawerMenu extends AbstractContainerMenu {
 			return drawer.sortContents();
 		}
 
-		UpgradeBehaviour behaviour = UpgradeBehaviour.byId(id / BUTTON_BEHAVIOUR_STRIDE);
-		int storageSlot = id % BUTTON_BEHAVIOUR_STRIDE;
-
-		if (behaviour == null || storageSlot >= storageEnd()) {
+		if (id >= storageEnd()) {
 			return false;
 		}
 
-		return drawer.toggleTarget(behaviour, storageSlot);
+		return drawer.chooseDisplaySlot(id);
 	}
 
 	@Override
