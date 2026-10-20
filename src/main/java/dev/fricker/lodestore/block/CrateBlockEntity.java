@@ -797,18 +797,13 @@ public class CrateBlockEntity extends BlockEntity
 			return false;
 		}
 
-		CrateTier self = tier();
-
-		if (!self.keepsContents()) {
-			return true;
-		}
-
-		// Stops a crate that keeps its contents from holding another of equal or higher rank,
-		// which would otherwise let storage compound without limit. An empty crate compounds
-		// nothing — it is a block item like any other — so only one with contents is held to it.
+		// A crate with contents goes only where CrateTier#canContain says, which with the shipped
+		// tiers is a sturdy crate inside a reinforced one; a basic crate is a chest and refuses it
+		// as a chest does. An empty crate compounds nothing — it is a block item like any other —
+		// so only one with contents is held to it.
 		if (stack.getItem() instanceof BlockItem blockItem && blockItem.getBlock() instanceof CrateBlock other
 				&& hasContents(stack)) {
-			return self.canContain(resolve(other.tierKey()));
+			return tier().canContain(resolve(other.tierKey()));
 		}
 
 		return true;

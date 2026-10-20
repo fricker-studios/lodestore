@@ -207,7 +207,10 @@ public class CrateGameTests {
 	// --- nesting -----------------------------------------------------------
 
 	/**
-	 * The rank rule applies to a crate with contents. An empty crate is a block item like any
+	 * The rank rule applies to a crate with contents, and allows exactly one nesting: a sturdy
+	 * crate with contents inside a reinforced one. A basic crate is a chest and refuses every
+	 * filled crate, as chests now do; a sturdy crate refuses every filled crate; and a filled basic
+	 * crate, which only a command can make, goes nowhere. An empty crate is a block item like any
 	 * other and compounds nothing, so every tier takes it.
 	 */
 	@GameTest
@@ -216,16 +219,21 @@ public class CrateGameTests {
 		CrateBlockEntity sturdy = place(helper, new BlockPos(2, 1, 1), LodestoreBlocks.STURDY_CRATE);
 		CrateBlockEntity reinforced = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.REINFORCED_CRATE);
 
+		ItemStack basicItem = filledCrate(LodestoreBlocks.BASIC_CRATE);
 		ItemStack sturdyItem = filledCrate(LodestoreBlocks.STURDY_CRATE);
 		ItemStack reinforcedItem = filledCrate(LodestoreBlocks.REINFORCED_CRATE);
 
-		expect(helper, sturdy.canStore(0, sturdyItem), false, "sturdy accepted a sturdy crate with contents");
-		expect(helper, sturdy.canStore(0, reinforcedItem), false, "sturdy accepted a reinforced crate with contents");
+		for (ItemStack filled : List.of(basicItem, sturdyItem, reinforcedItem)) {
+			String name = filled.getHoverName().getString();
+			expect(helper, basic.canStore(0, filled), false, "basic accepted a " + name + " with contents");
+			expect(helper, sturdy.canStore(0, filled), false, "sturdy accepted a " + name + " with contents");
+		}
+
+		expect(helper, reinforced.canStore(0, basicItem), false, "reinforced accepted a basic crate with contents");
 		expect(helper, reinforced.canStore(0, sturdyItem), true, "reinforced rejected a sturdy crate with contents");
 		expect(helper, reinforced.canStore(0, reinforcedItem), false, "reinforced accepted a reinforced crate with contents");
 
-		// A basic crate spills when broken, so nesting into it compounds nothing.
-		expect(helper, basic.canStore(0, reinforcedItem), true, "basic rejected a crate");
+		expect(helper, basic.canStore(0, new ItemStack(Items.DIAMOND)), true, "basic rejected a plain item");
 		expect(helper, sturdy.canStore(0, new ItemStack(Items.DIAMOND)), true, "sturdy rejected a plain item");
 
 		// Empty, every tier takes every tier.
@@ -242,6 +250,12 @@ public class CrateGameTests {
 		parked.set(LodestoreComponents.CRATE_OVERFLOW,
 				new CrateOverflow(List.of(new CrateOverflow.Entry(0, 100))));
 		expect(helper, reinforced.canStore(0, parked), false, "reinforced accepted a reinforced crate with parked counts");
+
+		ItemStack parkedSturdy = new ItemStack(LodestoreBlocks.STURDY_CRATE);
+		parkedSturdy.set(LodestoreComponents.CRATE_OVERFLOW,
+				new CrateOverflow(List.of(new CrateOverflow.Entry(0, 100))));
+		expect(helper, basic.canStore(0, parkedSturdy), false, "basic accepted a sturdy crate with parked counts");
+		expect(helper, sturdy.canStore(0, parkedSturdy), false, "sturdy accepted a sturdy crate with parked counts");
 
 		helper.succeed();
 	}

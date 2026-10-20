@@ -80,7 +80,7 @@ Crates are working containers with a GUI.
 
 | Tier | Behaves like | Size | Upgrade slots | On break | May contain |
 |---|---|---|---|---|---|
-| Basic | chest | 27 | 1 | contents spill | anything |
+| Basic | chest | 27 | 1 | contents spill | empty crates |
 | Sturdy | shulker box | 27 | 2 | contents stay inside | empty crates |
 | Reinforced | shulker box | 54 | 3 | contents stay inside | empty crates, and sturdy ones with contents |
 
@@ -129,10 +129,14 @@ crate that was never filled and checks the drop against a fresh item.
 Nesting is blocked in `CrateBlockEntity#canStore`, which both doors into a crate ask — the
 storage's insert, which hoppers and pipes use, and the menu's slot, which the player does. A rule
 enforced only in the UI would be bypassed by piping one in; one enforced only on the storage, by a
-hand. The rule is about contents: a crate that keeps its contents refuses a crate *with contents*
-of equal or higher rank, because that is what would let storage compound without limit. An empty
-crate compounds nothing — it is a block item like any other — and every tier takes it. Contents
-means either component: stacks in `minecraft:container`, or counts parked in `crate_overflow`.
+hand. The rule is about contents. A crate *with contents* goes only into a crate that keeps its
+contents and ranks higher, and only if it keeps its own, because anything else would let storage
+compound without limit. With the shipped tiers that allows exactly one nesting, a sturdy crate with
+contents inside a reinforced one. A basic crate is a chest and refuses every filled crate, as a chest
+does; a sturdy crate refuses every filled crate; and a basic crate carrying contents, which only a
+command can make, goes nowhere. An empty crate compounds nothing — it is a block item like any
+other — and every tier takes it. Contents means either component: stacks in `minecraft:container`,
+or counts parked in `crate_overflow`.
 
 A crate with contents never goes into vanilla storage at all. Chests (trapped, copper and double
 ones included), barrels, shulker boxes, the ender chest, chest minecarts and chest boats refuse it,
