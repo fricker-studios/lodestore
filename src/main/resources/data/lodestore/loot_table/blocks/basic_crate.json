@@ -12,15 +12,11 @@
               "function": "minecraft:copy_components",
               "source": "block_entity",
               "include": [
-                "minecraft:custom_name"
+                "minecraft:custom_name",
+                "lodestore:crate_upgrades"
               ]
             }
           ]
-        }
-      ],
-      "conditions": [
-        {
-          "condition": "minecraft:survives_explosion"
         }
       ]
     }

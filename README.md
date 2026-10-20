@@ -110,6 +110,13 @@ dropped item, exactly as a shulker box does, and the crate skips spilling for th
 cannot be duplicated by doing both. Alongside it rides `lodestore:crate_overflow`, the counts parked
 behind full stacks, since `minecraft:container` cannot carry more than a legal stack per slot.
 
+Upgrades stay in the crate on break, for every tier — the basic one too, whose contents spill. They
+ride on the dropped item in `lodestore:crate_upgrades`, with what the lock has claimed and the slot
+chosen for the face, and every tier's loot table copies it, so a crate placed back down is fitted
+and locked as it was. The item's tooltip lists them. Because the item now carries something worth
+keeping, the basic crate drops whole from an explosion, as a shulker box does; its loot table used
+to drop it only if it survived the blast.
+
 The container copy is unconditional — the crate writes the component whether or not it held
 anything — so the crate **item** declares an empty `minecraft:container` of its own. Without it, a
 sturdy or reinforced crate that had been placed once came back carrying a component a never-placed
@@ -166,8 +173,8 @@ hotbar.
 | Item | Recipe |
 |---|---|
 | Basic crate | planks around an iron nugget, **or** a chest plus an iron nugget |
-| Sturdy crate | a basic crate surrounded by planks |
-| Reinforced crate | a sturdy crate surrounded by iron ingots |
+| Sturdy crate | a basic crate and eight planks |
+| Reinforced crate | a sturdy crate and eight iron ingots |
 | Lock upgrade | gold nuggets around an iron ingot, over a second ingot |
 | Void upgrade | obsidian around an iron ingot, over a second ingot |
 
@@ -175,6 +182,13 @@ Each recipe ships an advancement that reveals it in the recipe book once you are
 ingredients — planks or an iron nugget for a basic crate, an iron ingot or a sturdy crate for a
 reinforced one, and so on. The two basic crate recipes share a group, so they collapse into a
 single recipe book entry rather than appearing twice.
+
+The two tier-up recipes are vanilla's `crafting_transmute` with exactly eight of the material, the
+type shulker box dyeing uses, rather than shaped ones. A shaped recipe hands back a fresh item, so
+crafting a crate up a tier destroyed whatever it carried — a sturdy crate's contents, and, once
+upgrades stayed with a crate, every crate's upgrades. A transmute copies the crate's components onto
+the result. Each tier holds at least as much as the one below it, so nothing carried can fail to
+fit. The crate no longer has to sit in the middle of the grid.
 
 Both are covered by gametests: one crafts each recipe and checks which matched, the other checks
 every advancement loads and grants the recipe it is named for. Neither a malformed recipe nor a
@@ -248,7 +262,8 @@ building blocks a player happens to be carrying.
 
 Upgrades are kept outside the crate's inventory. In it, they would be visible to hoppers, and for
 the tiers whose contents ride inside the dropped item they would duplicate along with everything
-else. They drop as items when the crate is broken, for every tier.
+else. They stay in the crate when it is broken, for every tier, in a component of their own — see
+[Status](#status).
 
 The storage also refuses upgrades as goods, through both of its doors, and the upgrade slots are
 marked *fake* — a vanilla flag that changes only how the screen draws the item, and the first thing
@@ -532,10 +547,11 @@ in `minecraft:container` as always (all legal, so nothing is validated away) and
 to is the stack in the same slot of `minecraft:container`, so the contents are never described
 twice, and two descriptions cannot disagree about how many of something exist. A count whose slot
 arrives empty is dropped — the worst an inconsistent pair can do is lose what the editor already
-lost, never duplicate. Placing the drop back restores the total even if the stack upgrade dropped
-separately; the slot is simply over capacity. If something strips the component — another mod, hand
-editing — the stacks survive and the remainders do not, and the item's tooltip says how much is
-parked so an undercount is never silent. The basic tier spills everything as repeated legal stacks,
+lost, never duplicate. The stack upgrade rides in `lodestore:crate_upgrades` beside them, and
+placing the drop back puts it in before the contents settle, so the slot holds what it held. A drop
+stripped of its upgrades still gives back the whole total, spread into legal stacks. If something
+strips the overflow component — another mod, hand editing — the stacks survive and the remainders
+do not, and the item's tooltip says how much is parked so an undercount is never silent. The basic tier spills everything as repeated legal stacks,
 which the crate now does itself: vanilla's default spill fires only for a `Container`.
 
 **What was free and is now owned.** Each with what it risks and how that is checked:
@@ -585,7 +601,9 @@ is filtered into one that quietly accepts anything. An old lock entry that still
 `slot_capacity` must keep decoding, since packs written for it exist.
 
 **Server gametests.** Persistence, hopper interop, comparator output, drop-on-break, that a broken
-crate still stacks with a fresh one, that upgrade slots rise with the tier, and the lock: that it
+crate still stacks with a fresh one, that upgrades stay in a broken crate of every tier and come
+back installed and locked when it is placed, that crafting a crate up a tier keeps what it carries,
+that upgrade slots rise with the tier, and the lock: that it
 claims everything already inside or else the first item in, refuses everything else in every slot,
 cannot be bypassed by a hopper or slipped past by two kinds in one transfer, is not claimed by a
 simulated insert, forgets its claim when it comes off, and voids only what it claimed alongside a

@@ -32,7 +32,10 @@ import net.minecraft.world.level.block.HopperBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemStorage;
@@ -41,6 +44,7 @@ import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
 import dev.fricker.lodestore.block.CrateBlockEntity;
+import dev.fricker.lodestore.item.InstalledUpgrades;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
 import dev.fricker.lodestore.registry.LodestoreComponents;
 import dev.fricker.lodestore.registry.LodestoreItems;
@@ -376,7 +380,60 @@ public class CrateGameTests {
 		helper.succeed();
 	}
 
-	private static void assertCrafts(GameTestHelper helper, CraftingInput input, String expectedRecipe,
+	/**
+	 * Crafting a crate up a tier keeps everything in it: the upgrades, which now stay with a crate,
+	 * and a sturdy crate's contents, parked counts included. A shaped recipe hands back a fresh item
+	 * and would have destroyed all of it; these are vanilla's transmute recipes, which shulker box
+	 * dyeing uses for the same reason. The crate does not have to sit in the middle, and the
+	 * planks can be any mix.
+	 */
+	@GameTest
+	public void craftingACrateUpATierKeepsWhatIsInIt(GameTestHelper helper) {
+		ItemStack basic = new ItemStack(LodestoreBlocks.BASIC_CRATE);
+		basic.set(LodestoreComponents.CRATE_UPGRADES, InstalledUpgrades.of(
+				List.of(new ItemStack(LodestoreItems.LOCK_UPGRADE)), List.of(new ItemStack(Items.COBBLESTONE)), -1,
+				ItemStack.EMPTY));
+
+		ItemStack oak = new ItemStack(Items.OAK_PLANKS);
+		ItemStack birch = new ItemStack(Items.BIRCH_PLANKS);
+		ItemStack sturdy = assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				basic, oak, birch,
+				oak, oak, oak,
+				birch, oak, oak)), "sturdy_crate", LodestoreBlocks.STURDY_CRATE.asItem());
+
+		InstalledUpgrades fitted = sturdy.getOrDefault(LodestoreComponents.CRATE_UPGRADES, InstalledUpgrades.EMPTY);
+
+		if (fitted.upgradeStacks().size() != 1 || !fitted.upgradeStacks().getFirst().is(LodestoreItems.LOCK_UPGRADE)
+				|| fitted.lockFilterStacks().size() != 1) {
+			throw helper.assertionException("crafting a basic crate into a sturdy one lost its lock: " + fitted);
+		}
+
+		sturdy.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.COBBLESTONE, 64))));
+		sturdy.set(LodestoreComponents.CRATE_OVERFLOW, new CrateOverflow(List.of(new CrateOverflow.Entry(0, 136))));
+
+		ItemStack iron = new ItemStack(Items.IRON_INGOT);
+		ItemStack reinforced = assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				iron, iron, iron,
+				iron, sturdy, iron,
+				iron, iron, iron)), "reinforced_crate", LodestoreBlocks.REINFORCED_CRATE.asItem());
+
+		long stacks = reinforced.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY)
+				.nonEmptyItemCopyStream().mapToLong(ItemStack::getCount).sum();
+		long parked = reinforced.getOrDefault(LodestoreComponents.CRATE_OVERFLOW, CrateOverflow.EMPTY).total();
+
+		if (stacks != 64 || parked != 136) {
+			throw helper.assertionException("crafting a sturdy crate into a reinforced one kept " + stacks
+					+ " in stacks and " + parked + " parked, not 64 and 136");
+		}
+
+		if (carriedUpgrades(reinforced).size() != 1) {
+			throw helper.assertionException("crafting a sturdy crate into a reinforced one lost its lock");
+		}
+
+		helper.succeed();
+	}
+
+	private static ItemStack assertCrafts(GameTestHelper helper, CraftingInput input, String expectedRecipe,
 			net.minecraft.world.item.Item expectedResult) {
 		RecipeHolder<CraftingRecipe> match = helper.getLevel().getServer().getRecipeManager()
 				.getRecipeFor(RecipeType.CRAFTING, input, helper.getLevel())
@@ -393,6 +450,8 @@ public class CrateGameTests {
 		if (!result.is(expectedResult)) {
 			throw helper.assertionException(expectedRecipe + " produced " + result.getHoverName().getString());
 		}
+
+		return result;
 	}
 
 	/**
@@ -907,28 +966,156 @@ public class CrateGameTests {
 	}
 
 	/**
-	 * Upgrades drop for every tier. The shulker-style tiers carry their contents inside the
-	 * dropped item, but upgrades deliberately ride outside the inventory, so that component never
-	 * carries them and nothing else would.
+	 * Upgrades stay in the crate when it is broken, for every tier — the basic one included, whose
+	 * contents spill. They ride on the dropped item in their own component, never loose beside it.
 	 */
 	@GameTest(maxTicks = 100)
-	public void upgradesDropWhenTheCrateIsBroken(GameTestHelper helper) {
+	public void upgradesStayInABrokenBasicCrate(GameTestHelper helper) {
+		assertUpgradesStay(helper, LodestoreBlocks.BASIC_CRATE);
+	}
+
+	@GameTest(maxTicks = 100)
+	public void upgradesStayInABrokenSturdyCrate(GameTestHelper helper) {
+		assertUpgradesStay(helper, LodestoreBlocks.STURDY_CRATE);
+	}
+
+	@GameTest(maxTicks = 100)
+	public void upgradesStayInABrokenReinforcedCrate(GameTestHelper helper) {
+		assertUpgradesStay(helper, LodestoreBlocks.REINFORCED_CRATE);
+	}
+
+	private static void assertUpgradesStay(GameTestHelper helper, Block block) {
 		BlockPos pos = new BlockPos(1, 1, 1);
-		CrateBlockEntity crate = place(helper, pos, LodestoreBlocks.STURDY_CRATE);
+		CrateBlockEntity crate = place(helper, pos, block);
 		crate.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
 
 		destroy(helper, pos);
 
 		helper.runAtTickTime(5, () -> {
-			long dropped = count(drops(helper, pos), LodestoreItems.LOCK_UPGRADE);
+			List<ItemStack> drops = drops(helper, pos);
+			long loose = count(drops, LodestoreItems.LOCK_UPGRADE);
 
-			if (dropped != 1) {
-				throw helper.assertionException("breaking a sturdy crate should drop its 1 lock upgrade, dropped "
-						+ dropped);
+			if (loose != 0) {
+				throw helper.assertionException("breaking a " + block.getName().getString() + " dropped " + loose
+						+ " lock upgrade(s) beside it; upgrades should stay in the crate");
+			}
+
+			ItemStack dropped = droppedCrate(helper, drops, block);
+			List<ItemStack> carried = carriedUpgrades(dropped);
+
+			if (carried.size() != 1 || !carried.getFirst().is(LodestoreItems.LOCK_UPGRADE)) {
+				throw helper.assertionException("the dropped " + block.getName().getString()
+						+ " should carry its lock upgrade, carries " + carried.size() + " upgrade(s)");
 			}
 
 			helper.succeed();
 		});
+	}
+
+	/**
+	 * A broken crate placed back down is the crate it was: its upgrades installed, and its lock
+	 * still claiming what it claimed. Breaking is not taking the lock off, so the claim survives —
+	 * on a basic crate too, whose contents spilled, exactly as if it had been emptied by hand.
+	 */
+	@GameTest(maxTicks = 100)
+	public void aBrokenBasicCrateComesBackLocked(GameTestHelper helper) {
+		assertComesBackLocked(helper, LodestoreBlocks.BASIC_CRATE);
+	}
+
+	@GameTest(maxTicks = 100)
+	public void aBrokenSturdyCrateComesBackLocked(GameTestHelper helper) {
+		assertComesBackLocked(helper, LodestoreBlocks.STURDY_CRATE);
+	}
+
+	private static void assertComesBackLocked(GameTestHelper helper, Block block) {
+		BlockPos pos = new BlockPos(1, 1, 1);
+		CrateBlockEntity crate = place(helper, pos, block);
+		crate.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 12));
+		crate.setChanged();
+		crate.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+		expectClaims(helper, crate, Items.COBBLESTONE);
+
+		destroy(helper, pos);
+
+		helper.runAtTickTime(5, () -> {
+			ItemStack dropped = droppedCrate(helper, drops(helper, pos), block);
+			CrateBlockEntity placed = placeFrom(helper, new BlockPos(3, 1, 1), dropped);
+
+			if (placed.upgrades().size() != 1 || !placed.upgrades().getFirst().is(LodestoreItems.LOCK_UPGRADE)) {
+				throw helper.assertionException("the placed " + block.getName().getString()
+						+ " came back with " + placed.upgrades().size() + " upgrade(s), not its lock");
+			}
+
+			expectClaims(helper, placed, Items.COBBLESTONE);
+			expect(helper, placed.canStore(1, new ItemStack(Items.DIRT)), false,
+					"the placed crate takes dirt; its lock forgot its claim");
+			expect(helper, placed.canStore(1, new ItemStack(Items.COBBLESTONE)), true,
+					"the placed crate refuses the cobblestone it is locked to");
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * Two crates fitted alike must stack, or a player who breaks two locked crates ends up with two
+	 * piles of identical items for no visible reason — the component compares by value.
+	 */
+	@GameTest(maxTicks = 100)
+	public void brokenCratesFittedAlikeStack(GameTestHelper helper) {
+		BlockPos first = new BlockPos(1, 1, 1);
+		BlockPos second = new BlockPos(1, 1, 4);
+
+		for (BlockPos pos : List.of(first, second)) {
+			place(helper, pos, LodestoreBlocks.STURDY_CRATE).installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+			destroy(helper, pos);
+		}
+
+		helper.runAtTickTime(5, () -> {
+			List<ItemStack> crates = drops(helper, first).stream()
+					.filter(stack -> stack.is(LodestoreBlocks.STURDY_CRATE.asItem()))
+					.toList();
+
+			if (crates.size() != 2) {
+				throw helper.assertionException("expected two dropped crates, found " + crates.size());
+			}
+
+			if (!ItemStack.isSameItemSameComponents(crates.get(0), crates.get(1))) {
+				throw helper.assertionException("two crates fitted with one lock each will not stack: "
+						+ crates.get(0).getComponentsPatch() + " against " + crates.get(1).getComponentsPatch());
+			}
+
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * An explosion leaves a basic crate behind rather than destroying it with its upgrades inside.
+	 * The loot table used to drop the crate only if it survived the blast, which was harmless while
+	 * upgrades popped out loose; now that they stay in the crate it would destroy them. Shulker
+	 * boxes have no such condition, for the same reason.
+	 *
+	 * <p>Asked of the loot table directly with an enormous blast radius, under which the old
+	 * condition dropped the crate one time in a thousand.
+	 */
+	@GameTest
+	public void aBasicCrateSurvivesAnExplosion(GameTestHelper helper) {
+		BlockPos pos = new BlockPos(1, 1, 1);
+		CrateBlockEntity crate = place(helper, pos, LodestoreBlocks.BASIC_CRATE);
+		crate.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+
+		LootParams.Builder params = new LootParams.Builder(helper.getLevel())
+				.withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(helper.absolutePos(pos)))
+				.withParameter(LootContextParams.TOOL, ItemStack.EMPTY)
+				.withParameter(LootContextParams.BLOCK_ENTITY, crate)
+				.withParameter(LootContextParams.EXPLOSION_RADIUS, 1000.0f);
+
+		List<ItemStack> drops = crate.getBlockState().getDrops(params);
+		ItemStack dropped = droppedCrate(helper, drops, LodestoreBlocks.BASIC_CRATE);
+
+		if (carriedUpgrades(dropped).size() != 1) {
+			throw helper.assertionException("the basic crate survived the blast without its lock upgrade");
+		}
+
+		helper.succeed();
 	}
 
 	/** One of each: a second lock is refused rather than silently swallowed. */
@@ -1412,6 +1599,26 @@ public class CrateGameTests {
 	private static void destroy(GameTestHelper helper, BlockPos pos) {
 		// helper.destroyBlock does not run the loot pipeline, so nothing would drop at all.
 		helper.getLevel().destroyBlock(helper.absolutePos(pos), true, null, 512);
+	}
+
+	/** Places a crate item the way {@code BlockItem#place} does: the block, then the item's components. */
+	private static CrateBlockEntity placeFrom(GameTestHelper helper, BlockPos pos, ItemStack stack) {
+		Block block = ((net.minecraft.world.item.BlockItem) stack.getItem()).getBlock();
+		CrateBlockEntity crate = place(helper, pos, block);
+		crate.applyComponentsFromItemStack(stack);
+		crate.setChanged();
+		return crate;
+	}
+
+	private static ItemStack droppedCrate(GameTestHelper helper, List<ItemStack> drops, Block block) {
+		return drops.stream()
+				.filter(stack -> stack.is(block.asItem()))
+				.findFirst()
+				.orElseThrow(() -> helper.assertionException("the " + block.getName().getString() + " did not drop at all"));
+	}
+
+	private static List<ItemStack> carriedUpgrades(ItemStack crate) {
+		return crate.getOrDefault(LodestoreComponents.CRATE_UPGRADES, InstalledUpgrades.EMPTY).upgradeStacks();
 	}
 
 	private static List<ItemStack> drops(GameTestHelper helper, BlockPos pos) {
