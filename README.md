@@ -599,8 +599,8 @@ box**. Crates join it by touching a connection block, or a device.
 | Block | Made of | Does |
 |---|---|---|
 | Connection block | planks and iron nuggets around redstone, eight at a time | carries the network; nothing else |
-| Deposit box | a hopper over a basic crate | one row of plain slots; what goes in flows to its home crate, one item a tick |
-| Interface box | a glass pane over a basic crate over redstone | opens a scrolling view of everything the crates hold, one cell per kind; pulls whatever sits on top of it into the network, one item a tick |
+| Deposit box | a hopper over a basic crate | a hopper for the network: pulls from whatever sits on top of it into one row of plain slots, and what is in them flows to its home crate, one item a tick each way |
+| Interface box | a glass pane over a basic crate over redstone | opens a scrolling view of everything the crates hold, one cell per kind; nothing goes in through it |
 
 A network has no object of its own. Whichever device needs it walks from where it stands, breadth-
 first through the connection blocks it touches, and every crate touching any of those — or the
@@ -631,23 +631,24 @@ both devices feed through it.
 no cooldown any more, only a once-per-frame flag — and eight times a hopper block. The walk is
 redone every twenty ticks; the ticks between reuse the crates it found.
 
+**Pulling.** The deposit box is a hopper for the network. Like one, it draws from whatever
+container sits on top of it — a chest, a hopper, a hopper minecart whether or not it is on a rail —
+one item a tick, into its own slots, where the drain above takes over. The source is found the way
+a hopper finds its own: vanilla's `getContainerAt`, which sees container entities as well as
+blocks, wrapped as a storage; failing that, anything offering a `Storage<ItemVariant>` through its
+bottom face. So a hopper minecart parked on a deposit box empties into the network at its own rate,
+and what the network has no place for ends up in the box's slots, where the player can see it. A
+crate on top is not pulled from — crates are the network's storage, not its feeders, and a crate
+touching the box is already on its network, so pulling from it would carry an item into the box and
+straight back to the same crate.
+
 The deposit box is a plain vanilla `Container`, deliberately, where a crate is not: its slots are
 ordinary, and being a container is what lets a hopper, a dropper or a hand fill it with nothing
 further said. It is a `WorldlyContainer` that lets everything in by every face and nothing out by
 any — the network takes, and a hopper under the box pulling things out before they were sorted
 would defeat it. Its screen is vanilla's one-row chest.
 
-**Pulling.** The interface box is also a mouth. Like a hopper it draws from whatever container
-sits on top of it — a chest, a hopper, a hopper minecart parked on a rail above — one item a tick,
-into the item's home crate. The source is found the way a hopper finds its own: vanilla's
-`getContainerAt`, which sees container entities as well as blocks, wrapped as a storage; failing
-that, anything offering a `Storage<ItemVariant>` through its bottom face. Taking and landing happen
-in one transaction, so an item the network has no place for is never taken: a minecart of mixed
-loot leaves with what had nowhere to go still aboard. A crate on top is not pulled from — crates are the
-network's storage, not its feeders, and a crate touching the box is already on its network, so
-pulling from it would move an item to the nearest home, which may be the same crate.
-
-**The view.** The interface box holds nothing of its own. While its menu is open the server
+**The view.** The interface box holds nothing and never ticks, and nothing goes in through it. While its menu is open the server
 walks the network every ten ticks and sends the whole view — one entry per kind of item, with a
 count that is a `long` — whenever it has changed, as a payload of its own. Not the menu's data
 slots, which carry ints, and not item slots, which carry one legal stack: a kind of item on a
@@ -658,8 +659,8 @@ to fit the cell — `1.5k`, `12k`, `2M`, always rounded *down* so a cell never c
 is — and exact in the tooltip. An empty view says which kind of empty it is: no crates reached, or
 crates with nothing in them, since only the first is something the player should go and fix.
 
-The view is read-only in this iteration: the deposit box and whatever is set on an interface box
-are the ways in, and the crates themselves are the way out.
+The view is read-only in this iteration: the deposit box is the way in, and the crates themselves
+are the way out.
 
 ### Not yet
 

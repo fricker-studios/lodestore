@@ -1,11 +1,14 @@
 package dev.fricker.lodestore.block;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.Container;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.WorldlyContainer;
 import net.minecraft.world.entity.player.Inventory;
@@ -15,11 +18,16 @@ import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BaseContainerBlockEntity;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 
+import net.fabricmc.fabric.api.transfer.v1.item.ContainerStorage;
+import net.fabricmc.fabric.api.transfer.v1.item.ItemStorage;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
+import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
+import net.fabricmc.fabric.api.transfer.v1.storage.StorageUtil;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
 import dev.fricker.lodestore.network.NetworkCrateCache;
@@ -36,12 +44,19 @@ import dev.fricker.lodestore.registry.LodestoreBlockEntities;
  * network takes, and a hopper under the box pulling things out before the network had sorted them
  * would make the box an ordinary chest with a delay.
  *
- * <p>Every tick, one item leaves for the network: a crate that is its home — one already holding
- * that item, or locked to it — nearest first, or else an unlocked crate, which is the network's
- * overflow. One a tick is the rate a hopper minecart pulls at, which is eight times a hopper
- * block. An item with nowhere to go stays, and the box says so by not emptying; the player decides
- * what it is for. The order, and when a void upgrade destroys instead, is
+ * <p>It works like a hopper, at a hopper minecart's rate. Every tick it pulls one item from
+ * whatever container sits on top of it — a chest, a hopper, a hopper minecart whether or not it is
+ * on a rail — into its own slots, found the way a hopper finds its source, so container entities
+ * count; and every tick one item leaves its slots for the network: a crate that is its home — one
+ * already holding that item, or locked to it — nearest first, or else an unlocked crate, which is
+ * the network's overflow. One a tick each way is the rate a hopper minecart pulls at, eight times a
+ * hopper block. An item with nowhere to go stays in the box, and the box says so by not emptying;
+ * the player decides what it is for. The order, and when a void upgrade destroys instead, is
  * {@link StorageNetwork#insertOne}'s.
+ *
+ * <p>A crate on top is not pulled from. Crates are the network's storage, not its feeders, and a
+ * crate touching the box is already on its network: pulling from it would carry an item into the
+ * box and straight back to the nearest home for it, which is the same crate.
  */
 public class DepositBoxBlockEntity extends BaseContainerBlockEntity implements WorldlyContainer {
 	public static final int SIZE = 9;
@@ -58,8 +73,10 @@ public class DepositBoxBlockEntity extends BaseContainerBlockEntity implements W
 		}
 	}
 
-	/** Moves one item into the network, if any item here has a home on it. */
+	/** Pulls one item in from above, and sends one item out to the network. */
 	public static void serverTick(Level level, BlockPos pos, BlockState state, DepositBoxBlockEntity box) {
+		box.pullFromAbove(level, pos);
+
 		if (box.isEmpty()) {
 			return;
 		}
@@ -81,6 +98,41 @@ public class DepositBoxBlockEntity extends BaseContainerBlockEntity implements W
 				}
 			}
 		}
+	}
+
+	/** Takes one item, of any kind, from the container on top into the first slot with room. */
+	private void pullFromAbove(Level level, BlockPos pos) {
+		Storage<ItemVariant> source = sourceAbove(level, pos);
+
+		if (source == null) {
+			return;
+		}
+
+		try (Transaction transaction = Transaction.openOuter()) {
+			if (StorageUtil.move(source, ContainerStorage.of(this, Direction.UP), variant -> true, 1, transaction) == 1) {
+				transaction.commit();
+			}
+		}
+	}
+
+	/**
+	 * What sits on top, as a storage: a vanilla container or a container entity, found the way a
+	 * hopper finds its source, or else anything offering a storage through its bottom face.
+	 */
+	private static @Nullable Storage<ItemVariant> sourceAbove(Level level, BlockPos pos) {
+		BlockPos above = pos.above();
+
+		if (level.getBlockEntity(above) instanceof CrateBlockEntity) {
+			return null;
+		}
+
+		Container container = HopperBlockEntity.getContainerAt(level, above);
+
+		if (container != null) {
+			return ContainerStorage.of(container, Direction.DOWN);
+		}
+
+		return ItemStorage.SIDED.find(level, above, Direction.DOWN);
 	}
 
 	// --- container ---------------------------------------------------------------
