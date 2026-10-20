@@ -134,6 +134,16 @@ of equal or higher rank, because that is what would let storage compound without
 crate compounds nothing — it is a block item like any other — and every tier takes it. Contents
 means either component: stacks in `minecraft:container`, or counts parked in `crate_overflow`.
 
+A crate with contents never goes into vanilla storage at all. Chests (trapped, copper and double
+ones included), barrels, shulker boxes, the ender chest, chest minecarts and chest boats refuse it,
+whether a hand or a hopper puts it there, and so does a bundle; its contents nest only where the
+rule above allows. An empty crate still goes anywhere. Vanilla's `Slot#mayPlace` answers yes without
+asking the container, which only hoppers ask, so `SlotMixin` makes a plain slot ask before taking a
+filled crate, and the storage answers through the `canPlaceItem` it otherwise inherits as a yes.
+The shulker box's slot and the bundle have checks of their own and get mixins of their own.
+Hoppers, droppers and crafters still take one: they move a crate along, they do not keep it.
+Donkeys, llamas, decorated pots and other mods' storage are not covered.
+
 ### Sprites
 
 Every tier has its own front, side and top texture. They are one family of oak separated by the
@@ -603,7 +613,9 @@ is filtered into one that quietly accepts anything. An old lock entry that still
 **Server gametests.** Persistence, hopper interop, comparator output, drop-on-break, that a broken
 crate still stacks with a fresh one, that upgrades stay in a broken crate of every tier and come
 back installed and locked when it is placed, that crafting a crate up a tier keeps what it carries,
-that upgrade slots rise with the tier, and the lock: that it
+that a filled crate stays out of every kind of vanilla storage from a hand and from a hopper, that a
+reinforced crate of filled crates comes back whole, that upgrade slots rise with the tier, and the
+lock: that it
 claims everything already inside or else the first item in, refuses everything else in every slot,
 cannot be bypassed by a hopper or slipped past by two kinds in one transfer, is not claimed by a
 simulated insert, forgets its claim when it comes off, and voids only what it claimed alongside a

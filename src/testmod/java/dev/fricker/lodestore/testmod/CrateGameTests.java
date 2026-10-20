@@ -16,10 +16,19 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.CompoundContainer;
+import net.minecraft.world.Container;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.vehicle.minecart.MinecartChest;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.BundleContents;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
@@ -30,7 +39,10 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.HopperBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
@@ -232,6 +244,153 @@ public class CrateGameTests {
 		expect(helper, reinforced.canStore(0, parked), false, "reinforced accepted a reinforced crate with parked counts");
 
 		helper.succeed();
+	}
+
+	/**
+	 * A crate with something in it never goes into vanilla storage — chests, double chests,
+	 * barrels, shulker boxes, the ender chest, chest minecarts, bundles — whether a hand puts it
+	 * there or a hopper does. Its contents nest only where the rank rule allows, inside another
+	 * crate. Each refusal is paired with an empty crate going into the same place, so a container
+	 * that refused everything would fail here too.
+	 */
+	@GameTest
+	public void filledCratesStayOutOfVanillaStorage(GameTestHelper helper) {
+		ItemStack filled = filledCrate(LodestoreBlocks.STURDY_CRATE);
+		ItemStack parked = new ItemStack(LodestoreBlocks.REINFORCED_CRATE);
+		parked.set(LodestoreComponents.CRATE_OVERFLOW, new CrateOverflow(List.of(new CrateOverflow.Entry(0, 100))));
+		ItemStack empty = new ItemStack(LodestoreBlocks.STURDY_CRATE);
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+
+		helper.setBlock(new BlockPos(1, 1, 1), Blocks.CHEST.defaultBlockState());
+		helper.setBlock(new BlockPos(3, 1, 1), Blocks.CHEST.defaultBlockState());
+		helper.setBlock(new BlockPos(5, 1, 1), Blocks.BARREL.defaultBlockState());
+		helper.setBlock(new BlockPos(1, 1, 3), Blocks.SHULKER_BOX.defaultBlockState());
+		ChestBlockEntity chest = helper.getBlockEntity(new BlockPos(1, 1, 1), ChestBlockEntity.class);
+		ChestBlockEntity other = helper.getBlockEntity(new BlockPos(3, 1, 1), ChestBlockEntity.class);
+		BarrelBlockEntity barrel = helper.getBlockEntity(new BlockPos(5, 1, 1), BarrelBlockEntity.class);
+		ShulkerBoxBlockEntity shulker = helper.getBlockEntity(new BlockPos(1, 1, 3), ShulkerBoxBlockEntity.class);
+		MinecartChest minecart = helper.spawn(EntityTypes.CHEST_MINECART, new BlockPos(5, 1, 3));
+
+		Map<String, Container> storage = Map.of(
+				"a chest", chest,
+				"a double chest", new CompoundContainer(chest, other),
+				"a barrel", barrel,
+				"a shulker box", shulker,
+				"the ender chest", player.getEnderChestInventory(),
+				"a chest minecart", minecart);
+
+		for (Map.Entry<String, Container> entry : storage.entrySet()) {
+			Container container = entry.getValue();
+			int last = container.getContainerSize() - 1;
+
+			expect(helper, container.canPlaceItem(last, filled), false, entry.getKey() + " takes a crate with contents");
+			expect(helper, container.canPlaceItem(last, parked), false, entry.getKey() + " takes a crate with parked counts");
+			expect(helper, container.canPlaceItem(last, empty), true, entry.getKey() + " refuses an empty crate");
+
+			// A hopper, a dropper or a pipe asks the same question; this is the hopper's own call.
+			ItemStack left = HopperBlockEntity.addItem(null, container, filled.copy(), Direction.DOWN);
+
+			if (left.isEmpty()) {
+				throw helper.assertionException("a hopper put a crate with contents into " + entry.getKey());
+			}
+
+			if (!HopperBlockEntity.addItem(null, container, empty.copy(), Direction.DOWN).isEmpty()) {
+				throw helper.assertionException("a hopper could not put an empty crate into " + entry.getKey());
+			}
+		}
+
+		// A hand, through each screen. The player's own slots in the same screen still take it.
+		Map<String, AbstractContainerMenu> screens = Map.of(
+				"a chest", chest.createMenu(1, player.getInventory(), player),
+				"a double chest", ChestMenu.sixRows(2, player.getInventory(), new CompoundContainer(chest, other)),
+				"a barrel", barrel.createMenu(3, player.getInventory(), player),
+				"a shulker box", shulker.createMenu(4, player.getInventory(), player),
+				"the ender chest", ChestMenu.threeRows(5, player.getInventory(), player.getEnderChestInventory()));
+
+		for (Map.Entry<String, AbstractContainerMenu> entry : screens.entrySet()) {
+			AbstractContainerMenu menu = entry.getValue();
+			Slot inside = menu.getSlot(0);
+			Slot own = menu.getSlot(menu.slots.size() - 1);
+
+			expect(helper, inside.mayPlace(filled), false, "the screen of " + entry.getKey() + " takes a crate with contents");
+			expect(helper, inside.mayPlace(empty), true, "the screen of " + entry.getKey() + " refuses an empty crate");
+			expect(helper, own.container == player.getInventory() && own.mayPlace(filled), true,
+					"the player's own slots in the screen of " + entry.getKey() + " refuse a crate with contents");
+		}
+
+		expect(helper, BundleContents.canItemBeInBundle(filled), false, "a bundle takes a crate with contents");
+		expect(helper, BundleContents.canItemBeInBundle(empty), true, "a bundle refuses an empty crate");
+
+		helper.succeed();
+	}
+
+	/**
+	 * The nesting the rank rule does allow loses nothing: a reinforced crate full of sturdy crates,
+	 * each full itself, comes back whole from being broken and placed again, and from a save and
+	 * load. Every slot's crate is checked down to the stacks inside it.
+	 */
+	@GameTest(maxTicks = 100)
+	public void aReinforcedCrateOfFilledCratesComesBackWhole(GameTestHelper helper) {
+		BlockPos pos = new BlockPos(1, 1, 1);
+		CrateBlockEntity reinforced = place(helper, pos, LodestoreBlocks.REINFORCED_CRATE);
+
+		for (int slot = 0; slot < reinforced.storageSize(); slot++) {
+			ItemStack inner = new ItemStack(LodestoreBlocks.STURDY_CRATE);
+			inner.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(innerStacks(slot)));
+
+			if (!reinforced.canStore(slot, inner)) {
+				throw helper.assertionException("a reinforced crate refuses a sturdy crate with contents");
+			}
+
+			reinforced.contents().setItem(slot, inner);
+		}
+
+		reinforced.setChanged();
+
+		CompoundTag written = reinforced.saveCustomOnly(helper.getLevel().registryAccess());
+		CrateBlockEntity reloaded = new CrateBlockEntity(
+				helper.absolutePos(pos), LodestoreBlocks.REINFORCED_CRATE.defaultBlockState());
+		reloaded.loadWithComponents(TagValueInput.create(
+				ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), written));
+		expectNestedWhole(helper, reloaded, "after a save and load");
+
+		destroy(helper, pos);
+
+		helper.runAtTickTime(5, () -> {
+			ItemStack dropped = droppedCrate(helper, drops(helper, pos), LodestoreBlocks.REINFORCED_CRATE);
+			expectNestedWhole(helper, placeFrom(helper, new BlockPos(3, 1, 1), dropped), "after being broken and placed");
+			helper.succeed();
+		});
+	}
+
+	/** What the sturdy crate in a given slot holds: 27 stacks, different in every slot. */
+	private static List<ItemStack> innerStacks(int slot) {
+		List<ItemStack> stacks = new java.util.ArrayList<>();
+
+		for (int i = 0; i < 27; i++) {
+			stacks.add(new ItemStack(i % 2 == 0 ? Items.COBBLESTONE : Items.DIAMOND, 1 + (slot + i) % 64));
+		}
+
+		return stacks;
+	}
+
+	private static void expectNestedWhole(GameTestHelper helper, CrateBlockEntity crate, String when) {
+		for (int slot = 0; slot < crate.storageSize(); slot++) {
+			ItemStack inner = crate.contents().visible(slot);
+
+			if (!inner.is(LodestoreBlocks.STURDY_CRATE.asItem())) {
+				throw helper.assertionException("slot " + slot + " lost its sturdy crate " + when);
+			}
+
+			List<ItemStack> held = inner.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY)
+					.nonEmptyItemCopyStream().toList();
+			List<ItemStack> expected = innerStacks(slot);
+
+			if (!ItemStack.listMatches(held, expected)) {
+				throw helper.assertionException("the sturdy crate in slot " + slot + " came back holding "
+						+ held.size() + " stacks that differ from the " + expected.size() + " it held, " + when);
+			}
+		}
 	}
 
 	/** A crate item holding five diamonds — what the rank rule is about. */

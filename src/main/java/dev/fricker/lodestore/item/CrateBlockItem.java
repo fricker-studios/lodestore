@@ -10,6 +10,7 @@ import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.level.block.Block;
 
+import dev.fricker.lodestore.block.CrateBlockEntity;
 import dev.fricker.lodestore.registry.LodestoreComponents;
 import dev.fricker.lodestore.storage.CrateOverflow;
 
@@ -26,6 +27,17 @@ import dev.fricker.lodestore.storage.CrateOverflow;
 public class CrateBlockItem extends BlockItem {
 	public CrateBlockItem(Block block, Properties properties) {
 		super(block, properties);
+	}
+
+	/**
+	 * Whether this is a crate with something in it — stacks, or counts parked behind them.
+	 *
+	 * <p>Such a crate goes only where Lodestore's nesting rule allows, inside another crate, and
+	 * never into vanilla storage: chests, barrels, shulker boxes, the ender chest, chest minecarts
+	 * and boats, or a bundle. An empty crate is a block item like any other and goes anywhere.
+	 */
+	public static boolean isFilled(ItemStack stack) {
+		return stack.getItem() instanceof CrateBlockItem && CrateBlockEntity.hasContents(stack);
 	}
 
 	@Override
