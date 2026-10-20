@@ -1,0 +1,98 @@
+name: Bug report
+description: Something in Lodestore is broken, crashes, or loses items.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. A report with versions and a log usually
+        gets fixed in one round; one without them usually gets a "needs info" label and waits.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched the [open and closed issues](https://github.com/fricker-studios/lodestore/issues?q=is%3Aissue) and this is not already reported.
+          required: true
+        - label: I am on the [latest release](https://github.com/fricker-studios/lodestore/releases/latest) or a build from `main`.
+          required: true
+        - label: I can reproduce this with only Lodestore and Fabric API installed, or I have described which other mod is involved below.
+          required: true
+
+  - type: input
+    id: lodestore-version
+    attributes:
+      label: Lodestore version
+      description: From the jar filename or the Mods screen, e.g. `0.2.0` or `0.2.0-rc.1-3-gabc1234`.
+      placeholder: "0.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: minecraft-version
+    attributes:
+      label: Minecraft version
+      placeholder: "26.2"
+    validations:
+      required: true
+
+  - type: input
+    id: loader-version
+    attributes:
+      label: Fabric Loader and Fabric API versions
+      placeholder: "Loader 0.19.3, Fabric API 0.158.0+26.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - Singleplayer
+        - Multiplayer (dedicated server)
+        - Multiplayer (LAN / open to LAN)
+        - Only on the client
+        - Only on the server
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: |
+        1. Place a basic crate next to a network interface
+        2. Put 64 cobblestone in the hopper above it
+        3. Expected: cobblestone lands in the crate. Actual: it vanishes.
+    validations:
+      required: true
+
+  - type: textarea
+    id: other-mods
+    attributes:
+      label: Other mods installed
+      description: Paste your mod list, or write "none" if it is just Lodestore and Fabric API. Name the one you think is involved, if any.
+      placeholder: "none"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log or crash report
+      description: |
+        Attach `logs/latest.log`, or the file from `crash-reports/`, by dragging it into this box.
+        For anything longer than a screen, upload the file or paste it into https://mclo.gs and link it.
+        This box is formatted as a code block, so no backticks are needed.
+      render: text
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, a world download, a video, a note on when it started happening.

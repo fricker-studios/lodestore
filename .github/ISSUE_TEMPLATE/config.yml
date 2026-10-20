@@ -1,0 +1,10 @@
+# Every issue goes through one of the forms in this directory. Blank issues are
+# off so bug reports always arrive with versions and a log attached.
+blank_issues_enabled: false
+contact_links:
+  - name: Questions, ideas, and help
+    url: https://github.com/fricker-studios/lodestore/discussions
+    about: Not sure it's a bug, or just want to talk about the mod? Start a discussion.
+  - name: Security vulnerability
+    url: https://github.com/fricker-studios/lodestore/security/advisories/new
+    about: Report a security problem privately instead of in a public issue.

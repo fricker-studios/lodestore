@@ -1,0 +1,61 @@
+name: Feature request
+description: Suggest a new block, item, mechanic, or change to an existing one.
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Lodestore has a fairly specific design: storage that composes through Fabric's transfer API,
+        with limits that make the upgrades matter. Requests that fit that tend to land; "add everything
+        from mod X" tends not to. Either way, say what problem it solves and it will get a real answer.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched the [existing issues and discussions](https://github.com/fricker-studios/lodestore/issues?q=is%3Aissue+label%3Aenhancement) and this has not been suggested.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is the problem?
+      description: What are you trying to do in-game that is awkward or impossible today?
+      placeholder: "Sorting a mixed chest into the network means hand-carrying it to the deposit box every time."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like instead?
+      description: Describe the block, item, or behaviour. A rough sketch of the recipe or UI is welcome but not required.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Other ways to solve it, including other mods that do something similar and why they do not fit.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: How big a change is this?
+      options:
+        - Small tweak to something that exists
+        - New block or item
+        - New system or mechanic
+        - Not sure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I would be willing to open a pull request for this.
