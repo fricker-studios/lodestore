@@ -9,6 +9,7 @@
   "item.lodestore.void_upgrade": "Void Upgrade",
   "itemGroup.lodestore.general": "Lodestore",
   "lodestore.crate.overflow": "Holds %s more than its stacks show",
+  "lodestore.crate.upgrades": "Upgrades:",
   "lodestore.slot.stored": "%s of %s in this slot",
   "lodestore.upgrade.choose_display": "Right-click to choose the slot shown on the front",
   "lodestore.upgrade.compress": "Right-click to sort the crate",

@@ -18,10 +18,10 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  * so a pack may change it between loads without stranding anything.
  *
  * @param keepsContents whether contents survive being broken, shulker-style, rather than spilling
- * @param nestingRank   ordering used to stop crates nesting inside themselves. A crate that keeps
- *                      its contents refuses any crate <em>with contents</em> of equal or higher
- *                      rank, which would otherwise let storage compound without limit. An empty
- *                      crate compounds nothing and is taken by any tier.
+ * @param nestingRank   ordering used to stop crates nesting inside themselves. A crate <em>with
+ *                      contents</em> goes only into one that keeps its contents and has a higher
+ *                      rank, and only if it keeps its own; anything else would let storage compound
+ *                      without limit. An empty crate compounds nothing and is taken by any tier.
  * @param upgradeSlots  how many upgrades a crate of this tier may hold at once
  */
 public record CrateTier(boolean keepsContents, int nestingRank, int upgradeSlots) {
@@ -44,8 +44,17 @@ public record CrateTier(boolean keepsContents, int nestingRank, int upgradeSlots
 	 */
 	public static final CrateTier FALLBACK = new CrateTier(false, 0, 0);
 
-	/** Whether this crate may hold {@code other}. */
+	/**
+	 * Whether this crate may hold a crate of tier {@code other} that has something in it. Any tier
+	 * may hold an empty one.
+	 *
+	 * <p>Only a crate that keeps its contents may, since one that spills is a chest, and chests
+	 * refuse filled crates too. The filled crate must keep its own as well: a tier that spills is
+	 * never carried full, so one that arrives full was made that way by hand. And it must rank
+	 * lower, so nothing holds its own kind. With the shipped tiers that leaves exactly one nesting,
+	 * a sturdy crate with contents inside a reinforced one.
+	 */
 	public boolean canContain(CrateTier other) {
-		return !keepsContents || other.nestingRank() < nestingRank();
+		return keepsContents && other.keepsContents() && other.nestingRank() < nestingRank();
 	}
 }
