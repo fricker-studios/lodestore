@@ -14,6 +14,10 @@ jobs:
   release:
     name: Build and publish
     runs-on: arc-runner-fricker-amd64
+    env:
+      # A step's `if` cannot read `secrets`, only `env`, so the token is mapped here for the
+      # Modrinth steps to test. Empty on a fork, which has no secret, and they skip.
+      MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
 
     steps:
       - name: Checkout
@@ -69,16 +73,16 @@ jobs:
       # candidate goes up as a beta, as it goes up here as a pre-release. The script is
       # idempotent, and .github/workflows/modrinth.yml re-sends any release this step missed.
       - name: Set up Python
-        if: ${{ secrets.MODRINTH_TOKEN != '' }}
+        if: ${{ env.MODRINTH_TOKEN != '' }}
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       - name: Publish to Modrinth
-        if: ${{ secrets.MODRINTH_TOKEN != '' }}
+        if: ${{ env.MODRINTH_TOKEN != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_PROJECT: ${{ vars.MODRINTH_PROJECT }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail

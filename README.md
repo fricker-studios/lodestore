@@ -61,7 +61,11 @@ git tag v0.2.0 && git push origin v0.2.0
 The same tag publishes the jar to [Modrinth](https://modrinth.com/project/lodestore), with the
 release notes GitHub generated as the changelog: a release candidate goes up as a beta, a bare
 version as a release, both needing Fabric API and filed under the Minecraft version in
-`gradle.properties`. The step needs a `MODRINTH_TOKEN` repository secret and skips without one.
+`gradle.properties`. The step needs a `MODRINTH_TOKEN` repository secret — a Modrinth token with the *Read projects*,
+*Read versions*, *Create versions* and *Write projects* scopes, the last for the gallery — and
+skips without one. The project is found by its `lodestore` slug, or by the id in the
+`MODRINTH_PROJECT` repository variable when one is set; a draft project answers a token that
+cannot read it with a 404, and the scripts say so.
 `tools/modrinth/publish.py` does the upload and is idempotent, so the *Modrinth* workflow
 (`.github/workflows/modrinth.yml`, run by hand from the Actions tab) can re-send any tag, or every
 tag at once, from the jars the GitHub releases already carry — never a rebuild. The same workflow
