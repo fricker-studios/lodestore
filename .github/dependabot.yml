@@ -1,0 +1,22 @@
+# Keeps the GitHub Actions pins and Gradle dependencies current. Minecraft, Fabric Loader,
+# Fabric API, and Loom are deliberately left alone: those bumps are a toolchain decision
+# documented in the README, not a routine update.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies, ci]
+
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+    ignore:
+      - dependency-name: "net.fabricmc:fabric-loader"
+      - dependency-name: "net.fabricmc.fabric-api:fabric-api"
+      - dependency-name: "net.fabricmc.fabric-loom"
+      - dependency-name: "net.fabricmc:fabric-loom"
+      - dependency-name: "net.fabricmc.fabric-loom:net.fabricmc.fabric-loom.gradle.plugin"
