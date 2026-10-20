@@ -58,6 +58,17 @@ Tagged commits publish a GitHub Release with the jar attached:
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
+The same tag publishes the jar to [Modrinth](https://modrinth.com/project/lodestore), with the
+release notes GitHub generated as the changelog: a release candidate goes up as a beta, a bare
+version as a release, both needing Fabric API and filed under the Minecraft version in
+`gradle.properties`. The step needs a `MODRINTH_TOKEN` repository secret and skips without one.
+`tools/modrinth/publish.py` does the upload and is idempotent, so the *Modrinth* workflow
+(`.github/workflows/modrinth.yml`, run by hand from the Actions tab) can re-send any tag, or every
+tag at once, from the jars the GitHub releases already carry — never a rebuild. The same workflow
+uploads the gallery from `docs/modrinth/gallery/`, whose `gallery.json` gives each picture its
+title and caption in order; the pictures are the client screenshot test's, copied in once they have
+been looked at.
+
 The tag is the single source of truth for the version. A release passes it through as `-Pversion`,
 so the jar filename and the version inside `fabric.mod.json` cannot drift apart; every other build
 derives it from the nearest tag with `git describe`, so a test jar three commits past `v0.2.0-rc.1`
