@@ -42,6 +42,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          # The project's slug, or its id from the Modrinth project settings page when the slug
+          # is not enough — a repository variable, so it needs no change here.
+          MODRINTH_PROJECT: ${{ vars.MODRINTH_PROJECT }}
           TAGS: ${{ inputs.tags }}
         run: |
           set -euo pipefail
@@ -73,4 +76,5 @@ jobs:
         if: ${{ inputs.gallery }}
         env:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_PROJECT: ${{ vars.MODRINTH_PROJECT }}
         run: python3 tools/modrinth/gallery.py
