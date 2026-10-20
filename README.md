@@ -72,7 +72,7 @@ tagged, and the test builds quietly shipped under it.
 ./gradlew runClient
 ```
 
-Then, in-game: `/give @s lodestore:storage_core`
+Then, in-game: `/give @s lodestore:basic_crate`, or open the Lodestore creative tab.
 
 ## Status
 
