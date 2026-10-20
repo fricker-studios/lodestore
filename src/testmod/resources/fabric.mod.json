@@ -20,7 +20,8 @@
 		"fabric-client-gametest": [
 			"dev.fricker.lodestore.testmod.client.CrateRenderClientTest",
 			"dev.fricker.lodestore.testmod.client.CratePersistenceClientTest",
-			"dev.fricker.lodestore.testmod.client.StorageNetworkClientTest"
+			"dev.fricker.lodestore.testmod.client.StorageNetworkClientTest",
+			"dev.fricker.lodestore.testmod.client.MarketingScreenshotsClientTest"
 		]
 	},
 	"depends": {
