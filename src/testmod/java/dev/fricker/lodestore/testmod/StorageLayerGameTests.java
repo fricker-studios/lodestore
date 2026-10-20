@@ -42,6 +42,7 @@ import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
 import dev.fricker.lodestore.block.CrateBlock;
 import dev.fricker.lodestore.block.CrateBlockEntity;
+import dev.fricker.lodestore.item.InstalledUpgrades;
 import dev.fricker.lodestore.menu.CrateMenu;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
 import dev.fricker.lodestore.registry.LodestoreComponents;
@@ -867,8 +868,20 @@ public class StorageLayerGameTests {
 				}
 			}
 
-			if (count(drops, LodestoreItems.STACK_UPGRADE) != 1) {
-				throw helper.assertionException("the stack upgrade did not drop");
+			// The contents spill; the upgrade stays in the crate.
+			if (count(drops, LodestoreItems.STACK_UPGRADE) != 0) {
+				throw helper.assertionException("the stack upgrade dropped loose instead of staying in the crate");
+			}
+
+			ItemStack dropped = drops.stream()
+					.filter(stack -> stack.is(LodestoreBlocks.BASIC_CRATE.asItem()))
+					.findFirst()
+					.orElseThrow(() -> helper.assertionException("the crate did not drop at all"));
+			List<ItemStack> carried = dropped.getOrDefault(LodestoreComponents.CRATE_UPGRADES, InstalledUpgrades.EMPTY)
+					.upgradeStacks();
+
+			if (carried.size() != 1 || !carried.getFirst().is(LodestoreItems.STACK_UPGRADE)) {
+				throw helper.assertionException("the dropped crate does not carry its stack upgrade");
 			}
 
 			helper.succeed();
@@ -880,8 +893,10 @@ public class StorageLayerGameTests {
 	 * placed.
 	 *
 	 * <p>{@code minecraft:container} carries the visible stacks, which are legal and so survive its
-	 * validation; the remainders ride in Lodestore's own component. Placing the drop back restores
-	 * the total even though the stack upgrade dropped separately — the slot is simply over capacity.
+	 * validation; the remainders ride in Lodestore's own component, and the stack upgrade in another.
+	 * Placing the drop back restores the crate as it was, the 200 still parked in one slot, which
+	 * holds only if the upgrade goes back in before the contents settle. A drop stripped of its
+	 * upgrades still gives back all 200, spread into legal stacks.
 	 */
 	@GameTest(maxTicks = 100)
 	public void aSturdyCrateKeepsItsParkedRemainderWhenBroken(GameTestHelper helper) {
@@ -915,11 +930,27 @@ public class StorageLayerGameTests {
 						+ (overflow == null ? "nothing" : overflow.total()));
 			}
 
-			// Placed back without its upgrade, which dropped separately: the 200 are all there, spread
-			// into legal stacks because the slot they were parked in no longer holds that many.
-			BlockPos again = new BlockPos(3, 1, 1);
-			CrateBlockEntity placed = place(helper, again, LodestoreBlocks.STURDY_CRATE);
-			placed.applyComponentsFromItemStack(dropped);
+			if (count(drops, LodestoreItems.STACK_UPGRADE) != 0) {
+				throw helper.assertionException("the stack upgrade dropped loose instead of staying in the crate");
+			}
+
+			// Placed back as it dropped: the upgrade is in again and the slot holds all 200.
+			CrateBlockEntity restored = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.STURDY_CRATE);
+			restored.applyComponentsFromItemStack(dropped);
+			restored.setChanged();
+
+			if (!restored.stacks() || restored.total(0) != 200 || restored.remainder(0) != 200 - STACK) {
+				throw helper.assertionException("placing the drop back gave slot 0 " + restored.total(0) + " with "
+						+ restored.remainder(0) + " parked, stack upgrade " + (restored.stacks() ? "in" : "missing")
+						+ "; expected 200 with " + (200 - STACK) + " parked");
+			}
+
+			// Placed back stripped of its upgrade — another mod, hand editing: the 200 are all
+			// there, spread into legal stacks because the slot no longer holds that many.
+			ItemStack stripped = dropped.copy();
+			stripped.remove(LodestoreComponents.CRATE_UPGRADES);
+			CrateBlockEntity placed = place(helper, new BlockPos(5, 1, 1), LodestoreBlocks.STURDY_CRATE);
+			placed.applyComponentsFromItemStack(stripped);
 			long back = 0;
 
 			for (int slot = 0; slot < placed.storageSize(); slot++) {
@@ -933,7 +964,7 @@ public class StorageLayerGameTests {
 			}
 
 			if (back != 200) {
-				throw helper.assertionException("placing the drop back gave " + back + " cobblestone, not 200");
+				throw helper.assertionException("placing the stripped drop back gave " + back + " cobblestone, not 200");
 			}
 
 			helper.succeed();

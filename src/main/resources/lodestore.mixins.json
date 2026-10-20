@@ -2,7 +2,12 @@
 	"required": true,
 	"package": "dev.fricker.lodestore.mixin",
 	"compatibilityLevel": "JAVA_25",
-	"mixins": [],
+	"mixins": [
+		"BundleContentsMixin",
+		"ShulkerBoxSlotMixin",
+		"SlotMixin",
+		"StorageRefusesFilledCratesMixin"
+	],
 	"injectors": {
 		"defaultRequire": 1
 	},

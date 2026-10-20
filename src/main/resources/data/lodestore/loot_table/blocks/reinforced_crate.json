@@ -16,7 +16,8 @@
                 "minecraft:container",
                 "lodestore:crate_overflow",
                 "minecraft:lock",
-                "minecraft:container_loot"
+                "minecraft:container_loot",
+                "lodestore:crate_upgrades"
               ]
             }
           ]

@@ -19,6 +19,7 @@ import dev.fricker.lodestore.block.CrateBlock;
 import dev.fricker.lodestore.block.DepositBoxBlock;
 import dev.fricker.lodestore.block.InterfaceBoxBlock;
 import dev.fricker.lodestore.item.CrateBlockItem;
+import dev.fricker.lodestore.item.InstalledUpgrades;
 import dev.fricker.lodestore.storage.CrateOverflow;
 
 /**
@@ -101,10 +102,11 @@ public final class LodestoreBlocks {
 	 * of identical crates. Declaring it here makes the copied value equal the prototype, which
 	 * {@code PatchedDataComponentMap} then drops instead of recording.
 	 *
-	 * <p>The overflow component — the counts parked behind full stacks — gets the same treatment
-	 * for the same reason, even though the crate only writes it when there is something to say.
+	 * <p>The overflow component — the counts parked behind full stacks — and the installed upgrades
+	 * get the same treatment for the same reason, even though the crate only writes either when
+	 * there is something to say.
 	 *
-	 * <p>Both go on every tier, not just the two that keep their contents: which tiers those are is
+	 * <p>All of them go on every tier, not just the two that keep their contents: which tiers those are is
 	 * datapack-driven and the loot tables are data too, so the item side stays permissive rather
 	 * than encoding an assumption a pack can change.
 	 */
@@ -116,7 +118,8 @@ public final class LodestoreBlocks {
 				new CrateBlockItem(block, new Item.Properties()
 						.setId(ResourceKey.create(Registries.ITEM, key.identifier()))
 						.component(DataComponents.CONTAINER, ItemContainerContents.EMPTY)
-						.component(LodestoreComponents.CRATE_OVERFLOW, CrateOverflow.EMPTY))
+						.component(LodestoreComponents.CRATE_OVERFLOW, CrateOverflow.EMPTY)
+						.component(LodestoreComponents.CRATE_UPGRADES, InstalledUpgrades.EMPTY))
 		);
 	}
 }

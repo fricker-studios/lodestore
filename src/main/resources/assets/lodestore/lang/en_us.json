@@ -12,6 +12,7 @@
   "item.lodestore.void_upgrade": "Void Upgrade",
   "itemGroup.lodestore.general": "Lodestore",
   "lodestore.crate.overflow": "Holds %s more than its stacks show",
+  "lodestore.crate.upgrades": "Upgrades:",
   "lodestore.interface.crates": "Crates: %s",
   "lodestore.interface.no_crates": "No crates on this network",
   "lodestore.interface.nothing_stored": "Nothing stored yet",

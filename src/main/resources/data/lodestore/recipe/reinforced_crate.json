@@ -1,14 +1,11 @@
 {
-  "type": "minecraft:crafting_shaped",
-  "key": {
-    "I": "minecraft:iron_ingot",
-    "D": "lodestore:sturdy_crate"
+  "type": "minecraft:crafting_transmute",
+  "input": "lodestore:sturdy_crate",
+  "material": "minecraft:iron_ingot",
+  "material_count": {
+    "min": 8,
+    "max": 8
   },
-  "pattern": [
-    "III",
-    "IDI",
-    "III"
-  ],
   "result": {
     "id": "lodestore:reinforced_crate"
   }

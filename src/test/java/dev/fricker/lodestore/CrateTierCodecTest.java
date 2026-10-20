@@ -62,6 +62,11 @@ class CrateTierCodecTest {
 	/**
 	 * The nesting rule is ordering-based, so it is only correct if the shipped ranks are ordered.
 	 * A pack that flattened them would silently allow a crate inside itself.
+	 *
+	 * <p>The whole table, since {@code canContain} is asked only about crates with contents: of the
+	 * nine pairings, a sturdy crate inside a reinforced one is the only one allowed. A basic crate is
+	 * a chest and refuses every filled crate, a sturdy crate refuses every filled crate, and nothing
+	 * takes a filled basic crate, which only a command can make.
 	 */
 	@Test
 	void nestingRanksAreOrderedAndEnforced() throws IOException {
@@ -71,13 +76,20 @@ class CrateTierCodecTest {
 
 		assertTrue(sturdy.nestingRank() < reinforced.nestingRank(), "sturdy must outrank below reinforced");
 
-		assertFalse(sturdy.canContain(sturdy), "sturdy must refuse a sturdy crate");
-		assertFalse(sturdy.canContain(reinforced), "sturdy must refuse a reinforced crate");
-		assertTrue(reinforced.canContain(sturdy), "reinforced must accept a sturdy crate");
-		assertFalse(reinforced.canContain(reinforced), "reinforced must refuse a reinforced crate");
+		assertFalse(basic.canContain(basic), "basic must refuse a basic crate with contents");
+		assertFalse(basic.canContain(sturdy), "basic must refuse a sturdy crate with contents");
+		assertFalse(basic.canContain(reinforced), "basic must refuse a reinforced crate with contents");
 
-		// A basic crate spills when broken, so nesting into it compounds nothing.
-		assertTrue(basic.canContain(reinforced), "basic should accept any crate");
+		assertFalse(sturdy.canContain(basic), "sturdy must refuse a basic crate with contents");
+		assertFalse(sturdy.canContain(sturdy), "sturdy must refuse a sturdy crate with contents");
+		assertFalse(sturdy.canContain(reinforced), "sturdy must refuse a reinforced crate with contents");
+
+		assertFalse(reinforced.canContain(basic), "reinforced must refuse a basic crate with contents");
+		assertTrue(reinforced.canContain(sturdy), "reinforced must accept a sturdy crate with contents");
+		assertFalse(reinforced.canContain(reinforced), "reinforced must refuse a reinforced crate with contents");
+
+		// A tier that cannot be resolved is held to nothing, so it is never let in full.
+		assertFalse(reinforced.canContain(CrateTier.FALLBACK), "reinforced must refuse a crate of unknown tier");
 	}
 
 	@Test

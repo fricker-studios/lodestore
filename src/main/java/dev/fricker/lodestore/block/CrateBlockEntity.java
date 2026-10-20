@@ -57,6 +57,7 @@ import dev.fricker.lodestore.api.crate.CrateTier;
 import dev.fricker.lodestore.api.crate.CrateUpgrade;
 import dev.fricker.lodestore.api.crate.UpgradeBehaviour;
 import dev.fricker.lodestore.item.CrateUpgradeItem;
+import dev.fricker.lodestore.item.InstalledUpgrades;
 import dev.fricker.lodestore.menu.CrateMenu;
 import dev.fricker.lodestore.menu.CrateMenuData;
 import dev.fricker.lodestore.registry.LodestoreBlockEntities;
@@ -141,7 +142,8 @@ public class CrateBlockEntity extends BlockEntity
 	 * <p>Kept outside the contents on purpose: upgrades are hardware bolted to the crate, not
 	 * stored goods. Putting them in the inventory would expose them in the chest screen, let a
 	 * hopper pull one out, and — for the tiers whose contents ride inside the dropped item — make
-	 * them duplicate along with everything else.
+	 * them duplicate along with everything else. They travel with the crate in a component of their
+	 * own instead, {@link LodestoreComponents#CRATE_UPGRADES}, for every tier.
 	 */
 	private final NonNullList<ItemStack> upgrades =
 			NonNullList.withSize(CrateTier.MAX_UPGRADE_SLOTS, ItemStack.EMPTY);
@@ -423,7 +425,7 @@ public class CrateBlockEntity extends BlockEntity
 		return previewCount;
 	}
 
-	/** Installed upgrades, empties omitted, for the drop-on-break path and for tests. */
+	/** Installed upgrades, empties omitted. */
 	public List<ItemStack> upgrades() {
 		return installedUpgrades();
 	}
@@ -795,18 +797,13 @@ public class CrateBlockEntity extends BlockEntity
 			return false;
 		}
 
-		CrateTier self = tier();
-
-		if (!self.keepsContents()) {
-			return true;
-		}
-
-		// Stops a crate that keeps its contents from holding another of equal or higher rank,
-		// which would otherwise let storage compound without limit. An empty crate compounds
-		// nothing — it is a block item like any other — so only one with contents is held to it.
+		// A crate with contents goes only where CrateTier#canContain says, which with the shipped
+		// tiers is a sturdy crate inside a reinforced one; a basic crate is a chest and refuses it
+		// as a chest does. An empty crate compounds nothing — it is a block item like any other —
+		// so only one with contents is held to it.
 		if (stack.getItem() instanceof BlockItem blockItem && blockItem.getBlock() instanceof CrateBlock other
 				&& hasContents(stack)) {
-			return self.canContain(resolve(other.tierKey()));
+			return tier().canContain(resolve(other.tierKey()));
 		}
 
 		return true;
@@ -1189,20 +1186,13 @@ public class CrateBlockEntity extends BlockEntity
 	 * this one is not, so spilling is ours to do: every slot's total, as as many legal stacks as it
 	 * takes. The tiers that keep their contents skip it — for them the contents ride inside the
 	 * dropped item via the components below, and spilling as well would duplicate everything.
+	 *
+	 * <p>The upgrades are left alone for every tier. They stay in the crate: the dropped item
+	 * carries them, and the loot table copies them off this block entity after this has run, so
+	 * clearing them here would destroy them.
 	 */
 	@Override
 	public void preRemoveSideEffects(BlockPos pos, BlockState state) {
-		// Upgrades drop for every tier, including the ones that keep their contents: they ride
-		// outside the inventory, so the `minecraft:container` component never carries them and
-		// leaving them here would destroy them with the block.
-		if (level != null && !level.isClientSide()) {
-			for (ItemStack upgrade : installedUpgrades()) {
-				Block.popResource(level, pos, upgrade.copy());
-			}
-		}
-
-		upgrades.clear();
-
 		if (tier().keepsContents() || level == null) {
 			return;
 		}
@@ -1213,17 +1203,36 @@ public class CrateBlockEntity extends BlockEntity
 	}
 
 	/**
-	 * Reads a placed crate's contents back off the item.
+	 * Reads a placed crate's upgrades and contents back off the item.
 	 *
 	 * <p>{@code minecraft:container} carries the visible stacks; the remainders come separately,
 	 * as counts against those stacks, and a count whose stack did not arrive is dropped rather than
 	 * attached to nothing.
+	 *
+	 * <p>The upgrades go back in first. A stack upgrade is what lets a slot hold its remainder, and
+	 * {@link #setChanged} spreads anything over capacity into empty slots, so contents that arrived
+	 * before their upgrade would be spread out by the very placement meant to restore them. They are
+	 * set directly rather than installed, so placing a crate is not mistaken for a stack upgrade
+	 * going in and does not sort it.
 	 */
 	@Override
 	protected void applyImplicitComponents(DataComponentGetter components) {
 		super.applyImplicitComponents(components);
 		name = components.get(DataComponents.CUSTOM_NAME);
 		lockKey = components.getOrDefault(DataComponents.LOCK, LockCode.NO_LOCK);
+
+		InstalledUpgrades fitted = components.getOrDefault(LodestoreComponents.CRATE_UPGRADES, InstalledUpgrades.EMPTY);
+		List<ItemStack> carried = fitted.upgradeStacks();
+		upgrades.clear();
+
+		for (int slot = 0; slot < carried.size() && slot < upgrades.size(); slot++) {
+			upgrades.set(slot, carried.get(slot));
+		}
+
+		lockFilter.clear();
+		lockFilter.addAll(fitted.lockFilterStacks());
+		displaySlot = fitted.displaySlot();
+		displayItem = fitted.displayItemStack();
 
 		contents.clearContent();
 		components.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).copyInto(contents.items());
@@ -1237,7 +1246,8 @@ public class CrateBlockEntity extends BlockEntity
 	 *
 	 * <p>The visible stacks are all legal, so {@code minecraft:container} validates none of them
 	 * away. The remainders go in their own component, and only when there are any, so an ordinary
-	 * crate's drop stays identical to a fresh item and the two still stack.
+	 * crate's drop stays identical to a fresh item and the two still stack. The upgrades work the
+	 * same way, and every tier's loot table copies them.
 	 */
 	@Override
 	protected void collectImplicitComponents(DataComponentMap.Builder builder) {
@@ -1255,6 +1265,12 @@ public class CrateBlockEntity extends BlockEntity
 		if (!overflow.isEmpty()) {
 			builder.set(LodestoreComponents.CRATE_OVERFLOW, overflow);
 		}
+
+		InstalledUpgrades fitted = InstalledUpgrades.of(installedUpgrades(), lockFilter, displaySlot, displayItem);
+
+		if (!fitted.isEmpty()) {
+			builder.set(LodestoreComponents.CRATE_UPGRADES, fitted);
+		}
 	}
 
 	@Override
@@ -1263,5 +1279,9 @@ public class CrateBlockEntity extends BlockEntity
 		output.discard("lock");
 		output.discard("Items");
 		output.discard(CrateContents.OVERFLOW_KEY);
+		output.discard("upgrades");
+		output.discard("lock_filter");
+		output.discard("display_slot");
+		output.discard("display_item");
 	}
 }

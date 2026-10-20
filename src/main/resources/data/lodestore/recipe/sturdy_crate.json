@@ -1,14 +1,11 @@
 {
-  "type": "minecraft:crafting_shaped",
-  "key": {
-    "P": "#minecraft:planks",
-    "D": "lodestore:basic_crate"
+  "type": "minecraft:crafting_transmute",
+  "input": "lodestore:basic_crate",
+  "material": "#minecraft:planks",
+  "material_count": {
+    "min": 8,
+    "max": 8
   },
-  "pattern": [
-    "PPP",
-    "PDP",
-    "PPP"
-  ],
   "result": {
     "id": "lodestore:sturdy_crate"
   }
