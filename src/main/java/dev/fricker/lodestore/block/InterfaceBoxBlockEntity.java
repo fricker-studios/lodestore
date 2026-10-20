@@ -38,8 +38,9 @@ import dev.fricker.lodestore.registry.LodestoreBlockEntities;
  * <p>Holds nothing. Its screen is a view the menu builds while it is open. What it does on its
  * own is pull: like a hopper, it draws from whatever container sits on top of it — a chest, a
  * hopper, a hopper minecart parked on a rail — one item a tick, into the crate on the network that
- * is the item's home. Only items with a home are taken; the rest stay where they were, so a
- * minecart full of mixed loot leaves with what the network had no place for still aboard.
+ * is the item's home, or failing that an unlocked crate, the network's overflow. Only items the
+ * network has a place for are taken; the rest stay where they were, so a minecart full of mixed
+ * loot leaves with what had nowhere to go still aboard.
  *
  * <p>A crate on top is not pulled from. Crates are the network's storage, not its feeders, and a
  * crate touching the box is already on its network, so pulling from it would move an item from a
@@ -73,7 +74,7 @@ public class InterfaceBoxBlockEntity extends BlockEntity implements ExtendedMenu
 
 			ItemVariant variant = view.getResource();
 
-			// Taken and landed in one transaction, so an item with no home is never taken at all.
+			// Taken and landed in one transaction, so an item with nowhere to go is never taken at all.
 			try (Transaction transaction = Transaction.openOuter()) {
 				if (view.extract(variant, 1, transaction) == 1
 						&& StorageNetwork.insertOne(level, crates, variant, transaction)) {
