@@ -347,12 +347,18 @@ public class CrateScreen extends AbstractContainerScreen<CrateMenu> {
 	/**
 	 * Right-click the lock, then click a storage slot to show its item on the front face. Right-
 	 * click the stack upgrade to sort the crate, or the disenchant upgrade to collect what it holds.
+	 *
+	 * <p>Only with an empty cursor, and only on a slot holding an upgrade. A right-click with
+	 * something carried is vanilla's way of placing one of it — and the way many players drop an
+	 * upgrade into the column — and it used to be swallowed here, so a right-clicked upgrade never
+	 * landed and a left-clicked one did, which read as the slot working only sometimes.
 	 */
 	@Override
 	protected void slotClicked(Slot slot, int slotId, int button, ContainerInput input) {
 		CrateMenu menu = getMenu();
 
-		if (slot != null && button == 1 && slotId >= menu.storageEnd() && slotId < menu.upgradeEnd()) {
+		if (slot != null && button == 1 && slot.hasItem() && menu.getCarried().isEmpty()
+				&& slotId >= menu.storageEnd() && slotId < menu.upgradeEnd()) {
 			CrateUpgrade upgrade = upgradeOf(slot.getItem());
 
 			if (stacks(upgrade) || disenchants(upgrade)) {

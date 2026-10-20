@@ -297,15 +297,22 @@ the tiers whose contents ride inside the dropped item they would duplicate along
 else. They stay in the crate when it is broken, for every tier, in a component of their own — see
 [Status](#status).
 
-The storage also refuses upgrades as goods, through both of its doors, and the upgrade slots are
-marked *fake* — a vanilla flag that changes only how the screen draws the item, and the first thing
-Inventory Profiles Next checks when it decides which slots make up a container's sortable area,
-read from its decompiled `AreaTypes`. The two together are what keep a sorter out of the column.
-Before them, a sort treated the column as more slots of the same chest, lifted the upgrade out,
-found nowhere in the grid that would take it, and left it on the cursor. A shift-clicked upgrade
-still goes to the column, as it always did. Should an IPN version stop honouring the flag, its
-`config/inventoryprofilesnext/SlotIntegrationHints.json` takes
+Spare upgrades are goods like any other: the grid takes them by hand and by hopper, so a crate is
+where a player keeps them. The upgrade slots are marked *fake* — a vanilla flag that changes only
+how the screen draws the item, and the first thing Inventory Profiles Next checks when it decides
+which slots make up a container's sortable area, read from its decompiled `AreaTypes` — which is
+what keeps a sorter out of the column. The storage used to refuse upgrades as goods as a second
+guard, so that a sort which lifted an installed upgrade would find nowhere in the grid to put it;
+that cost players the one obvious place to store them, and the flag is the guard that works. A
+shift-clicked upgrade goes to the column first, and into the grid only when the column will not
+take it — full, or already holding one of the same. Should an IPN version stop honouring the flag,
+its `config/inventoryprofilesnext/SlotIntegrationHints.json` takes
 `{"dev.fricker.lodestore.menu.UpgradeSlot": {"ignore": true}}` and does the same by name.
+
+Dropping an upgrade into the column works with either button. A right-click on an installed upgrade
+is a gesture of its own — sort, collect, choose the face's slot — but only with an empty cursor:
+with something carried it is vanilla's way of placing one, and for a while the screen swallowed it,
+so a right-clicked upgrade never landed while a left-clicked one did.
 
 #### Choosing the slot the face shows
 
@@ -807,8 +814,8 @@ crate's grid is fake and a plain one's is not; it spreads what was parked into l
 when taken out, cannot be taken out while the contents need it, and goes back in; a moved stack
 stays where it is put; an aborted insert leaves no trace; the
 comparator measures each slot against its own capacity; the three levels give the right numbers to
-a block, a pearl and a sword, and the deepest decides; upgrades are refused as goods through both
-doors. Migration gets a pair of its own: a tag written in the old shape by hand
+a block, a pearl and a sword, and the deepest decides; upgrades are taken as goods through both
+doors, and a shift-clicked one goes to the column first and into the grid once the column refuses it. Migration gets a pair of its own: a tag written in the old shape by hand
 loads unchanged, its per-slot lock claim carried over to the whole crate, and the same tag with a
 remainder table restores the count; and an old claim on a slot since emptied survives the move. A
 reinforced drawer's block state, a sturdy drawer item with parked counts, and a drawer's block entity,

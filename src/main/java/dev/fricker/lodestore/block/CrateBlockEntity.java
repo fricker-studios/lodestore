@@ -967,13 +967,10 @@ public class CrateBlockEntity extends BlockEntity
 			return false;
 		}
 
-		// Upgrades are hardware, not goods, and the storage never holds them. This is also what
-		// keeps an inventory sorter from shuffling an installed upgrade into the grid: nothing in
-		// the container region will take it, so it stays where it was.
-		if (stack.getItem() instanceof CrateUpgradeItem) {
-			return false;
-		}
-
+		// An upgrade in the grid is goods like any other — a crate is where spare upgrades get
+		// kept. The storage used to refuse them, as a second guard against an inventory sorter
+		// lifting an installed upgrade into the grid; the column's fake flag is what actually
+		// keeps the sorter out, and the refusal cost players the one obvious place to store them.
 		if (!accepts(stack)) {
 			return false;
 		}

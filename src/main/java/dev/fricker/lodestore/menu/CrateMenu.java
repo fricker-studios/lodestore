@@ -197,8 +197,9 @@ public class CrateMenu extends AbstractContainerMenu {
 
 	/**
 	 * Shift-clicking. An upgrade moved in from the player's inventory goes to the upgrade column
-	 * rather than into storage, which is the only sensible reading of the gesture — a crate full
-	 * of loose upgrade items is never what was meant.
+	 * first, which is the likelier reading of the gesture; only when the column will not take it —
+	 * full, or already holding one of the same — does it go into storage like any other item, so a
+	 * crate can keep spare upgrades.
 	 *
 	 * <p>Out of a storage slot, this moves one legal stack; vanilla then calls it again for as long
 	 * as the slot still holds the same item, so a slot with stacks parked behind the visible one
@@ -220,10 +221,9 @@ public class CrateMenu extends AbstractContainerMenu {
 			if (!moveItemStackTo(stack, upgradeEnd(), playerEnd, true)) {
 				return ItemStack.EMPTY;
 			}
-		} else if (stack.getItem() instanceof CrateUpgradeItem) {
-			if (!moveItemStackTo(stack, storageEnd(), upgradeEnd(), false)) {
-				return ItemStack.EMPTY;
-			}
+		} else if (stack.getItem() instanceof CrateUpgradeItem
+				&& moveItemStackTo(stack, storageEnd(), upgradeEnd(), false)) {
+			// Installed; nothing left to move.
 		} else if (!moveItemStackTo(stack, 0, storageEnd(), false)) {
 			return ItemStack.EMPTY;
 		}
