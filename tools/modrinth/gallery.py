@@ -39,13 +39,24 @@ def request(method, path, token, body=None, content_type=None):
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", "replace")
+
+        if error.code == 404 and path.startswith("/project/"):
+            # Modrinth hides a draft project from anyone who may not read it, with a 404 rather
+            # than a 403, so this is as likely a token without the read scopes as a wrong slug.
+            sys.exit(f"{method} {path} -> 404. Either the project slug or id is wrong, or the token cannot "
+                     "see the draft project: it needs the 'Read projects' and 'Read versions' scopes as "
+                     "well as 'Create versions' (and 'Write projects' for the gallery). The project id "
+                     "from the Modrinth project settings page can be passed with --project, or set as "
+                     "the MODRINTH_PROJECT repository variable.")
+
         sys.exit(f"{method} {path} -> {error.code}: {detail}")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dir", default="docs/modrinth/gallery", type=pathlib.Path)
-    parser.add_argument("--project", default="lodestore", help="the Modrinth project slug or id")
+    parser.add_argument("--project", default=os.environ.get("MODRINTH_PROJECT") or "lodestore",
+                        help="the Modrinth project slug or id; defaults to $MODRINTH_PROJECT, then 'lodestore'")
     parser.add_argument("--dry-run", action="store_true", help="print what would be sent and stop")
     args = parser.parse_args()
 
