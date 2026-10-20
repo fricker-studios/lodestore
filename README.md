@@ -62,7 +62,9 @@ The same tag publishes the jar to [Modrinth](https://modrinth.com/project/lodest
 release notes GitHub generated as the changelog: a release candidate goes up as a beta, a bare
 version as a release, both needing Fabric API and filed under the Minecraft version in
 `gradle.properties`. The step needs a `MODRINTH_TOKEN` repository secret — a Modrinth token with the *Read projects*,
-*Read versions*, *Create versions* and *Write projects* scopes, the last for the gallery — and
+*Read versions*, *Create versions*, *Write versions* and *Write projects* scopes — the fourth sets
+each version's environment, client and server, which the create call cannot; the last is for the
+gallery — and
 skips without one. The project is found by its `lodestore` slug, or by the id in the
 `MODRINTH_PROJECT` repository variable when one is set; a draft project answers a token that
 cannot read it with a 404, and the scripts say so.

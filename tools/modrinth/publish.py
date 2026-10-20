@@ -24,17 +24,18 @@ import urllib.request
 import uuid
 
 API = "https://api.modrinth.com/v2"
+API_V3 = "https://api.modrinth.com/v3"
 USER_AGENT = "fricker-studios/lodestore (github.com/fricker-studios/lodestore)"
 FABRIC_API = "P7dR8mSH"
 
 
-def request(method, path, token, body=None, content_type=None):
+def request(method, path, token, body=None, content_type=None, api=API):
     headers = {"User-Agent": USER_AGENT, "Authorization": token}
 
     if content_type:
         headers["Content-Type"] = content_type
 
-    req = urllib.request.Request(API + path, data=body, method=method, headers=headers)
+    req = urllib.request.Request(api + path, data=body, method=method, headers=headers)
 
     try:
         with urllib.request.urlopen(req, timeout=120) as response:
@@ -88,6 +89,8 @@ def main():
     parser.add_argument("--jar", required=True, type=pathlib.Path, help="the mod jar to upload")
     parser.add_argument("--changelog", type=pathlib.Path, help="a Markdown file; the GitHub release notes")
     parser.add_argument("--game-version", default="26.2", help="the Minecraft version the jar targets")
+    parser.add_argument("--environment", default="client_and_server",
+                        help="where the jar must be installed; a mod with blocks is needed on both sides")
     parser.add_argument("--project", default=os.environ.get("MODRINTH_PROJECT") or "lodestore",
                         help="the Modrinth project slug or id; defaults to $MODRINTH_PROJECT, then 'lodestore'")
     parser.add_argument("--dry-run", action="store_true", help="print what would be sent and stop")
@@ -110,6 +113,7 @@ def main():
         "loaders": ["fabric"],
         "featured": False,
         "status": "listed",
+        "environment": args.environment,
         "project_id": args.project,
         "file_parts": ["file"],
         "primary_file": "file",
@@ -127,16 +131,40 @@ def main():
     project = request("GET", f"/project/{args.project}", token)
     data["project_id"] = project["id"]
 
+    created = None
+
     for existing in request("GET", f"/project/{project['id']}/version", token) or []:
         if existing["version_number"] == version:
-            print(f"Modrinth already has {version} ({existing['id']}); nothing to do")
-            return
+            print(f"Modrinth already has {version} ({existing['id']})")
+            created = existing
+            break
 
-    body, content_type = multipart(
-        {"data": json.dumps(data)},
-        {"file": (args.jar.name, args.jar.read_bytes(), "application/java-archive")})
-    created = request("POST", "/version", token, body, content_type)
-    print(f"published {version} as {created['id']}: https://modrinth.com/project/{project['slug']}/version/{version}")
+    if created is None:
+        body, content_type = multipart(
+            {"data": json.dumps(data)},
+            {"file": (args.jar.name, args.jar.read_bytes(), "application/java-archive")})
+        created = request("POST", "/version", token, body, content_type)
+        print(f"published {version} as {created['id']}: https://modrinth.com/project/{project['slug']}/version/{version}")
+
+    ensure_environment(created["id"], version, args.environment, token)
+
+
+def ensure_environment(version_id, version, environment, token):
+    """Sets the version's environment where Modrinth now keeps it, per version.
+
+    The v2 create call takes no environment, so a version goes up as "unknown" — which the
+    project page shows as missing — and the environment lives on the v3 version object. Read
+    back and patched only when it differs, so a backfill of versions that already had it costs
+    one GET each. The patch needs the token's 'Write versions' scope.
+    """
+    current = request("GET", f"/version/{version_id}", token, api=API_V3)
+
+    if current.get("environment") == environment:
+        return
+
+    request("PATCH", f"/version/{version_id}", token, json.dumps({"environment": environment}).encode(),
+            "application/json", api=API_V3)
+    print(f"set {version} environment to {environment} (was {current.get('environment')})")
 
 
 if __name__ == "__main__":
