@@ -152,6 +152,69 @@ REINFORCED_TOP = OAK_TOP
 for r, c in ((0, 0), (0, 13), (13, 0), (13, 13)):
     REINFORCED_TOP = overlay(REINFORCED_TOP, r, c, CORNER_PLATE)
 
+# ------------------------------------------------------------ network blocks
+#
+# The network is iron and copper where the crates are oak: a connection block is a dark iron
+# plate with a copper conduit crossing it, so a run of them reads as one line from any side, and
+# the two devices are crates with that same iron and copper bolted on.
+
+CONNECTION_BLOCK = (
+    ["GGGGGGGGGGGGGGGG",
+     "GNBBBBBjkBBBBBNG"]
+    + ["GBBBBBBjkBBBBBBG"] * 5
+    + ["GjjjjjjjjjjjjjjG",
+       "GkkkkkkkkkkkkkkG"]
+    + ["GBBBBBBjkBBBBBBG"] * 5
+    + ["GNBBBBBjkBBBBBNG",
+       "GGGGGGGGGGGGGGGG"]
+)
+
+# The deposit box is a crate with a hopper's mouth let into its top and a copper arrow pointing
+# down each side: things go in here and leave downward, into the network.
+_MOUTH = [
+    "GGGGGGGGGG",
+    "GNNNNNNNNG",
+    "GNSSSSSSNG",
+    "GNSXXXXSNG",
+    "GNSXXXXSNG",
+    "GNSXXXXSNG",
+    "GNSXXXXSNG",
+    "GNSSSSSSNG",
+    "GNNNNNNNNG",
+    "GGGGGGGGGG",
+]
+DEPOSIT_BOX_TOP = overlay(OAK_TOP, 3, 3, _MOUTH)
+
+_ARROW = [
+    "~~~~~~jk~~~~~~",
+    "~~~~~~jk~~~~~~",
+    "~~~~~~jk~~~~~~",
+    "~~jkkkkkkkkk~~",
+    "~~~jkkkkkkk~~~",
+    "~~~~jkkkkk~~~~",
+    "~~~~~jkkk~~~~~",
+    "~~~~~~jk~~~~~~",
+]
+DEPOSIT_BOX_SIDE = overlay(OAK_PLANKS, 0, 0, IRON_BAND)
+DEPOSIT_BOX_SIDE = overlay(DEPOSIT_BOX_SIDE, 4, 1, _ARROW)
+
+# The interface box is a crate whose front panel is a screen: dark glass with a grid of lit
+# cells, which is what its own screen shows when opened.
+_SCREEN = [
+    "tttttttttttt",
+    "tCCttCCttCCt",
+    "tCCttCCttCCt",
+    "tttttttttttt",
+    "tCCttCCttCCt",
+    "tCCttCCttCCt",
+    "tttttttttttt",
+    "tCCttCCttCCt",
+    "tCCttCCttCCt",
+    "tttttttttttt",
+]
+INTERFACE_BOX_FRONT = overlay(BASIC_FRONT, 3, 2, _SCREEN)
+INTERFACE_BOX_SIDE = overlay(OAK_PLANKS, 0, 0, IRON_BAND)
+
 # ------------------------------------------------------------- upgrade sprites
 
 
@@ -230,6 +293,11 @@ BLOCKS = {
     "reinforced_crate_front": REINFORCED_FRONT,
     "reinforced_crate_side": REINFORCED_SIDE,
     "reinforced_crate_top": REINFORCED_TOP,
+    "connection_block": CONNECTION_BLOCK,
+    "deposit_box_top": DEPOSIT_BOX_TOP,
+    "deposit_box_side": DEPOSIT_BOX_SIDE,
+    "interface_box_front": INTERFACE_BOX_FRONT,
+    "interface_box_side": INTERFACE_BOX_SIDE,
 }
 LOCK_UPGRADE = plate(LOCK_MOTIF)
 

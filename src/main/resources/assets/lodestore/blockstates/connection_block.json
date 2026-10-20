@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "lodestore:block/connection_block"
+    }
+  }
+}

@@ -12,7 +12,7 @@ import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;
 
 import dev.fricker.lodestore.Lodestore;
 
-/** Lodestore's own creative tab. Backpacks and network devices will join it in later phases. */
+/** Lodestore's own creative tab. Backpacks will join it in a later phase. */
 public final class LodestoreCreativeTab {
 	public static final ResourceKey<CreativeModeTab> KEY =
 			ResourceKey.create(Registries.CREATIVE_MODE_TAB, Lodestore.id("general"));
