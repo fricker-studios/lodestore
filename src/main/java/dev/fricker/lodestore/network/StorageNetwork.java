@@ -18,6 +18,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
 import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
+import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
 
 import dev.fricker.lodestore.block.ConnectionBlock;
 import dev.fricker.lodestore.block.CrateBlockEntity;
@@ -122,6 +123,29 @@ public final class StorageNetwork {
 			ItemStack held = crate.contents().visible(slot);
 
 			if (!held.isEmpty() && ItemStack.isSameItem(held, stack)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Puts one of {@code variant} into the first crate on the list that is its home and has room,
+	 * inside {@code transaction}. The deposit box and the interface box both feed the network
+	 * through this, so a home means the same thing at either.
+	 *
+	 * @return whether it landed; if not, nothing was changed
+	 */
+	public static boolean insertOne(Level level, List<BlockPos> crates, ItemVariant variant, TransactionContext transaction) {
+		ItemStack stack = variant.toStack();
+
+		for (BlockPos at : crates) {
+			if (!(level.getBlockEntity(at) instanceof CrateBlockEntity crate) || crate.isRemoved() || !isHome(crate, stack)) {
+				continue;
+			}
+
+			if (crate.storage().insert(variant, 1, transaction) == 1) {
 				return true;
 			}
 		}
