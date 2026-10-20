@@ -80,7 +80,7 @@ public class RefiningUpgradeGameTests {
 		expectTotals(helper, crate, "after compressing 81 nuggets",
 				Items.IRON_BLOCK, 1, Items.IRON_INGOT, 0, Items.IRON_NUGGET, 0);
 
-		List<Item> family = Compression.family(helper.getLevel(), Items.IRON_NUGGET);
+		List<Item> family = Compression.family(helper.getLevel(), Items.IRON_NUGGET, false);
 
 		if (!family.equals(List.of(Items.IRON_BLOCK, Items.IRON_INGOT, Items.IRON_NUGGET))) {
 			throw helper.assertionException("iron's family should be block, ingot, nugget, is " + family);
@@ -110,8 +110,138 @@ public class RefiningUpgradeGameTests {
 				Items.AMETHYST_SHARD, 4, Items.AMETHYST_BLOCK, 0,
 				Items.BONE_BLOCK, 1, Items.HAY_BLOCK, 1, Items.WHEAT, 0);
 
-		if (Compression.stepUp(helper.getLevel(), Items.BONE) != null) {
+		if (Compression.stepUp(helper.getLevel(), Items.BONE, false) != null) {
 			throw helper.assertionException("bone must have no step up: bone meal does not craft back into bone");
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * Turned on, destructive compression follows the one-way pathways: four quartz and four shards
+	 * into their blocks, and bones — which split into bone meal, which pairs with the bone block —
+	 * three to a block, with the odd bone left as a bone. The pair is the test above: the same
+	 * items, untouched, with the setting off.
+	 */
+	@GameTest
+	public void destructiveCompressionFollowsTheOneWayPathways(GameTestHelper helper) {
+		CrateBlockEntity crate = fitted(helper, LodestoreBlocks.BASIC_CRATE, LodestoreItems.COMPRESS_UPGRADE);
+		crate.contents().setItem(0, new ItemStack(Items.BONE, 10));
+		crate.contents().setItem(1, new ItemStack(Items.QUARTZ, 4));
+		crate.contents().setItem(2, new ItemStack(Items.AMETHYST_SHARD, 4));
+		crate.setChanged();
+
+		expectTotals(helper, crate, "with the setting off", Items.BONE, 10, Items.QUARTZ, 4, Items.AMETHYST_SHARD, 4);
+
+		expect(helper, crate.toggleDestructiveCompression(), true, "the compress upgrade should take the setting");
+		expect(helper, crate.destructiveCompression(), true, "the setting should be on after one toggle");
+
+		expectTotals(helper, crate, "with the setting on",
+				Items.BONE_BLOCK, 3, Items.BONE, 1, Items.BONE_MEAL, 0,
+				Items.QUARTZ_BLOCK, 1, Items.QUARTZ, 0,
+				Items.AMETHYST_BLOCK, 1, Items.AMETHYST_SHARD, 0);
+
+		CrateBlockEntity plain = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.BASIC_CRATE);
+		expect(helper, plain.toggleDestructiveCompression(), false, "a crate without a compress upgrade has nothing to toggle");
+		helper.succeed();
+	}
+
+	/**
+	 * The split shape is narrow on purpose: a log splits into planks, but planks and a crafting
+	 * table are not a pair that craft into each other, so logs stay logs and planks stay planks
+	 * even destructively. Iron keeps compressing as before, since the reversible table is a subset.
+	 */
+	@GameTest
+	public void destructiveCompressionNeverMakesCraftingTablesOfLogs(GameTestHelper helper) {
+		CrateBlockEntity crate = fitted(helper, LodestoreBlocks.BASIC_CRATE, LodestoreItems.COMPRESS_UPGRADE);
+		crate.toggleDestructiveCompression();
+		crate.contents().setItem(0, new ItemStack(Items.OAK_LOG, 9));
+		crate.contents().setItem(1, new ItemStack(Items.OAK_PLANKS, 9));
+		crate.contents().setItem(2, new ItemStack(Items.IRON_INGOT, 9));
+		crate.setChanged();
+
+		expectTotals(helper, crate, "destructively, with logs and planks",
+				Items.OAK_LOG, 9, Items.OAK_PLANKS, 9, Items.CRAFTING_TABLE, 0, Items.OAK_WOOD, 0,
+				Items.IRON_BLOCK, 1, Items.IRON_INGOT, 0);
+		helper.succeed();
+	}
+
+	/**
+	 * The setting is the upgrade's: it survives a save and a break, as the upgrade does, and goes
+	 * when the upgrade comes out, so a compress upgrade put into another crate starts off safe.
+	 * The menu's button is what a right-click on the screen sends.
+	 */
+	@GameTest(maxTicks = 100)
+	public void theDestructiveSettingBelongsToTheUpgrade(GameTestHelper helper) {
+		CrateBlockEntity crate = fitted(helper, LodestoreBlocks.STURDY_CRATE, LodestoreItems.COMPRESS_UPGRADE);
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		AbstractContainerMenu menu = crate.createMenu(1, player.getInventory(), player);
+
+		if (menu == null) {
+			throw helper.assertionException("the crate refused to open");
+		}
+
+		expect(helper, menu.clickMenuButton(player, dev.fricker.lodestore.menu.CrateMenu.DESTRUCTIVE_BUTTON), true,
+				"the button should toggle the setting");
+		expect(helper, crate.destructiveCompression(), true, "the button should have turned the setting on");
+
+		CompoundTag written = crate.saveCustomOnly(helper.getLevel().registryAccess());
+		CrateBlockEntity reloaded = new CrateBlockEntity(
+				helper.absolutePos(CRATE), LodestoreBlocks.STURDY_CRATE.defaultBlockState());
+		reloaded.setLevel(helper.getLevel());
+		reloaded.loadWithComponents(TagValueInput.create(
+				ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), written));
+		expect(helper, reloaded.destructiveCompression(), true, "the setting did not survive a save and load");
+
+		helper.getLevel().destroyBlock(helper.absolutePos(CRATE), true, null, 512);
+
+		helper.runAtTickTime(5, () -> {
+			ItemStack dropped = helper.getLevel()
+					.getEntitiesOfClass(ItemEntity.class, new AABB(helper.absolutePos(CRATE)).inflate(6.0))
+					.stream().map(ItemEntity::getItem)
+					.filter(stack -> stack.is(LodestoreBlocks.STURDY_CRATE.asItem()))
+					.findFirst()
+					.orElseThrow(() -> helper.assertionException("the crate did not drop"));
+
+			CrateBlockEntity placed = place(helper, new BlockPos(3, 1, 1), LodestoreBlocks.STURDY_CRATE);
+			placed.applyComponentsFromItemStack(dropped);
+			placed.setChanged();
+			expect(helper, placed.destructiveCompression(), true, "the setting did not survive the crate being broken and placed");
+
+			placed.upgradeContainer().setItem(0, ItemStack.EMPTY);
+			expect(helper, placed.destructiveCompression(), false, "taking the compress upgrade out should forget the setting");
+			helper.succeed();
+		});
+	}
+
+	/** A crate locked to bone blocks takes bones only once it may make bone blocks of them. */
+	@GameTest
+	public void aLockedBoneBlockCrateTakesBonesOnlyDestructively(GameTestHelper helper) {
+		CrateBlockEntity crate = place(helper, CRATE, LodestoreBlocks.STURDY_CRATE);
+		crate.contents().setItem(0, new ItemStack(Items.BONE_BLOCK, 1));
+		crate.setChanged();
+		crate.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+		crate.installUpgrade(new ItemStack(LodestoreItems.COMPRESS_UPGRADE));
+
+		expect(helper, crate.canStore(5, new ItemStack(Items.BONE_MEAL)), true,
+				"bone meal and the bone block craft into each other, so the lock must take bone meal");
+		expect(helper, crate.canStore(5, new ItemStack(Items.BONE)), false,
+				"bones do not craft back, so without the setting the lock must refuse them");
+
+		crate.toggleDestructiveCompression();
+
+		expect(helper, crate.canStore(5, new ItemStack(Items.BONE)), true,
+				"with the setting on, bones are what the crate will make bone blocks of");
+		expect(helper, crate.canStore(5, new ItemStack(Items.DIRT)), false, "dirt is still dirt");
+
+		List<Item> family = Compression.family(helper.getLevel(), Items.BONE_BLOCK, true);
+
+		if (!family.contains(Items.BONE) || !family.contains(Items.BONE_MEAL) || family.getFirst() != Items.BONE_BLOCK) {
+			throw helper.assertionException("the bone block's destructive family should be block, meal and bone, is " + family);
+		}
+
+		if (Compression.family(helper.getLevel(), Items.BONE_BLOCK, false).contains(Items.BONE)) {
+			throw helper.assertionException("the reversible family must not reach the bone");
 		}
 
 		helper.succeed();

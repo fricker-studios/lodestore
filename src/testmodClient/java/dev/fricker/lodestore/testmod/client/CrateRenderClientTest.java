@@ -240,6 +240,11 @@ public class CrateRenderClientTest implements FabricClientGameTest {
 		crate.contents().setItem(4, sword);
 		crate.setChanged();
 
+		// A fifth, destructive: the compress upgrade wears a red wash while it may follow the
+		// one-way pathways, which is the one visible difference between the two settings.
+		crate.installUpgrade(new ItemStack(LodestoreItems.COMPRESS_UPGRADE));
+		crate.toggleDestructiveCompression();
+
 		// Slot 0 is filled to its four stacks: the stacked-slot screenshot hovers it, and the slot
 		// should draw 256 where a plain one would draw 64, with the tooltip saying out of how much.
 		try (Transaction transaction = Transaction.openOuter()) {

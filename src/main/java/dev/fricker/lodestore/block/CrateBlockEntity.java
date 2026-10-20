@@ -244,6 +244,14 @@ public class CrateBlockEntity extends BlockEntity
 	 */
 	private long storedExperience;
 
+	/**
+	 * Whether the compress upgrade may follow one-way pathways — bones to bone blocks, quartz to
+	 * a block — which destroy the loose form. Off until a right-click on the installed upgrade
+	 * turns it on, for this crate alone, and forgotten when the upgrade comes out: it is a
+	 * setting of the upgrade, not of the crate.
+	 */
+	private boolean destructiveCompression;
+
 	/** Whether a lock is installed, as the server last told this client, which has no upgrades. */
 	private boolean syncedLocked;
 
@@ -660,7 +668,7 @@ public class CrateBlockEntity extends BlockEntity
 		}
 
 		for (ItemStack kind : kinds) {
-			if (Compression.sameFamily(server, kind, stack)) {
+			if (Compression.sameFamily(server, kind, stack, destructiveCompression)) {
 				return true;
 			}
 		}
@@ -679,7 +687,8 @@ public class CrateBlockEntity extends BlockEntity
 
 	/** Whether a compress upgrade puts both items on one chain — nugget, ingot and block are one. */
 	private boolean sameFamily(ItemStack a, ItemStack b) {
-		return compresses() && level instanceof ServerLevel server && Compression.sameFamily(server, a, b);
+		return compresses() && level instanceof ServerLevel server
+				&& Compression.sameFamily(server, a, b, destructiveCompression);
 	}
 
 	/**
@@ -693,7 +702,7 @@ public class CrateBlockEntity extends BlockEntity
 
 		if (compresses() && level instanceof ServerLevel server) {
 			for (ItemStack kind : lockedItems()) {
-				for (Item member : Compression.family(server, kind.getItem())) {
+				for (Item member : Compression.family(server, kind.getItem(), destructiveCompression)) {
 					ItemStack relative = new ItemStack(member);
 
 					if (!containsKind(claim, relative)) {
@@ -863,6 +872,28 @@ public class CrateBlockEntity extends BlockEntity
 		return storedExperience;
 	}
 
+	/** Whether this crate's compress upgrade follows one-way pathways as well as those that craft back. */
+	public boolean destructiveCompression() {
+		return destructiveCompression;
+	}
+
+	/**
+	 * Allows or forbids destructive compression, as a right-click on the installed compress
+	 * upgrade asks. Turning it on compresses at once whatever the wider table now covers, since
+	 * the player has just asked for exactly that.
+	 *
+	 * @return {@code false} without a compress upgrade, when there is nothing to toggle
+	 */
+	public boolean toggleDestructiveCompression() {
+		if (!compresses()) {
+			return false;
+		}
+
+		destructiveCompression = !destructiveCompression;
+		setChanged();
+		return true;
+	}
+
 	/**
 	 * Hands the banked experience to {@code player}, all of it, as a right-click on the installed
 	 * disenchant upgrade asks. Points, not levels, so nothing is rounded away.
@@ -902,7 +933,11 @@ public class CrateBlockEntity extends BlockEntity
 		}
 
 		if (compresses()) {
-			contents.compress(kind -> Compression.stepUp(server, kind.getItem()), this::isDisplaySlot);
+			contents.compress(kind -> Compression.stepUp(server, kind.getItem(), destructiveCompression),
+					this::isDisplaySlot);
+		} else {
+			// The setting belongs to the upgrade: out with it, off with it.
+			destructiveCompression = false;
 		}
 	}
 
@@ -1255,6 +1290,10 @@ public class CrateBlockEntity extends BlockEntity
 			data.putLong("stored_experience", storedExperience);
 		}
 
+		if (destructiveCompression) {
+			data.putBoolean("destructive_compression", true);
+		}
+
 		saveLockState(data, false);
 	}
 
@@ -1276,6 +1315,7 @@ public class CrateBlockEntity extends BlockEntity
 
 		loadLockState(data);
 		storedExperience = Math.max(0, data.getLongOr("stored_experience", 0L));
+		destructiveCompression = data.getBooleanOr("destructive_compression", false);
 		broadcastFilters = List.copyOf(lockedItems());
 
 		syncedLocked = data.getBooleanOr("locked", false);
@@ -1327,6 +1367,7 @@ public class CrateBlockEntity extends BlockEntity
 				case CrateMenu.DATA_LOCKED -> locks() ? 1 : 0;
 				case CrateMenu.DATA_REMOVABLE -> removableUpgrades();
 				case CrateMenu.DATA_EXPERIENCE -> (int) Math.min(storedExperience, Integer.MAX_VALUE);
+				case CrateMenu.DATA_DESTRUCTIVE -> destructiveCompression ? 1 : 0;
 				default -> 0;
 			};
 		}
@@ -1422,6 +1463,7 @@ public class CrateBlockEntity extends BlockEntity
 		displaySlot = fitted.displaySlot();
 		displayItem = fitted.displayItemStack();
 		storedExperience = Math.max(0, fitted.storedExperience());
+		destructiveCompression = fitted.destructiveCompression();
 
 		contents.clearContent();
 		components.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).copyInto(contents.items());
@@ -1456,7 +1498,7 @@ public class CrateBlockEntity extends BlockEntity
 		}
 
 		InstalledUpgrades fitted = InstalledUpgrades.of(installedUpgrades(), lockFilter, displaySlot, displayItem,
-				storedExperience);
+				storedExperience, destructiveCompression);
 
 		if (!fitted.isEmpty()) {
 			builder.set(LodestoreComponents.CRATE_UPGRADES, fitted);
@@ -1474,5 +1516,6 @@ public class CrateBlockEntity extends BlockEntity
 		output.discard("display_slot");
 		output.discard("display_item");
 		output.discard("stored_experience");
+		output.discard("destructive_compression");
 	}
 }

@@ -423,11 +423,26 @@ destroy the loose form, and a crate must not make it on the player's behalf. Req
 recipe is what draws that line, for every item in the game and in every other mod, without a list
 to keep. The pathways are read off the recipes through `RecipeManager#getRecipeFor` with a grid of
 the one item and then with the result alone — the lookup a crafting table makes, on public API —
-and cached per item until the recipes reload. Only plain items are compressed; a renamed ingot is
-not the ingot the recipe names. What does not make a whole block stays loose, and a result that
-has nowhere to land is not made — except that a crate full to the last slot with ingots drains one
+built in one pass over the recipes and kept until they reload. A recipe counts only when every
+ingredient is the same single item — a tag of planks is not an item — and only as the table would
+actually resolve a grid of that item. Only plain items are compressed; a renamed ingot is not the
+ingot the recipe names. What does not make a whole block stays loose, and a result that has
+nowhere to land is not made — except that a crate full to the last slot with ingots drains one
 slot of them to make the room, since otherwise the one crate most in need of compressing would be
 the one that could not.
+
+The line can be crossed on purpose. Right-click the installed compress upgrade and the crate
+follows the one-way pathways too — *destructive* compression: four quartz into a block, four
+shards into an amethyst block, nine snowballs or nine ice into their blocks, and bones into bone
+blocks. Bones are the one shape of pathway that starts with a split rather than a grid — a bone
+crafts into three bone meal, and bone meal and the bone block craft into each other — so three
+bones make a block and the odd bone stays a bone. A split counts only when it lands in a pair like
+that; a log splits into planks, but planks and a crafting table are not a pair, so logs stay logs
+however the setting is set. The setting is the upgrade's, for one crate: the upgrade wears a red
+wash in the screen while it is on, its tooltip says which table is in force, it rides on the crate
+item with the upgrade, and taking the upgrade out forgets it, so a compress upgrade moved to
+another crate starts off safe. The lock, the void and the network's homes follow the wider family
+while it is on — a crate locked to bone blocks takes bones — and not otherwise.
 
 **Disenchanting.** Whatever goes in with an enchantment on it comes out without, and the crate
 banks what the enchantment was worth — the grindstone's own arithmetic, roll included, so the
@@ -849,7 +864,11 @@ meal and wheat are compressed; a renamed ingot is not compressed; new blocks joi
 already there; a crate full to the last slot with ingots still compresses; a crate locked to
 blocks refuses a nugget until the compress upgrade goes in, then takes nuggets by hand and by
 hopper while still refusing dirt, and is the network's home for them; a full voiding crate of
-blocks refuses nuggets until it compresses, then voids them. An enchanted sword is stripped and
+blocks refuses nuggets until it compresses, then voids them. Destructively: bones, quartz and
+shards become their blocks once the setting is on and not before, three bones to a bone block with
+the odd bone left; logs and planks never become anything; the setting survives a save and a break,
+goes when the upgrade comes out, and is what the menu's button toggles; a crate locked to bone
+blocks takes bones only once the setting is on. An enchanted sword is stripped and
 the bank grows by between half and all of the grindstone's figure; a stripped book joins the
 books; curses stay on and an item with only a curse is worth nothing; collecting through the
 menu's button hands the player every point, empties the bank and frees the upgrade, which could

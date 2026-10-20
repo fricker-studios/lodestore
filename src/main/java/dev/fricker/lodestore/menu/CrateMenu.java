@@ -40,12 +40,14 @@ public class CrateMenu extends AbstractContainerMenu {
 
 	/**
 	 * What the client needs that slots cannot carry: whether a lock is installed, which upgrades
-	 * may be taken out, and how much experience the disenchant upgrade holds.
+	 * may be taken out, how much experience the disenchant upgrade holds, and whether the compress
+	 * upgrade follows one-way pathways.
 	 */
 	public static final int DATA_LOCKED = 0;
 	public static final int DATA_REMOVABLE = 1;
 	public static final int DATA_EXPERIENCE = 2;
-	public static final int DATA_COUNT = 3;
+	public static final int DATA_DESTRUCTIVE = 3;
+	public static final int DATA_COUNT = 4;
 
 	/** Button ids below this name a storage slot for the face to show; storage never exceeds 54. */
 	private static final int DISPLAY_BUTTONS = 256;
@@ -53,6 +55,8 @@ public class CrateMenu extends AbstractContainerMenu {
 	public static final int SORT_BUTTON = DISPLAY_BUTTONS;
 	/** The next: hand over the banked experience, as a right-click on the disenchant upgrade asks. */
 	public static final int COLLECT_BUTTON = DISPLAY_BUTTONS + 1;
+	/** And the next: allow or forbid destructive compression, as one on the compress upgrade asks. */
+	public static final int DESTRUCTIVE_BUTTON = DISPLAY_BUTTONS + 2;
 
 	private final Container storage;
 	private final @Nullable CrateBlockEntity crate;
@@ -147,6 +151,11 @@ public class CrateMenu extends AbstractContainerMenu {
 		return menuData.get(DATA_EXPERIENCE);
 	}
 
+	/** Whether the compress upgrade follows one-way pathways, from the synced menu data. */
+	public boolean destructiveCompression() {
+		return menuData.get(DATA_DESTRUCTIVE) != 0;
+	}
+
 	public int storageEnd() {
 		return rows * 9;
 	}
@@ -181,6 +190,10 @@ public class CrateMenu extends AbstractContainerMenu {
 
 		if (id == COLLECT_BUTTON) {
 			return crate.collectExperience(player);
+		}
+
+		if (id == DESTRUCTIVE_BUTTON) {
+			return crate.toggleDestructiveCompression();
 		}
 
 		if (id >= storageEnd()) {

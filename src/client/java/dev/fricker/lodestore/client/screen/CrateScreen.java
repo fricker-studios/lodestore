@@ -77,6 +77,8 @@ public class CrateScreen extends AbstractContainerScreen<CrateMenu> {
 	private static final float MIN_COUNT_SCALE = 0.6F;
 	/** The experience bar's own green, for the levels the disenchant upgrade holds. */
 	private static final int EXPERIENCE_COLOUR = 0xFF80FF20;
+	/** A warning red over the compress upgrade while it is allowed to destroy the loose form. */
+	private static final int DESTRUCTIVE_TINT = 0x66E04A3C;
 
 	private final int rows;
 
@@ -174,9 +176,23 @@ public class CrateScreen extends AbstractContainerScreen<CrateMenu> {
 			return;
 		}
 
+		CrateMenu menu = getMenu();
+
+		// A compress upgrade allowed to follow one-way pathways wears a red wash, so a crate that
+		// will turn bones into bone blocks says so before anything goes in.
+		if (menu.destructiveCompression()) {
+			for (int index = menu.storageEnd(); index < menu.upgradeEnd(); index++) {
+				Slot upgradeSlot = menu.getSlot(index);
+
+				if (compresses(upgradeOf(upgradeSlot.getItem()))) {
+					graphics.fill(upgradeSlot.x, upgradeSlot.y, upgradeSlot.x + 16, upgradeSlot.y + 16, DESTRUCTIVE_TINT);
+				}
+			}
+		}
+
 		int slot = crate.displaySlot();
 
-		if (slot < 0 || slot >= getMenu().storageEnd()) {
+		if (slot < 0 || slot >= menu.storageEnd()) {
 			return;
 		}
 
@@ -246,6 +262,10 @@ public class CrateScreen extends AbstractContainerScreen<CrateMenu> {
 		// upgrade that quietly turns ingots into blocks with no word of warning looks like a bug.
 		if (compresses(upgrade)) {
 			hinted.add(Component.translatable("lodestore.upgrade.compresses").withStyle(ChatFormatting.GRAY));
+			hinted.add(menu.destructiveCompression()
+					? Component.translatable("lodestore.upgrade.destructive_on").withStyle(ChatFormatting.RED)
+					: Component.translatable("lodestore.upgrade.destructive_off").withStyle(ChatFormatting.DARK_GRAY));
+			hinted.add(Component.translatable("lodestore.upgrade.toggle_destructive").withStyle(ChatFormatting.GRAY));
 		}
 
 		if (repairs(upgrade)) {
@@ -346,7 +366,8 @@ public class CrateScreen extends AbstractContainerScreen<CrateMenu> {
 
 	/**
 	 * Right-click the lock, then click a storage slot to show its item on the front face. Right-
-	 * click the stack upgrade to sort the crate, or the disenchant upgrade to collect what it holds.
+	 * click the stack upgrade to sort the crate, the disenchant upgrade to collect what it holds, or
+	 * the compress upgrade to allow or forbid the one-way pathways.
 	 *
 	 * <p>Only with an empty cursor, and only on a slot holding an upgrade. A right-click with
 	 * something carried is vanilla's way of placing one of it — and the way many players drop an
@@ -361,11 +382,14 @@ public class CrateScreen extends AbstractContainerScreen<CrateMenu> {
 				&& slotId >= menu.storageEnd() && slotId < menu.upgradeEnd()) {
 			CrateUpgrade upgrade = upgradeOf(slot.getItem());
 
-			if (stacks(upgrade) || disenchants(upgrade)) {
+			int gesture = stacks(upgrade) ? CrateMenu.SORT_BUTTON
+					: disenchants(upgrade) ? CrateMenu.COLLECT_BUTTON
+					: compresses(upgrade) ? CrateMenu.DESTRUCTIVE_BUTTON : -1;
+
+			if (gesture >= 0) {
 				// Rides the same validated button packet the lock's display choice does.
 				if (minecraft != null && minecraft.gameMode != null) {
-					minecraft.gameMode.handleInventoryButtonClick(menu.containerId,
-							stacks(upgrade) ? CrateMenu.SORT_BUTTON : CrateMenu.COLLECT_BUTTON);
+					minecraft.gameMode.handleInventoryButtonClick(menu.containerId, gesture);
 				}
 
 				return;

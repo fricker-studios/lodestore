@@ -26,11 +26,14 @@
   "lodestore.upgrade.collect_experience": "Right-click to collect the experience",
   "lodestore.upgrade.compress": "Right-click to sort the crate",
   "lodestore.upgrade.compresses": "Crafts nuggets and ingots up into blocks, where they craft back",
+  "lodestore.upgrade.destructive_off": "Only pathways that craft back are followed",
+  "lodestore.upgrade.destructive_on": "Destructive: one-way pathways are followed, bones to bone blocks and quartz to blocks",
   "lodestore.upgrade.disenchants": "Takes the enchantments off what goes in and keeps their worth",
   "lodestore.upgrade.experience": "Holds %s levels (%s experience)",
   "lodestore.upgrade.experience_held": "Collect the experience before taking this out",
   "lodestore.upgrade.needed": "Holds too much to take this out",
   "lodestore.upgrade.no_experience": "Nothing banked yet",
   "lodestore.upgrade.repairs": "Combines worn, unenchanted tools and armour",
-  "lodestore.upgrade.selecting_display": "Click a slot to show its item, or the shown one to stop"
+  "lodestore.upgrade.selecting_display": "Click a slot to show its item, or the shown one to stop",
+  "lodestore.upgrade.toggle_destructive": "Right-click to allow or forbid destructive compression"
 }

@@ -32,11 +32,13 @@ import net.minecraft.world.item.ItemStackTemplate;
  * @param lockFilter       the kinds of item the lock lets in
  * @param displaySlot      the storage slot the face shows, or -1 for the most numerous item
  * @param displayItem      what that slot last held
- * @param storedExperience experience points the disenchant upgrade holds for the player
+ * @param storedExperience       experience points the disenchant upgrade holds for the player
+ * @param destructiveCompression whether the compress upgrade has been told to follow one-way pathways
  */
 public record InstalledUpgrades(List<ItemStackTemplate> upgrades, List<ItemStackTemplate> lockFilter,
-		int displaySlot, Optional<ItemStackTemplate> displayItem, long storedExperience) {
-	public static final InstalledUpgrades EMPTY = new InstalledUpgrades(List.of(), List.of(), -1, Optional.empty(), 0L);
+		int displaySlot, Optional<ItemStackTemplate> displayItem, long storedExperience, boolean destructiveCompression) {
+	public static final InstalledUpgrades EMPTY =
+			new InstalledUpgrades(List.of(), List.of(), -1, Optional.empty(), 0L, false);
 
 	public static final Codec<InstalledUpgrades> CODEC = RecordCodecBuilder.create(instance -> instance.group(
 			ItemStackTemplate.CODEC.listOf().optionalFieldOf("upgrades", List.of()).forGetter(InstalledUpgrades::upgrades),
@@ -45,7 +47,8 @@ public record InstalledUpgrades(List<ItemStackTemplate> upgrades, List<ItemStack
 			ItemStackTemplate.CODEC.optionalFieldOf("display_item").forGetter(InstalledUpgrades::displayItem),
 			// Optional, and absent when zero, so a crate that has never disenchanted anything
 			// carries exactly the component it carried before this field existed.
-			Codec.LONG.optionalFieldOf("stored_experience", 0L).forGetter(InstalledUpgrades::storedExperience)
+			Codec.LONG.optionalFieldOf("stored_experience", 0L).forGetter(InstalledUpgrades::storedExperience),
+			Codec.BOOL.optionalFieldOf("destructive_compression", false).forGetter(InstalledUpgrades::destructiveCompression)
 	).apply(instance, InstalledUpgrades::new));
 
 	public static final StreamCodec<RegistryFriendlyByteBuf, InstalledUpgrades> STREAM_CODEC = StreamCodec.composite(
@@ -54,6 +57,7 @@ public record InstalledUpgrades(List<ItemStackTemplate> upgrades, List<ItemStack
 			ByteBufCodecs.VAR_INT, InstalledUpgrades::displaySlot,
 			ByteBufCodecs.optional(ItemStackTemplate.STREAM_CODEC), InstalledUpgrades::displayItem,
 			ByteBufCodecs.VAR_LONG, InstalledUpgrades::storedExperience,
+			ByteBufCodecs.BOOL, InstalledUpgrades::destructiveCompression,
 			InstalledUpgrades::new);
 
 	public InstalledUpgrades {
@@ -70,9 +74,15 @@ public record InstalledUpgrades(List<ItemStackTemplate> upgrades, List<ItemStack
 	/** Captures a crate's fittings, banked experience included. */
 	public static InstalledUpgrades of(List<ItemStack> upgrades, List<ItemStack> lockFilter, int displaySlot,
 			ItemStack displayItem, long storedExperience) {
+		return of(upgrades, lockFilter, displaySlot, displayItem, storedExperience, false);
+	}
+
+	/** Captures a crate's fittings, banked experience and the compress upgrade's setting included. */
+	public static InstalledUpgrades of(List<ItemStack> upgrades, List<ItemStack> lockFilter, int displaySlot,
+			ItemStack displayItem, long storedExperience, boolean destructiveCompression) {
 		InstalledUpgrades fitted = new InstalledUpgrades(templates(upgrades), templates(lockFilter), displaySlot,
 				displayItem.isEmpty() ? Optional.empty() : Optional.of(ItemStackTemplate.fromNonEmptyStack(displayItem)),
-				Math.max(0L, storedExperience));
+				Math.max(0L, storedExperience), destructiveCompression);
 		return fitted.isEmpty() ? EMPTY : fitted;
 	}
 
@@ -105,7 +115,7 @@ public record InstalledUpgrades(List<ItemStackTemplate> upgrades, List<ItemStack
 	/** Nothing installed and nothing set — what a crate fresh from the crafting table carries. */
 	public boolean isEmpty() {
 		return upgrades.isEmpty() && lockFilter.isEmpty() && displaySlot < 0 && displayItem.isEmpty()
-				&& storedExperience <= 0;
+				&& storedExperience <= 0 && !destructiveCompression;
 	}
 
 	/** The upgrades as fresh stacks, for the crate to install. */
