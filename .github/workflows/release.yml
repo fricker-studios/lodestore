@@ -63,3 +63,26 @@ jobs:
             ${prerelease:+"$prerelease"} \
             "build/libs/lodestore-${VERSION}.jar" \
             "build/libs/lodestore-${VERSION}-sources.jar"
+
+      # The same jar, to Modrinth, with the release notes GitHub just generated as the changelog.
+      # Skipped when the repository has no token, so a fork's release still works; a release
+      # candidate goes up as a beta, as it goes up here as a pre-release. The script is
+      # idempotent, and .github/workflows/modrinth.yml re-sends any release this step missed.
+      - name: Set up Python
+        if: ${{ secrets.MODRINTH_TOKEN != '' }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Publish to Modrinth
+        if: ${{ secrets.MODRINTH_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release view "$GITHUB_REF_NAME" --json body -q .body > build/changelog.md
+          game="$(sed -n 's/^minecraft_version=//p' gradle.properties)"
+          python3 tools/modrinth/publish.py --tag "$GITHUB_REF_NAME" --jar "build/libs/lodestore-${VERSION}.jar" \
+            --changelog build/changelog.md --game-version "${game:-26.2}"
