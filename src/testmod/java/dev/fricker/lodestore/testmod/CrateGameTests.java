@@ -31,6 +31,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.BundleContents;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -973,6 +974,65 @@ public class CrateGameTests {
 					"slot " + slot + " must refuse anything else");
 		}
 
+		helper.succeed();
+	}
+
+	/**
+	 * A claim is on an item, not a stack: a crate locked to bows takes a worn bow and an enchanted
+	 * one, through both doors, and still refuses everything that is not a bow.
+	 *
+	 * <p>The claim used to require the same components, so a crate locked with one bow inside
+	 * refused every other bow the player owned. The pair: the dirt, so the lock is still a lock.
+	 */
+	@GameTest
+	public void aLockedCrateTakesTheSameItemWhateverItsComponents(GameTestHelper helper) {
+		CrateBlockEntity crate = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_CRATE);
+		crate.contents().setItem(0, new ItemStack(Items.BOW));
+		crate.setChanged();
+		crate.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+		expectClaims(helper, crate, Items.BOW);
+
+		ItemStack worn = new ItemStack(Items.BOW);
+		worn.setDamageValue(100);
+		ItemStack enchanted = new ItemStack(Items.BOW);
+		enchanted.enchant(helper.getLevel().registryAccess()
+				.lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.POWER), 3);
+
+		expect(helper, crate.canStore(5, worn), true, "a crate locked to bows must take a worn bow");
+		expect(helper, crate.canStore(5, enchanted), true, "a crate locked to bows must take an enchanted bow");
+		expect(helper, crate.canStore(5, new ItemStack(Items.DIRT)), false, "a crate locked to bows must still refuse dirt");
+
+		if (!insert(helper, crate, worn).isEmpty() || !insert(helper, crate, enchanted).isEmpty()) {
+			throw helper.assertionException("the storage refused a bow the lock should take");
+		}
+
+		if (!insert(helper, crate, new ItemStack(Items.DIRT)).is(Items.DIRT)) {
+			throw helper.assertionException("the storage took dirt into a crate locked to bows");
+		}
+
+		// Three bows that differ in their components are three stacks: the slots keep them apart.
+		if (total(crate, Items.BOW) != 3 || crate.contents().visible(1).isEmpty() || crate.contents().visible(2).isEmpty()) {
+			throw helper.assertionException("expected three bows in three slots, got " + total(crate, Items.BOW)
+					+ " with slots 1 and 2 holding " + describe(crate.contents().visible(1)) + " and "
+					+ describe(crate.contents().visible(2)));
+		}
+
+		helper.succeed();
+	}
+
+	/** Two bows that differ only in their components are one kind to the lock: it claims bows once. */
+	@GameTest
+	public void theLockClaimsAnItemOnceHoweverItsStacksDiffer(GameTestHelper helper) {
+		CrateBlockEntity crate = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_CRATE);
+		ItemStack worn = new ItemStack(Items.BOW);
+		worn.setDamageValue(100);
+		crate.contents().setItem(0, new ItemStack(Items.BOW));
+		crate.contents().setItem(1, worn);
+		crate.contents().setItem(2, new ItemStack(Items.ARROW, 5));
+		crate.setChanged();
+		crate.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+
+		expectClaims(helper, crate, Items.BOW, Items.ARROW);
 		helper.succeed();
 	}
 

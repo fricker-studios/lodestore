@@ -114,6 +114,37 @@ public class StorageNetworkGameTests {
 		});
 	}
 
+	/**
+	 * A home is for the item, not the stack: a worn bow flows to the crate holding a new one, and
+	 * lands in a slot of its own there. The dirt alongside is the control, with no home anywhere.
+	 */
+	@GameTest(maxTicks = 100)
+	public void aHomeTakesTheSameItemWhateverItsComponents(GameTestHelper helper) {
+		ItemStack worn = new ItemStack(Items.BOW);
+		worn.setDamageValue(100);
+		DepositBoxBlockEntity box = depositBox(helper, BOX, worn, new ItemStack(Items.DIRT, 2));
+		link(helper, LINK_A, LINK_B);
+		CrateBlockEntity bows = crate(helper, CRATE, Items.BOW, 1);
+
+		helper.runAtTickTime(40, () -> {
+			if (!box.getItem(0).isEmpty() || count(bows, Items.BOW) != 2) {
+				throw helper.assertionException("the worn bow did not flow to the crate holding a bow: box holds "
+						+ describe(box.getItem(0)) + ", crate holds " + count(bows, Items.BOW));
+			}
+
+			if (!bows.contents().visible(1).is(Items.BOW) || bows.contents().visible(1).getDamageValue() != 100) {
+				throw helper.assertionException("the worn bow should sit in its own slot, slot 1 holds "
+						+ describe(bows.contents().visible(1)));
+			}
+
+			if (box.getItem(1).getCount() != 2) {
+				throw helper.assertionException("the dirt, with no home, left the box");
+			}
+
+			helper.succeed();
+		});
+	}
+
 	/** One item a tick: a hopper minecart's rate, eight times a hopper's. */
 	@GameTest(maxTicks = 120)
 	public void theDepositBoxDrainsOneItemATick(GameTestHelper helper) {
