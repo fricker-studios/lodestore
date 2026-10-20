@@ -50,6 +50,18 @@ that came from a sponsor; those are weighed ahead of the rest, which is part of 
 buys. `breaking` flags anything that changes what a save file or datapack names, since those
 need registry aliases and a release note.
 
+## Milestones and the project board
+
+Accepted work is scheduled with **milestones**, one per release, named for the tag that will
+ship it (`v0.3.0`, `v0.4.0 — Backpacks`). An issue on a version milestone is planned for that
+release; an issue on **Backlog** is wanted but not scheduled, and moves to a version once it is
+designed and accepted. An issue with no milestone has not been looked at yet. A release closes
+its milestone, and the release notes are generated from the PRs that landed in it.
+
+The [project board](https://github.com/orgs/fricker-studios/projects/3) shows the same issues by
+status, with columns that mirror the status labels above. The labels are the source of truth;
+the board is a view of them.
+
 ## Setting up
 
 You need **JDK 25**. The README's [Toolchain](README.md#toolchain-verified-2026-08-29-against-live-sources)
