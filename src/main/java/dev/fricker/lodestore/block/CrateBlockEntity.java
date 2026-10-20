@@ -583,6 +583,11 @@ public class CrateBlockEntity extends BlockEntity
 	 * keeps "the first item put into an empty crate" true inside a single transfer: the claim is
 	 * only made once a transaction commits, a pipe can insert several kinds before then, and only
 	 * the first of them may land.
+	 *
+	 * <p>A claim is on an <em>item</em>, not on a stack: a crate locked to bows takes every bow,
+	 * whatever its damage and whatever is on it. The claim used to require the same components as
+	 * well, and a crate locked with one bow inside then refused every other bow a player owned —
+	 * nothing worn is at full durability, and nothing good is unenchanted.
 	 */
 	private boolean accepts(ItemStack stack) {
 		if (!locks()) {
@@ -593,7 +598,7 @@ public class CrateBlockEntity extends BlockEntity
 		return allowed.isEmpty() || containsKind(allowed, stack);
 	}
 
-	/** The distinct kinds of item in storage, one of each, in slot order. */
+	/** The distinct items in storage, one of each, in slot order: the kinds a lock claims. */
 	private List<ItemStack> storedKinds() {
 		List<ItemStack> kinds = new ArrayList<>();
 
@@ -608,9 +613,10 @@ public class CrateBlockEntity extends BlockEntity
 		return kinds;
 	}
 
+	/** Whether {@code kinds} names this stack's item. Components are not consulted: a kind is an item. */
 	private static boolean containsKind(List<ItemStack> kinds, ItemStack stack) {
 		for (ItemStack kind : kinds) {
-			if (ItemStack.isSameItemSameComponents(kind, stack)) {
+			if (ItemStack.isSameItem(kind, stack)) {
 				return true;
 			}
 		}

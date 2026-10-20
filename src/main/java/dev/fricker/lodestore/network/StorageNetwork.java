@@ -106,10 +106,14 @@ public final class StorageNetwork {
 	 * slots and no opinion: a deposit box filling those would scatter every new kind of item into
 	 * whichever crate the walk found first, which is a chest, not a sorting system. An item with no
 	 * home stays in the deposit box, where the player can see it and decide.
+	 *
+	 * <p>"The item" means the item, as the lock's claim does: a crate holding a bow is home to a
+	 * damaged bow and an enchanted one. The crate's own slots still keep stacks that differ in
+	 * their components apart, so the bows land in slots of their own once they arrive.
 	 */
 	public static boolean isHome(CrateBlockEntity crate, ItemStack stack) {
 		for (ItemStack claimed : crate.lockedItems()) {
-			if (ItemStack.isSameItemSameComponents(claimed, stack)) {
+			if (ItemStack.isSameItem(claimed, stack)) {
 				return true;
 			}
 		}
@@ -117,7 +121,7 @@ public final class StorageNetwork {
 		for (int slot = 0; slot < crate.storageSize(); slot++) {
 			ItemStack held = crate.contents().visible(slot);
 
-			if (!held.isEmpty() && ItemStack.isSameItemSameComponents(held, stack)) {
+			if (!held.isEmpty() && ItemStack.isSameItem(held, stack)) {
 				return true;
 			}
 		}

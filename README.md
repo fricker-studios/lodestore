@@ -314,6 +314,14 @@ contents, so it survives the crate being emptied: an empty locked crate still sa
 it, which is the whole reason to lock a crate before the items arrive. Taking the lock off forgets
 the claim, so a lock put back on claims afresh from whatever is inside by then.
 
+A claim is on an *item*, not on a stack. A crate locked to bows takes every bow, whatever its
+damage and whatever is enchanted onto it; the slots inside still keep stacks that differ in their
+components apart, as any inventory does. The claim used to require the same components too, and a
+crate locked with one bow inside refused every other bow the player owned — nothing worn is at full
+durability, and nothing good is unenchanted. The deposit box's notion of a home follows the same
+rule. The void upgrade does not: it destroys only an exact match for something the crate holds,
+because the cost of being wrong there is the item, not a backed-up hopper.
+
 It is enforced in `CrateBlockEntity#canStore`, next to the nesting rule and for the same reason: a
 filter applied only by the screen would be bypassed by piping items in. Both doors into a crate ask
 it — the storage's insert, which is what hoppers, droppers and pipes reach, and the menu's
