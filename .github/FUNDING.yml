@@ -1,0 +1,10 @@
+# Powers the "Sponsor" button on the repository page.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+#
+# Each entry only shows once the account exists on that platform. GitHub Sponsors
+# has to be enabled for the account first: https://github.com/sponsors/accounts
+github: [alexfricker]
+# ko_fi: fricker
+# patreon: fricker
+# buy_me_a_coffee: fricker
+# custom: ["https://example.com/support"]

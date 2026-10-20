@@ -1,0 +1,20 @@
+# Code owners are automatically requested for review on every pull request that
+# touches a matching path, and the "main" ruleset requires their approval before
+# a merge. Later rules win over earlier ones.
+#
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Everything, unless a more specific rule below says otherwise.
+*                       @alexfricker
+
+# Build, release, and repository configuration: changes here can ship a bad jar
+# or weaken the protections on main, so they always need the maintainer.
+/build.gradle           @alexfricker
+/settings.gradle        @alexfricker
+/gradle.properties      @alexfricker
+/gradle/                @alexfricker
+/gradlew                @alexfricker
+/gradlew.bat            @alexfricker
+/.github/               @alexfricker
+/LICENSE                @alexfricker
+/SECURITY.md            @alexfricker
