@@ -319,8 +319,8 @@ damage and whatever is enchanted onto it; the slots inside still keep stacks tha
 components apart, as any inventory does. The claim used to require the same components too, and a
 crate locked with one bow inside refused every other bow the player owned — nothing worn is at full
 durability, and nothing good is unenchanted. The deposit box's notion of a home follows the same
-rule. The void upgrade does not: it destroys only an exact match for something the crate holds,
-because the cost of being wrong there is the item, not a backed-up hopper.
+rule, and so does the void upgrade: a full voiding crate of bows destroys the worn bow it has no
+room for, as it would a new one.
 
 It is enforced in `CrateBlockEntity#canStore`, next to the nesting rule and for the same reason: a
 filter applied only by the screen would be bypassed by piping items in. Both doors into a crate ask
@@ -600,7 +600,7 @@ box**. Crates join it by touching a connection block, or a device.
 |---|---|---|
 | Connection block | planks and iron nuggets around redstone, eight at a time | carries the network; nothing else |
 | Deposit box | a hopper over a basic crate | one row of plain slots; what goes in flows to its home crate, one item a tick |
-| Interface box | a glass pane over a basic crate over redstone | opens a scrolling view of everything the crates hold, one cell per kind |
+| Interface box | a glass pane over a basic crate over redstone | opens a scrolling view of everything the crates hold, one cell per kind; pulls whatever sits on top of it into the network, one item a tick |
 
 A network has no object of its own. Whichever device needs it walks from where it stands, breadth-
 first through the connection blocks it touches, and every crate touching any of those — or the
@@ -628,7 +628,17 @@ further said. It is a `WorldlyContainer` that lets everything in by every face a
 any — the network takes, and a hopper under the box pulling things out before they were sorted
 would defeat it. Its screen is vanilla's one-row chest.
 
-**The view.** The interface box holds nothing and never ticks. While its menu is open the server
+**Pulling.** The interface box is also a mouth. Like a hopper it draws from whatever container
+sits on top of it — a chest, a hopper, a hopper minecart parked on a rail above — one item a tick,
+into the item's home crate. The source is found the way a hopper finds its own: vanilla's
+`getContainerAt`, which sees container entities as well as blocks, wrapped as a storage; failing
+that, anything offering a `Storage<ItemVariant>` through its bottom face. Taking and landing happen
+in one transaction, so an item with no home is never taken: a minecart of mixed loot leaves with
+what the network had no place for still aboard. A crate on top is not pulled from — crates are the
+network's storage, not its feeders, and a crate touching the box is already on its network, so
+pulling from it would move an item to the nearest home, which may be the same crate.
+
+**The view.** The interface box holds nothing of its own. While its menu is open the server
 walks the network every ten ticks and sends the whole view — one entry per kind of item, with a
 count that is a `long` — whenever it has changed, as a payload of its own. Not the menu's data
 slots, which carry ints, and not item slots, which carry one legal stack: a kind of item on a
@@ -639,8 +649,8 @@ to fit the cell — `1.5k`, `12k`, `2M`, always rounded *down* so a cell never c
 is — and exact in the tooltip. An empty view says which kind of empty it is: no crates reached, or
 crates with nothing in them, since only the first is something the player should go and fix.
 
-The view is read-only in this iteration: the deposit box is the way in, and the crates themselves
-are the way out.
+The view is read-only in this iteration: the deposit box and whatever is set on an interface box
+are the ways in, and the crates themselves are the way out.
 
 ### Not yet
 

@@ -22,6 +22,7 @@ import net.minecraft.world.level.storage.ValueOutput;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
+import dev.fricker.lodestore.network.NetworkCrateCache;
 import dev.fricker.lodestore.network.StorageNetwork;
 import dev.fricker.lodestore.registry.LodestoreBlockEntities;
 
@@ -42,15 +43,10 @@ import dev.fricker.lodestore.registry.LodestoreBlockEntities;
  */
 public class DepositBoxBlockEntity extends BaseContainerBlockEntity implements WorldlyContainer {
 	public static final int SIZE = 9;
-	/** How often the walk to the crates is redone. In between, the crates found last time are reused. */
-	private static final int RESCAN_TICKS = 20;
 
 	private NonNullList<ItemStack> items = NonNullList.withSize(SIZE, ItemStack.EMPTY);
 	private final int[] allSlots = new int[SIZE];
-
-	/** Where the network's crates were when last walked, so a tick does not walk it again. */
-	private List<BlockPos> crates = List.of();
-	private int ticksSinceScan = RESCAN_TICKS;
+	private final NetworkCrateCache crates = new NetworkCrateCache();
 
 	public DepositBoxBlockEntity(BlockPos pos, BlockState state) {
 		super(LodestoreBlockEntities.DEPOSIT_BOX, pos, state);
@@ -66,40 +62,23 @@ public class DepositBoxBlockEntity extends BaseContainerBlockEntity implements W
 			return;
 		}
 
-		if (++box.ticksSinceScan >= RESCAN_TICKS) {
-			box.crates = StorageNetwork.cratePositions(level, pos);
-			box.ticksSinceScan = 0;
-		}
+		List<BlockPos> crates = box.crates.get(level, pos);
 
 		for (int slot = 0; slot < SIZE; slot++) {
 			ItemStack stack = box.items.get(slot);
 
-			if (!stack.isEmpty() && box.sendOne(level, slot, stack)) {
-				return;
-			}
-		}
-	}
-
-	/** Tries each crate found last scan, in walk order, for one that is this item's home and has room. */
-	private boolean sendOne(Level level, int slot, ItemStack stack) {
-		ItemVariant variant = ItemVariant.of(stack);
-
-		for (BlockPos at : crates) {
-			if (!(level.getBlockEntity(at) instanceof CrateBlockEntity crate) || crate.isRemoved()
-					|| !StorageNetwork.isHome(crate, stack)) {
+			if (stack.isEmpty()) {
 				continue;
 			}
 
 			try (Transaction transaction = Transaction.openOuter()) {
-				if (crate.storage().insert(variant, 1, transaction) == 1) {
+				if (StorageNetwork.insertOne(level, crates, ItemVariant.of(stack), transaction)) {
 					transaction.commit();
-					removeItem(slot, 1);
-					return true;
+					box.removeItem(slot, 1);
+					return;
 				}
 			}
 		}
-
-		return false;
 	}
 
 	// --- container ---------------------------------------------------------------

@@ -1399,6 +1399,38 @@ public class CrateGameTests {
 	}
 
 	/**
+	 * Voiding goes by item, as the lock's claim does: a full voiding crate of bows destroys a worn
+	 * bow and an enchanted one as it would a new one. The dirt is the control: still refused, so
+	 * the crate has not become one that destroys everything.
+	 */
+	@GameTest
+	public void aFullVoidingCrateVoidsTheSameItemWhateverItsComponents(GameTestHelper helper) {
+		CrateBlockEntity crate = voidingCrateFullOf(helper, Items.BOW);
+		long before = total(crate, Items.BOW);
+
+		ItemStack worn = new ItemStack(Items.BOW);
+		worn.setDamageValue(100);
+		ItemStack enchanted = new ItemStack(Items.BOW);
+		enchanted.enchant(helper.getLevel().registryAccess()
+				.lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.POWER), 3);
+
+		if (!insert(helper, crate, worn).isEmpty() || !insert(helper, crate, enchanted).isEmpty()) {
+			throw helper.assertionException("a full voiding crate of bows refused a worn or an enchanted bow");
+		}
+
+		if (total(crate, Items.BOW) != before) {
+			throw helper.assertionException("the bows were stored rather than destroyed: " + before
+					+ " before, " + total(crate, Items.BOW) + " after");
+		}
+
+		if (insert(helper, crate, new ItemStack(Items.DIRT)).isEmpty()) {
+			throw helper.assertionException("a voiding crate of bows took dirt");
+		}
+
+		helper.succeed();
+	}
+
+	/**
 	 * The point of voiding: the machine upstream keeps running. A hopper that backs up is the
 	 * failure this upgrade exists to prevent, and a real hopper is the only honest way to test it.
 	 */

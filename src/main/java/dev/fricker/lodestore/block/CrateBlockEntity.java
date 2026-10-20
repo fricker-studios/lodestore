@@ -747,9 +747,9 @@ public class CrateBlockEntity extends BlockEntity
 	/**
 	 * Whether this crate destroys {@code stack} rather than refusing it, once nothing has room.
 	 *
-	 * <p>Only ever true for an item one of the voided slots already holds. The worst a misrouted
-	 * item can then do is back the system up, which is recoverable, rather than vanish, which is
-	 * not.
+	 * <p>Only ever true for an item one of the voided slots already holds — the item, as the lock
+	 * claims it, whatever its damage or enchantments. The worst a misrouted item can then do is
+	 * back the system up, which is recoverable, rather than vanish, which is not.
 	 */
 	private boolean isVoiding(ItemStack stack) {
 		if (!voidsOverflow()) {
@@ -759,7 +759,7 @@ public class CrateBlockEntity extends BlockEntity
 		for (int slot : voidedSlots()) {
 			ItemStack held = contents.visible(slot);
 
-			if (!held.isEmpty() && ItemStack.isSameItemSameComponents(held, stack)) {
+			if (!held.isEmpty() && ItemStack.isSameItem(held, stack)) {
 				return true;
 			}
 		}

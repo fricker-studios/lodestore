@@ -8,6 +8,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.vehicle.minecart.MinecartHopper;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -276,6 +279,72 @@ public class StorageNetworkGameTests {
 
 			if (!below.isEmpty()) {
 				throw helper.assertionException("the hopper below pulled " + describe(below.getItem(0)) + " out of the deposit box");
+			}
+
+			helper.succeed();
+		});
+	}
+
+	// --- pulling -----------------------------------------------------------------------
+
+	/**
+	 * A hopper minecart parked on an interface box is emptied into the network, one item a tick,
+	 * and only of what has a home: the dirt stays aboard. The chest alongside is a second interface
+	 * box's source, and proves a block container is drawn from the same way.
+	 */
+	@GameTest(maxTicks = 120)
+	public void theInterfacePullsFromWhatSitsOnTopOfIt(GameTestHelper helper) {
+		BlockPos interfacePos = new BlockPos(1, 1, 1);
+		helper.setBlock(interfacePos, LodestoreBlocks.INTERFACE_BOX.defaultBlockState());
+		link(helper, LINK_A, LINK_B);
+		CrateBlockEntity home = crate(helper, CRATE, Items.COBBLESTONE, 1);
+
+		helper.setBlock(interfacePos.above(), Blocks.RAIL.defaultBlockState());
+		MinecartHopper minecart = helper.spawn(EntityTypes.HOPPER_MINECART, interfacePos.above());
+		minecart.setItem(0, new ItemStack(Items.COBBLESTONE, 10));
+		minecart.setItem(1, new ItemStack(Items.DIRT, 3));
+
+		BlockPos chestInterface = new BlockPos(1, 1, 3);
+		helper.setBlock(chestInterface, LodestoreBlocks.INTERFACE_BOX.defaultBlockState());
+		link(helper, new BlockPos(2, 1, 3), new BlockPos(3, 1, 3));
+		CrateBlockEntity chestHome = crate(helper, new BlockPos(4, 1, 3), Items.OAK_LOG, 1);
+		helper.setBlock(chestInterface.above(), Blocks.CHEST.defaultBlockState());
+		ChestBlockEntity chest = helper.getBlockEntity(chestInterface.above(), ChestBlockEntity.class);
+		chest.setItem(0, new ItemStack(Items.OAK_LOG, 6));
+		chest.setItem(1, new ItemStack(Items.DIRT, 2));
+
+		helper.runAtTickTime(80, () -> {
+			if (!minecart.getItem(0).isEmpty() || count(home, Items.COBBLESTONE) != 11) {
+				throw helper.assertionException("the minecart's cobblestone did not reach its home: minecart holds "
+						+ describe(minecart.getItem(0)) + ", crate " + count(home, Items.COBBLESTONE));
+			}
+
+			if (minecart.getItem(1).getCount() != 3) {
+				throw helper.assertionException("dirt with no home was taken from the minecart: " + describe(minecart.getItem(1)));
+			}
+
+			if (!chest.getItem(0).isEmpty() || count(chestHome, Items.OAK_LOG) != 7 || chest.getItem(1).getCount() != 2) {
+				throw helper.assertionException("the chest was not drawn from as the minecart was: holds "
+						+ describe(chest.getItem(0)) + " and " + describe(chest.getItem(1)) + ", crate " + count(chestHome, Items.OAK_LOG));
+			}
+
+			helper.succeed();
+		});
+	}
+
+	/** A crate on top of an interface box is storage, not a feeder: nothing moves. */
+	@GameTest(maxTicks = 80)
+	public void theInterfaceDoesNotPullFromACrate(GameTestHelper helper) {
+		BlockPos interfacePos = new BlockPos(1, 1, 1);
+		helper.setBlock(interfacePos, LodestoreBlocks.INTERFACE_BOX.defaultBlockState());
+		link(helper, LINK_A, LINK_B);
+		CrateBlockEntity other = crate(helper, CRATE, Items.COBBLESTONE, 1);
+		CrateBlockEntity above = crate(helper, interfacePos.above(), Items.COBBLESTONE, 10);
+
+		helper.runAtTickTime(60, () -> {
+			if (count(above, Items.COBBLESTONE) != 10 || count(other, Items.COBBLESTONE) != 1) {
+				throw helper.assertionException("the interface pulled from the crate on top of it: " + count(above, Items.COBBLESTONE)
+						+ " left above, " + count(other, Items.COBBLESTONE) + " in the other crate");
 			}
 
 			helper.succeed();
