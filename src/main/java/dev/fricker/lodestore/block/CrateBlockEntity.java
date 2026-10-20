@@ -546,6 +546,25 @@ public class CrateBlockEntity extends BlockEntity
 		return displaySlot;
 	}
 
+	/**
+	 * Whether a lock is installed, claim or no claim. An unlocked crate is the network's overflow:
+	 * attaching one is the deliberate act, so it takes whatever has no home.
+	 */
+	public boolean hasLock() {
+		return locks();
+	}
+
+	/** Whether any slot would take at least one of {@code stack}: the same item with room, or an empty slot that may. */
+	public boolean hasRoomFor(ItemStack stack) {
+		for (int slot = 0; slot < storageSize(); slot++) {
+			if (contents.room(slot, stack) > 0) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	/** Whether a lock is installed. The client is told rather than working it out, like the depths. */
 	private boolean locks() {
 		return isClient() ? syncedLocked : anyUpgrade(CrateUpgrade::locksContents);
@@ -729,7 +748,7 @@ public class CrateBlockEntity extends BlockEntity
 	}
 
 	/** Whether any installed upgrade destroys what this crate has no room for. */
-	private boolean voidsOverflow() {
+	public boolean voidsOverflow() {
 		return anyUpgrade(CrateUpgrade::voidsOverflow);
 	}
 
@@ -751,7 +770,7 @@ public class CrateBlockEntity extends BlockEntity
 	 * claims it, whatever its damage or enchantments. The worst a misrouted item can then do is
 	 * back the system up, which is recoverable, rather than vanish, which is not.
 	 */
-	private boolean isVoiding(ItemStack stack) {
+	public boolean isVoiding(ItemStack stack) {
 		if (!voidsOverflow()) {
 			return false;
 		}

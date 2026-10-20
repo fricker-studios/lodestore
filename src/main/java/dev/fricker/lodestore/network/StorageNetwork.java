@@ -103,14 +103,10 @@ public final class StorageNetwork {
 	/**
 	 * Whether {@code crate} is a home for {@code stack}: somewhere it already belongs.
 	 *
-	 * <p>A crate that holds the item, in any slot, or whose lock claims it. Not a crate with empty
-	 * slots and no opinion: a deposit box filling those would scatter every new kind of item into
-	 * whichever crate the walk found first, which is a chest, not a sorting system. An item with no
-	 * home stays in the deposit box, where the player can see it and decide.
-	 *
-	 * <p>"The item" means the item, as the lock's claim does: a crate holding a bow is home to a
-	 * damaged bow and an enchanted one. The crate's own slots still keep stacks that differ in
-	 * their components apart, so the bows land in slots of their own once they arrive.
+	 * <p>A crate that holds the item, in any slot, or whose lock claims it. "The item" means the
+	 * item, as the lock's claim does: a crate holding a bow is home to a damaged bow and an
+	 * enchanted one. The crate's own slots still keep stacks that differ in their components
+	 * apart, so the bows land in slots of their own once they arrive.
 	 */
 	public static boolean isHome(CrateBlockEntity crate, ItemStack stack) {
 		for (ItemStack claimed : crate.lockedItems()) {
@@ -131,21 +127,67 @@ public final class StorageNetwork {
 	}
 
 	/**
-	 * Puts one of {@code variant} into the first crate on the list that is its home and has room,
-	 * inside {@code transaction}. The deposit box and the interface box both feed the network
-	 * through this, so a home means the same thing at either.
+	 * Whether {@code crate} is overflow: an unlocked crate, which takes whatever has no home.
 	 *
-	 * @return whether it landed; if not, nothing was changed
+	 * <p>Attaching an unlocked crate to a network is the deliberate act that makes it so. A locked
+	 * crate has said what it is for; an unlocked one has said it will take anything, and the
+	 * network holds it to that once the homes are spoken for.
+	 */
+	public static boolean isOverflow(CrateBlockEntity crate) {
+		return !crate.hasLock();
+	}
+
+	/**
+	 * Puts one of {@code variant} somewhere on the network, inside {@code transaction}. The deposit
+	 * box and the interface box both feed the network through this, so the rules are the same at
+	 * either. In order:
+	 * <ol>
+	 *   <li>a home with room, nearest first;</li>
+	 *   <li>a home that is full and voids the item: it is destroyed rather than spilled, since a
+	 *       void upgrade is the player saying the crate's count is the ceiling for that item;</li>
+	 *   <li>overflow — an unlocked crate — with room, nearest first; a full home without a void
+	 *       upgrade spills here;</li>
+	 *   <li>overflow that is full and has a void upgrade: once the overflow is full, everything
+	 *       with no home is destroyed.</li>
+	 * </ol>
+	 * Step one comes before step two for every home, not crate by crate, so a full voiding crate
+	 * near the device cannot destroy what a crate further along had room for.
+	 *
+	 * @return whether it landed, or was destroyed; if not, nothing was changed and the item has
+	 *         nowhere to go
 	 */
 	public static boolean insertOne(Level level, List<BlockPos> crates, ItemVariant variant, TransactionContext transaction) {
 		ItemStack stack = variant.toStack();
+		List<CrateBlockEntity> live = new ArrayList<>(crates.size());
 
 		for (BlockPos at : crates) {
-			if (!(level.getBlockEntity(at) instanceof CrateBlockEntity crate) || crate.isRemoved() || !isHome(crate, stack)) {
-				continue;
+			if (level.getBlockEntity(at) instanceof CrateBlockEntity crate && !crate.isRemoved()) {
+				live.add(crate);
 			}
+		}
 
-			if (crate.storage().insert(variant, 1, transaction) == 1) {
+		for (CrateBlockEntity crate : live) {
+			if (isHome(crate, stack) && crate.hasRoomFor(stack) && crate.storage().insert(variant, 1, transaction) == 1) {
+				return true;
+			}
+		}
+
+		for (CrateBlockEntity crate : live) {
+			// The storage accepts and destroys: the same path a hopper into a full voiding crate takes.
+			if (isHome(crate, stack) && crate.isVoiding(stack) && crate.storage().insert(variant, 1, transaction) == 1) {
+				return true;
+			}
+		}
+
+		for (CrateBlockEntity crate : live) {
+			if (isOverflow(crate) && crate.hasRoomFor(stack) && crate.storage().insert(variant, 1, transaction) == 1) {
+				return true;
+			}
+		}
+
+		for (CrateBlockEntity crate : live) {
+			// Nothing to insert into: the overflow is full, and its void upgrade says the rest goes.
+			if (isOverflow(crate) && crate.voidsOverflow()) {
 				return true;
 			}
 		}

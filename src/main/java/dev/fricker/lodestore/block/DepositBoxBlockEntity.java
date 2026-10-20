@@ -36,10 +36,12 @@ import dev.fricker.lodestore.registry.LodestoreBlockEntities;
  * network takes, and a hopper under the box pulling things out before the network had sorted them
  * would make the box an ordinary chest with a delay.
  *
- * <p>Every tick, one item leaves for a crate on the network that is its home — a crate already
- * holding that item, or locked to it — nearest crate first. One a tick is the rate a hopper
- * minecart pulls at, which is eight times a hopper block. An item with no home stays, and the box
- * says so by not emptying; the player decides what it is for.
+ * <p>Every tick, one item leaves for the network: a crate that is its home — one already holding
+ * that item, or locked to it — nearest first, or else an unlocked crate, which is the network's
+ * overflow. One a tick is the rate a hopper minecart pulls at, which is eight times a hopper
+ * block. An item with nowhere to go stays, and the box says so by not emptying; the player decides
+ * what it is for. The order, and when a void upgrade destroys instead, is
+ * {@link StorageNetwork#insertOne}'s.
  */
 public class DepositBoxBlockEntity extends BaseContainerBlockEntity implements WorldlyContainer {
 	public static final int SIZE = 9;

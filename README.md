@@ -610,13 +610,22 @@ blocks and stays inside loaded chunks. Walking afresh costs a few hundred block 
 per deposit box with something to move, and cannot go stale; a graph kept up to date as blocks are
 placed and broken would be cheaper and would also be one more thing to get wrong.
 
-**Home.** An item flows out of a deposit box only to a crate that is its *home*: one that already
-holds that item, in any slot, or whose lock claims it. A crate with empty slots and no opinion is
-not a home. That is the difference between a sorting system and a chest with a delay — a box that
-filled empty slots would scatter each new kind of item into whichever crate the walk found first.
-An item with no home stays in the box, where the player can see it and decide; a comparator on the
-box reads how much is waiting. Where an item has two homes the nearer one fills first, and a full
-one is skipped for the next.
+**Home, then overflow.** An item flows out of a deposit box first to a crate that is its *home*:
+one that already holds that item, in any slot, or whose lock claims it. Where an item has two homes
+the nearer one fills first, and a full one is skipped for the next. Failing a home, it goes to
+*overflow*: any unlocked crate on the network, nearest first. Attaching an unlocked crate is the
+deliberate act that makes it overflow — a locked crate has said what it is for, an unlocked one has
+said it will take anything, and the network holds it to that once the homes are spoken for. An item
+with nowhere to go stays in the box, where the player can see it and decide; a comparator on the
+box reads how much is waiting.
+
+The void upgrade draws the lines. A full home *with* a void upgrade destroys the item rather than
+spilling it to overflow: the upgrade is the player saying that crate's count is the ceiling for
+that item. A full home *without* one spills to overflow. And once the overflow itself is full, an
+overflow crate with a void upgrade means everything with no home is destroyed. Homes with room are
+tried before any home voids, across the whole network, so a full voiding crate near the box cannot
+destroy what a crate further along had room for. The order is `StorageNetwork#insertOne`'s, and
+both devices feed through it.
 
 **Rate.** One item a tick, which is what a hopper minecart pulls at in 26.x — `MinecartHopper` has
 no cooldown any more, only a once-per-frame flag — and eight times a hopper block. The walk is
@@ -633,8 +642,8 @@ sits on top of it — a chest, a hopper, a hopper minecart parked on a rail abov
 into the item's home crate. The source is found the way a hopper finds its own: vanilla's
 `getContainerAt`, which sees container entities as well as blocks, wrapped as a storage; failing
 that, anything offering a `Storage<ItemVariant>` through its bottom face. Taking and landing happen
-in one transaction, so an item with no home is never taken: a minecart of mixed loot leaves with
-what the network had no place for still aboard. A crate on top is not pulled from — crates are the
+in one transaction, so an item the network has no place for is never taken: a minecart of mixed
+loot leaves with what had nowhere to go still aboard. A crate on top is not pulled from — crates are the
 network's storage, not its feeders, and a crate touching the box is already on its network, so
 pulling from it would move an item to the nearest home, which may be the same crate.
 
@@ -752,8 +761,9 @@ watching the hopper fill it to exactly 64 and stop.
 
 **The network**, in `StorageNetworkGameTests`, each flow with its control alongside: a deposit box
 fills the crate holding its item and not a connected crate holding something else, nor an
-unconnected crate holding the same thing; an item with no home stays, and a lock's claim on an
-empty crate counts as a home; the rate is one a tick, measured over thirty; the nearer home fills
+unconnected crate holding the same thing; an item with nowhere to go stays, and a lock's claim on
+an empty crate counts as a home; an unlocked crate takes what has no home, a full home spills into
+it unless the home voids, and a full voiding overflow crate destroys everything homeless; the rate is one a tick, measured over thirty; the nearer home fills
 first and a full one is skipped; only connection blocks conduct, not a device or stone; a hopper
 fills a deposit box and a hopper under it takes nothing; and the interface sums every crate it
 reaches, parked remainders included, and reports no crates rather than an empty network when it
