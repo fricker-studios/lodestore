@@ -281,6 +281,51 @@ STACK_UPGRADE = plate(STACK_MOTIF)
 STACK_UPGRADE_2 = plate(STACK_MOTIF, "j", "k", "l")
 STACK_UPGRADE_3 = plate(STACK_MOTIF, "n", "p", "q")
 
+# The three upgrades that work on the contents each wear a picture of the thing they stand in
+# for. Compress is a copper arrow pressing down onto a dark slab: the deposit box's arrow, since
+# that is the one "things go this way" mark the mod already has. Disenchant is a lapis book with a
+# clasp — the enchanting table's blue, on the enchanted book's shape — because what it takes off is
+# what that table puts on. Repair is an anvil in silhouette, the block everyone already knows
+# repairs things, even though the arithmetic is the crafting grid's.
+COMPRESS_UPGRADE = plate([
+    "NNNNNjkNNNNN",
+    "NNNNNjkNNNNN",
+    "NNjkkkkkkkNN",
+    "NNNjkkkkkNNN",
+    "NNNNjkkkNNNN",
+    "NNNNNjkNNNNN",
+    "NNNNNNNNNNNN",
+    "NBBBBBBBBBBN",
+    "NBGGGGGGGGBN",
+    "NBBBBBBBBBBN",
+])
+
+DISENCHANT_UPGRADE = plate([
+    "NNNNNNNNNNNN",
+    "NNbbbbbbbbNN",
+    "NNbbbbbbbbNN",
+    "NNbbbbbbbbNN",
+    "NNaaaaaaaaNN",
+    "NNbbbbbbbbNN",
+    "NNbbbbbbbbNN",
+    "NNbbbbbbbbNN",
+    "NNcWWWWWWcNN",
+    "NNNNNNNNNNNN",
+])
+
+REPAIR_UPGRADE = plate([
+    "NNNNNNNNNNNN",
+    "NNWWWWWWWWWN",
+    "NNBBBBBBBBBN",
+    "NNNBBBBBBNNN",
+    "NNNNNBBBNNNN",
+    "NNNNNBBBNNNN",
+    "NNNNBBBBBNNN",
+    "NNNBBBBBBBNN",
+    "NNBBBBBBBBBN",
+    "NNNNNNNNNNNN",
+])
+
 # ------------------------------------------------------------------------ main
 
 BLOCKS = {
@@ -307,6 +352,9 @@ ITEMS = {
     "stack_upgrade": STACK_UPGRADE,
     "stack_upgrade_2": STACK_UPGRADE_2,
     "stack_upgrade_3": STACK_UPGRADE_3,
+    "compress_upgrade": COMPRESS_UPGRADE,
+    "disenchant_upgrade": DISENCHANT_UPGRADE,
+    "repair_upgrade": REPAIR_UPGRADE,
 }
 
 if __name__ == "__main__":

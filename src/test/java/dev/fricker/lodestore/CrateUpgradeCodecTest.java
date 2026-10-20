@@ -52,7 +52,7 @@ class CrateUpgradeCodecTest {
 
 	@Test
 	void theLockUpgradeActuallyLocks() throws IOException {
-		assertEquals(new CrateUpgrade(true, false, 1, 1), decode("lock"),
+		assertEquals(new CrateUpgrade(true, false, 1, 1, false, false, false), decode("lock"),
 				"the shipped lock upgrade must set locks_contents, or it is an inert item");
 	}
 
@@ -65,7 +65,7 @@ class CrateUpgradeCodecTest {
 	 */
 	@Test
 	void theVoidUpgradeVoidsWithoutLocking() throws IOException {
-		assertEquals(new CrateUpgrade(false, true, 1, 1), decode("void"),
+		assertEquals(new CrateUpgrade(false, true, 1, 1, false, false, false), decode("void"),
 				"the shipped void upgrade must void, and no longer needs to lock to be safe");
 	}
 
@@ -76,7 +76,7 @@ class CrateUpgradeCodecTest {
 	 */
 	@Test
 	void theStackUpgradeStacks() throws IOException {
-		assertEquals(new CrateUpgrade(false, false, 4, 8), decode("stack"),
+		assertEquals(new CrateUpgrade(false, false, 4, 8, false, false, false), decode("stack"),
 				"the shipped stack upgrade must set stacks_per_slot above one, or it is an inert item");
 		assertTrue(decode("stack").stacks());
 		assertFalse(decode("lock").stacks(), "a lock written without stacks_per_slot must read as depth one");
@@ -108,7 +108,7 @@ class CrateUpgradeCodecTest {
 
 		assertTrue(parsed.isSuccess(), () -> "an old lock entry failed to decode: "
 				+ parsed.error().map(Object::toString).orElse("?"));
-		assertEquals(new CrateUpgrade(true, false, 1, 1), parsed.getOrThrow());
+		assertEquals(new CrateUpgrade(true, false, 1, 1, false, false, false), parsed.getOrThrow());
 	}
 
 	/**
@@ -124,6 +124,33 @@ class CrateUpgradeCodecTest {
 		assertFalse(parsed.voidsOverflow(), "a missing voids_overflow must not destroy anything");
 	}
 
+	/**
+	 * The three upgrades that work on the contents each set exactly their own flag. Each changes
+	 * what a crate holds, so a dropped entry would silently stop a crate doing what the player
+	 * installed it for, and a flag set by accident would silently start.
+	 */
+	@Test
+	void theRefiningUpgradesEachSetTheirOwnFlag() throws IOException {
+		assertEquals(new CrateUpgrade(false, false, 1, 1, true, false, false), decode("compress"),
+				"the shipped compress upgrade must compress and nothing else");
+		assertEquals(new CrateUpgrade(false, false, 1, 1, false, true, false), decode("disenchant"),
+				"the shipped disenchant upgrade must disenchant and nothing else");
+		assertEquals(new CrateUpgrade(false, false, 1, 1, false, false, true), decode("repair"),
+				"the shipped repair upgrade must repair and nothing else");
+	}
+
+	/** Upgrades written before the refining flags existed must keep decoding, and do none of it. */
+	@Test
+	void anUpgradeWithoutTheRefiningFlagsRefinesNothing() {
+		CrateUpgrade parsed = CrateUpgrade.CODEC
+				.parse(JsonOps.INSTANCE, JsonParser.parseString("{\"locks_contents\":true}"))
+				.getOrThrow();
+
+		assertFalse(parsed.compresses(), "a missing compresses must not craft anything");
+		assertFalse(parsed.disenchants(), "a missing disenchants must not strip anything");
+		assertFalse(parsed.repairs(), "a missing repairs must not combine anything");
+	}
+
 	/** The fallback has to be inert: an unresolved upgrade must not filter anything. */
 	@Test
 	void theFallbackDoesNothing() {
@@ -133,6 +160,8 @@ class CrateUpgradeCodecTest {
 				"an unresolved upgrade must not destroy items the player never asked it to");
 		assertFalse(CrateUpgrade.FALLBACK.stacks(),
 				"an unresolved upgrade must not deepen any slots");
+		assertFalse(CrateUpgrade.FALLBACK.compresses() || CrateUpgrade.FALLBACK.disenchants()
+				|| CrateUpgrade.FALLBACK.repairs(), "an unresolved upgrade must not change what a crate holds");
 	}
 
 	@Test

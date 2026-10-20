@@ -5,11 +5,13 @@ import org.slf4j.LoggerFactory;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
@@ -129,6 +131,19 @@ public class CrateRenderClientTest implements FabricClientGameTest {
 			context.waitTicks(20);
 			LOGGER.info("[lodestore] tooltip screenshot -> {}", context.takeScreenshot("crate-upgrade-tooltip"));
 
+			// The disenchant upgrade draws the levels it holds on itself, in green, and its tooltip
+			// gives the points and the right-click that collects them. Second row, first column.
+			int[] disenchant = context.computeOnClient(client -> {
+				double scale = client.getWindow().getGuiScale();
+				int left = (client.getWindow().getGuiScaledWidth() - (176 + 66)) / 2;
+				int top = (client.getWindow().getGuiScaledHeight() - (114 + 6 * 18)) / 2;
+				return new int[] {(int) ((left + 184 + 8) * scale), (int) ((top + 18 + 18 + 8) * scale)};
+			});
+
+			context.getInput().setCursorPos(disenchant[0], disenchant[1]);
+			context.waitTicks(20);
+			LOGGER.info("[lodestore] disenchant screenshot -> {}", context.takeScreenshot("crate-disenchant-tooltip"));
+
 			// A slot of a stacked crate draws its real total, and the tooltip says out of how much.
 			// Both are things only a picture can check. Worth one of its own.
 			int[] stacked = context.computeOnClient(client -> {
@@ -216,6 +231,19 @@ public class CrateRenderClientTest implements FabricClientGameTest {
 		crate.chooseDisplaySlot(0);
 		crate.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
 		crate.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE));
+
+		// A fourth, on the second row, with something in the bank so the green count has a value
+		// to draw: an enchanted sword put in after the upgrade is stripped on arrival.
+		crate.installUpgrade(new ItemStack(LodestoreItems.DISENCHANT_UPGRADE));
+		ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
+		sword.enchant(level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.SHARPNESS), 5);
+		crate.contents().setItem(4, sword);
+		crate.setChanged();
+
+		// A fifth, destructive: the compress upgrade wears a red wash while it may follow the
+		// one-way pathways, which is the one visible difference between the two settings.
+		crate.installUpgrade(new ItemStack(LodestoreItems.COMPRESS_UPGRADE));
+		crate.toggleDestructiveCompression();
 
 		// Slot 0 is filled to its four stacks: the stacked-slot screenshot hovers it, and the slot
 		// should draw 256 where a plain one would draw 64, with the tooltip saying out of how much.

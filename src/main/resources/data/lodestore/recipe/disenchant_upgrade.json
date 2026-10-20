@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "L": "minecraft:lapis_lazuli",
+    "I": "minecraft:iron_ingot"
+  },
+  "pattern": [
+    " L ",
+    "LIL",
+    " I "
+  ],
+  "result": {
+    "id": "lodestore:disenchant_upgrade"
+  }
+}

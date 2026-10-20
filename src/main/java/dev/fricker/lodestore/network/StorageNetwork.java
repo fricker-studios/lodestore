@@ -106,24 +106,12 @@ public final class StorageNetwork {
 	 * <p>A crate that holds the item, in any slot, or whose lock claims it. "The item" means the
 	 * item, as the lock's claim does: a crate holding a bow is home to a damaged bow and an
 	 * enchanted one. The crate's own slots still keep stacks that differ in their components
-	 * apart, so the bows land in slots of their own once they arrive.
+	 * apart, so the bows land in slots of their own once they arrive. With a compress upgrade the
+	 * item's whole family counts, so a crate of iron blocks is home to the network's nuggets — the
+	 * crate decides, since only it knows what it will make of them.
 	 */
 	public static boolean isHome(CrateBlockEntity crate, ItemStack stack) {
-		for (ItemStack claimed : crate.lockedItems()) {
-			if (ItemStack.isSameItem(claimed, stack)) {
-				return true;
-			}
-		}
-
-		for (int slot = 0; slot < crate.storageSize(); slot++) {
-			ItemStack held = crate.contents().visible(slot);
-
-			if (!held.isEmpty() && ItemStack.isSameItem(held, stack)) {
-				return true;
-			}
-		}
-
-		return false;
+		return crate.isHome(stack);
 	}
 
 	/**
