@@ -11,20 +11,13 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityTicker;
-import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.BlockHitResult;
 
-import dev.fricker.lodestore.registry.LodestoreBlockEntities;
-
-/**
- * The interface box. Faces the player who placed it, like a crate, so its screen is on the near
- * side. Ticks on the server, because it pulls from whatever sits on top of it.
- */
+/** The interface box. Faces the player who placed it, like a crate, so its screen is on the near side. */
 public class InterfaceBoxBlock extends Block implements EntityBlock {
 	public static final EnumProperty<Direction> FACING = BlockStateProperties.HORIZONTAL_FACING;
 
@@ -46,17 +39,6 @@ public class InterfaceBoxBlock extends Block implements EntityBlock {
 	@Override
 	public @Nullable BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
 		return new InterfaceBoxBlockEntity(pos, state);
-	}
-
-	@Override
-	@SuppressWarnings("unchecked")
-	public <T extends BlockEntity> @Nullable BlockEntityTicker<T> getTicker(Level level, BlockState state,
-			BlockEntityType<T> type) {
-		if (level.isClientSide() || type != LodestoreBlockEntities.INTERFACE_BOX) {
-			return null;
-		}
-
-		return (BlockEntityTicker<T>) (BlockEntityTicker<InterfaceBoxBlockEntity>) InterfaceBoxBlockEntity::serverTick;
 	}
 
 	@Override
