@@ -84,6 +84,8 @@ Crates are working containers with a GUI.
 | Sturdy | shulker box | 27 | 2 | contents stay inside | empty crates |
 | Reinforced | shulker box | 54 | 3 | contents stay inside | empty crates, and sturdy ones with contents |
 
+Crates can be joined into a network; see [The network](#the-network).
+
 Crates are wood, so an axe is the efficient tool, as it is for a chest or barrel. The reinforced
 crate is iron-banded as well, so a pickaxe is just as good on it. They still break without either,
 just slowly — no tool is required for them to drop.
@@ -551,6 +553,57 @@ which the crate now does itself: vanilla's default spill fires only for a `Conta
 | Transaction snapshots | per-slot `SnapshotParticipant`s, plus one that calls `setChanged` once per outer commit | a rollback leaking — a gametest aborts an insert |
 | `/item … block` and `/loot replace block` | **lost**; both hard-require `instanceof Container` | map-makers lose two commands on crates; no mitigation |
 
+### The network
+
+Three blocks make a storage network: a **connection block**, a **deposit box** and an **interface
+box**. Crates join it by touching a connection block, or a device.
+
+| Block | Made of | Does |
+|---|---|---|
+| Connection block | planks and iron nuggets around redstone, eight at a time | carries the network; nothing else |
+| Deposit box | a hopper over a basic crate | one row of plain slots; what goes in flows to its home crate, one item a tick |
+| Interface box | a glass pane over a basic crate over redstone | opens a scrolling view of everything the crates hold, one cell per kind |
+
+A network has no object of its own. Whichever device needs it walks from where it stands, breadth-
+first through the connection blocks it touches, and every crate touching any of those — or the
+device itself — is a member. Only connection blocks conduct: two devices side by side are not on one
+network, and neither is a crate on the far side of a device. The walk is capped at 4,096 connection
+blocks and stays inside loaded chunks. Walking afresh costs a few hundred block lookups a second
+per deposit box with something to move, and cannot go stale; a graph kept up to date as blocks are
+placed and broken would be cheaper and would also be one more thing to get wrong.
+
+**Home.** An item flows out of a deposit box only to a crate that is its *home*: one that already
+holds that item, in any slot, or whose lock claims it. A crate with empty slots and no opinion is
+not a home. That is the difference between a sorting system and a chest with a delay — a box that
+filled empty slots would scatter each new kind of item into whichever crate the walk found first.
+An item with no home stays in the box, where the player can see it and decide; a comparator on the
+box reads how much is waiting. Where an item has two homes the nearer one fills first, and a full
+one is skipped for the next.
+
+**Rate.** One item a tick, which is what a hopper minecart pulls at in 26.x — `MinecartHopper` has
+no cooldown any more, only a once-per-frame flag — and eight times a hopper block. The walk is
+redone every twenty ticks; the ticks between reuse the crates it found.
+
+The deposit box is a plain vanilla `Container`, deliberately, where a crate is not: its slots are
+ordinary, and being a container is what lets a hopper, a dropper or a hand fill it with nothing
+further said. It is a `WorldlyContainer` that lets everything in by every face and nothing out by
+any — the network takes, and a hopper under the box pulling things out before they were sorted
+would defeat it. Its screen is vanilla's one-row chest.
+
+**The view.** The interface box holds nothing and never ticks. While its menu is open the server
+walks the network every ten ticks and sends the whole view — one entry per kind of item, with a
+count that is a `long` — whenever it has changed, as a payload of its own. Not the menu's data
+slots, which carry ints, and not item slots, which carry one legal stack: a kind of item on a
+network can number thousands, and a slot cannot say so. The counts include what a stack upgrade
+parks behind a full stack, which is otherwise visible only by opening every crate. The screen draws
+the entries into the double chest's grid itself, with a scrollbar beside it, the count abbreviated
+to fit the cell — `1.5k`, `12k`, `2M`, always rounded *down* so a cell never claims more than there
+is — and exact in the tooltip. An empty view says which kind of empty it is: no crates reached, or
+crates with nothing in them, since only the first is something the player should go and fix.
+
+The view is read-only in this iteration: the deposit box is the way in, and the crates themselves
+are the way out.
+
 ### Not yet
 
 Grouping and sorting.
@@ -645,7 +698,16 @@ raised before asserting that the hopper ignored it, and it was confirmed to meas
 arithmetic rather than a blanket refusal by starting the slot below the item's own maximum and
 watching the hopper fill it to exactly 64 and stop.
 
-**Client gametests.** Two of them. One builds a row of crates — one of each tier, plus a locked
+**The network**, in `StorageNetworkGameTests`, each flow with its control alongside: a deposit box
+fills the crate holding its item and not a connected crate holding something else, nor an
+unconnected crate holding the same thing; an item with no home stays, and a lock's claim on an
+empty crate counts as a home; the rate is one a tick, measured over thirty; the nearer home fills
+first and a full one is skipped; only connection blocks conduct, not a device or stone; a hopper
+fills a deposit box and a hopper under it takes nothing; and the interface sums every crate it
+reaches, parked remainders included, and reports no crates rather than an empty network when it
+stands alone. `CountFormatTest` pins the abbreviation, rounding down included.
+
+**Client gametests.** Three of them. One builds a row of crates — one of each tier, plus a locked
 crate with stock and a locked crate that has been emptied — and screenshots it into
 `build/clientGametest/screenshots/`: the row, a close-up of the tier sprites, a close-up of the two
 lock states, the open screen, the upgrade hint, and a stacked slot drawing its real total with the
@@ -654,6 +716,11 @@ ended up on which face and "renders at all" are failure modes no assertion catch
 reopens the same save, which is the only way to exercise a real disconnect: server gametests never
 round-trip a block entity through a save file, so anything that only breaks across a save and load
 is invisible to them.
+
+The third stocks a network with more kinds of item than fit on one screen, plus two counts that
+need abbreviating, and screenshots the three network blocks in world, the interface box's screen
+open, the tooltip on its first cell, and the screen scrolled to its end:
+`network-in-world`, `network-gui-open`, `network-gui-tooltip` and `network-gui-scrolled`.
 
 Not in CI: they drive a real client and would need a virtual display on the runner.
 

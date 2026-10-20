@@ -19,6 +19,7 @@ import dev.fricker.lodestore.registry.LodestoreComponents;
 import dev.fricker.lodestore.registry.LodestoreCreativeTab;
 import dev.fricker.lodestore.menu.LodestoreMenus;
 import dev.fricker.lodestore.registry.LodestoreItems;
+import dev.fricker.lodestore.registry.LodestoreNetworking;
 import dev.fricker.lodestore.util.PersistenceSelfCheck;
 
 /**
@@ -43,6 +44,7 @@ public class Lodestore implements ModInitializer {
 		LodestoreItems.initialize();
 		LodestoreBlockEntities.initialize();
 		LodestoreMenus.initialize();
+		LodestoreNetworking.initialize();
 		LodestoreCreativeTab.initialize();
 		// Last, so every id it redirects to already exists.
 		LodestoreAliases.initialize();

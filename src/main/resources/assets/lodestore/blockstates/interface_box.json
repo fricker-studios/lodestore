@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "lodestore:block/interface_box"
+    },
+    "facing=east": {
+      "model": "lodestore:block/interface_box",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "lodestore:block/interface_box",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "lodestore:block/interface_box",
+      "y": 270
+    }
+  }
+}

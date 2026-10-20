@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "lodestore:block/deposit_box_top",
+    "bottom": "lodestore:block/basic_crate_top",
+    "side": "lodestore:block/deposit_box_side"
+  }
+}

@@ -1,5 +1,6 @@
 {
   "values": [
-    "lodestore:reinforced_crate"
+    "lodestore:reinforced_crate",
+    "lodestore:connection_block"
   ]
 }

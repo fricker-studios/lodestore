@@ -2,6 +2,8 @@
   "values": [
     "lodestore:basic_crate",
     "lodestore:sturdy_crate",
-    "lodestore:reinforced_crate"
+    "lodestore:reinforced_crate",
+    "lodestore:deposit_box",
+    "lodestore:interface_box"
   ]
 }

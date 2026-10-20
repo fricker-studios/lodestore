@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "G": "minecraft:glass_pane",
+    "C": "lodestore:basic_crate",
+    "R": "minecraft:redstone"
+  },
+  "pattern": [
+    "G",
+    "C",
+    "R"
+  ],
+  "result": {
+    "id": "lodestore:interface_box"
+  }
+}

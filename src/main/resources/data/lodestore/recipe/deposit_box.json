@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "H": "minecraft:hopper",
+    "C": "lodestore:basic_crate"
+  },
+  "pattern": [
+    "H",
+    "C"
+  ],
+  "result": {
+    "id": "lodestore:deposit_box"
+  }
+}
