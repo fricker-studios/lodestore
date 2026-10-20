@@ -58,7 +58,7 @@ release; an issue on **Backlog** is wanted but not scheduled, and moves to a ver
 designed and accepted. An issue with no milestone has not been looked at yet. A release closes
 its milestone, and the release notes are generated from the PRs that landed in it.
 
-The [project board](https://github.com/orgs/fricker-studios/projects) shows the same issues by
+The [project board](https://github.com/orgs/fricker-studios/projects/3) shows the same issues by
 status, with columns that mirror the status labels above. The labels are the source of truth;
 the board is a view of them.
 
