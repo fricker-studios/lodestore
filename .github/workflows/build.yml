@@ -45,20 +45,20 @@ jobs:
           distribution: temurin
           cache: gradle
 
-      # The artifact is named for where it came from and which run built it: the pull
-      # request's number, or main, plus the run number. The jar inside already carries the
-      # commit in its git-describe version, and the nearest tag with it, so a sha in the
-      # artifact name said nothing the jar did not — and left a rebuilt commit with two
-      # artifacts of one name.
+      # The artifact and the jar inside it are named for the pull request and the run that
+      # built them, the two numbers run together — pull request 57's twelfth run is
+      # lodestore-5712 — or the run number alone on a push to main. The jar's version inside
+      # fabric.mod.json is still derived from the nearest tag; only the file name changes. A
+      # sha in the name said nothing the jar's version did not, and left a rebuilt commit with
+      # two artifacts of one name.
       - name: Resolve build metadata
         id: meta
         run: |
           set -euo pipefail
-          SOURCE="${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.ref_name }}"
-          echo "label=${SOURCE}-run${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "label=${{ github.event.pull_request.number }}${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: Build and test
-        run: ./gradlew build --stacktrace
+        run: ./gradlew build --stacktrace -Pbuild_label=${{ steps.meta.outputs.label }}
 
       - name: Upload mod jar
         id: upload
