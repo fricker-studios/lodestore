@@ -14,6 +14,7 @@
 			"dev.fricker.lodestore.testmod.CrateGameTests",
 			"dev.fricker.lodestore.testmod.StackCeilingGameTests",
 			"dev.fricker.lodestore.testmod.StorageLayerGameTests",
+			"dev.fricker.lodestore.testmod.RefiningUpgradeGameTests",
 			"dev.fricker.lodestore.testmod.StorageNetworkGameTests"
 		],
 		"fabric-client-gametest": [

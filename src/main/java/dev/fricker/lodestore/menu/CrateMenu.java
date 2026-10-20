@@ -38,15 +38,21 @@ public class CrateMenu extends AbstractContainerMenu {
 	/** Upgrade slots wrap at three, so the panel is never wider than it needs to be. */
 	public static final int UPGRADES_PER_ROW = 3;
 
-	/** What the client needs that slots cannot carry: whether a lock is installed, and which upgrades may be taken out. */
+	/**
+	 * What the client needs that slots cannot carry: whether a lock is installed, which upgrades
+	 * may be taken out, and how much experience the disenchant upgrade holds.
+	 */
 	public static final int DATA_LOCKED = 0;
 	public static final int DATA_REMOVABLE = 1;
-	public static final int DATA_COUNT = 2;
+	public static final int DATA_EXPERIENCE = 2;
+	public static final int DATA_COUNT = 3;
 
 	/** Button ids below this name a storage slot for the face to show; storage never exceeds 54. */
 	private static final int DISPLAY_BUTTONS = 256;
 	/** One id past the display range: sort the crate, as a right-click on the stack upgrade asks. */
 	public static final int SORT_BUTTON = DISPLAY_BUTTONS;
+	/** The next: hand over the banked experience, as a right-click on the disenchant upgrade asks. */
+	public static final int COLLECT_BUTTON = DISPLAY_BUTTONS + 1;
 
 	private final Container storage;
 	private final @Nullable CrateBlockEntity crate;
@@ -136,6 +142,11 @@ public class CrateMenu extends AbstractContainerMenu {
 		return (menuData.get(DATA_REMOVABLE) & (1 << upgradeSlot)) != 0;
 	}
 
+	/** Experience points the disenchant upgrade holds, from the synced menu data. */
+	public int storedExperience() {
+		return menuData.get(DATA_EXPERIENCE);
+	}
+
 	public int storageEnd() {
 		return rows * 9;
 	}
@@ -150,8 +161,9 @@ public class CrateMenu extends AbstractContainerMenu {
 	}
 
 	/**
-	 * Sorts the crate, as a right-click on the stack upgrade asks, or chooses the storage slot
-	 * whose item the front face shows, as a click after right-clicking the lock asks.
+	 * Sorts the crate, as a right-click on the stack upgrade asks; hands over the banked experience,
+	 * as one on the disenchant upgrade asks; or chooses the storage slot whose item the front face
+	 * shows, as a click after right-clicking the lock asks.
 	 *
 	 * <p>Rides vanilla's container-button packet rather than a payload of our own: that path is
 	 * already validated against the container the player actually has open, which is exactly the
@@ -165,6 +177,10 @@ public class CrateMenu extends AbstractContainerMenu {
 
 		if (id == SORT_BUTTON) {
 			return crate.sortContents();
+		}
+
+		if (id == COLLECT_BUTTON) {
+			return crate.collectExperience(player);
 		}
 
 		if (id >= storageEnd()) {

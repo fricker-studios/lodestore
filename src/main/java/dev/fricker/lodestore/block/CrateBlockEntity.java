@@ -23,6 +23,7 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.util.ProblemReporter;
@@ -36,6 +37,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerData;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.block.Block;
@@ -62,10 +64,12 @@ import dev.fricker.lodestore.menu.CrateMenu;
 import dev.fricker.lodestore.menu.CrateMenuData;
 import dev.fricker.lodestore.registry.LodestoreBlockEntities;
 import dev.fricker.lodestore.registry.LodestoreComponents;
+import dev.fricker.lodestore.storage.Compression;
 import dev.fricker.lodestore.storage.ContentsHolder;
 import dev.fricker.lodestore.storage.CrateContents;
 import dev.fricker.lodestore.storage.CrateOverflow;
 import dev.fricker.lodestore.storage.CrateStorage;
+import dev.fricker.lodestore.storage.Disenchanting;
 
 /**
  * A crate.
@@ -82,7 +86,9 @@ import dev.fricker.lodestore.storage.CrateStorage;
  * <p>The contents themselves live in {@link CrateContents}: a legal stack plus a parked remainder
  * per slot. This class owns the rules the contents ask about — what a slot's capacity is, what it
  * will take, what the crate voids — and everything a container block entity used to get from its
- * base class: its name, its lock, its menu, its components, and spilling on break.
+ * base class: its name, its lock, its menu, its components, and spilling on break. It also runs
+ * the upgrades that work on the contents — compress, repair, disenchant — once per change, in
+ * {@link #setChanged}, which is the one moment every door into the crate passes through.
  *
  * <p>Still has no ticker — crates remain purely reactive.
  */
@@ -230,6 +236,14 @@ public class CrateBlockEntity extends BlockEntity
 	private int displaySlot = -1;
 	private ItemStack displayItem = ItemStack.EMPTY;
 
+	/**
+	 * Experience the disenchant upgrade has banked, in points, for the player to collect from the
+	 * installed upgrade. Travels with the crate on its item, like the lock's claim, and holds the
+	 * upgrade in place until it is collected: taking the upgrade out with points still in it would
+	 * lose them, and nothing in a crate loses anything silently.
+	 */
+	private long storedExperience;
+
 	/** Whether a lock is installed, as the server last told this client, which has no upgrades. */
 	private boolean syncedLocked;
 
@@ -346,6 +360,13 @@ public class CrateBlockEntity extends BlockEntity
 			return true;
 		}
 
+		// A disenchant upgrade with experience in the bank stays until the experience is
+		// collected; the slot's tooltip says so. Taking it out would have lost the points.
+		if (upgrades.get(upgradeSlot).getItem() instanceof CrateUpgradeItem item
+				&& resolveUpgrade(item.upgradeKey()).disenchants() && storedExperience > 0) {
+			return false;
+		}
+
 		int multiplier = 1;
 		int unstackable = 1;
 
@@ -448,7 +469,7 @@ public class CrateBlockEntity extends BlockEntity
 	}
 
 	/** Whether an upgrade of this kind is already installed. */
-	public boolean hasUpgrade(net.minecraft.world.item.Item item) {
+	public boolean hasUpgrade(Item item) {
 		for (ItemStack installed : upgrades) {
 			if (!installed.isEmpty() && installed.getItem() == item) {
 				return true;
@@ -468,6 +489,9 @@ public class CrateBlockEntity extends BlockEntity
 			case LOCK -> locks();
 			case STACK -> stacks();
 			case VOID -> !isClient() && voidsOverflow();
+			case COMPRESS -> !isClient() && compresses();
+			case DISENCHANT -> !isClient() && disenchants();
+			case REPAIR -> !isClient() && repairs();
 		};
 
 		if (!installed) {
@@ -614,7 +638,72 @@ public class CrateBlockEntity extends BlockEntity
 		}
 
 		List<ItemStack> allowed = lockFilter.isEmpty() ? storedKinds() : lockFilter;
-		return allowed.isEmpty() || containsKind(allowed, stack);
+		return allowed.isEmpty() || claims(allowed, stack);
+	}
+
+	/**
+	 * Whether {@code kinds} covers this stack's item.
+	 *
+	 * <p>A kind is an item, never a stack. And with a compress upgrade installed a kind is its
+	 * whole family: a crate locked to iron blocks takes nuggets and ingots too, because blocks are
+	 * what it is about to make of them, and refusing the ingot a hopper offers while accepting the
+	 * block it would have become is a rule nobody wants. The client is sent the family already
+	 * spelled out in its claim, since it has no recipes to work it out from.
+	 */
+	private boolean claims(List<ItemStack> kinds, ItemStack stack) {
+		if (containsKind(kinds, stack)) {
+			return true;
+		}
+
+		if (!compresses() || !(level instanceof ServerLevel server)) {
+			return false;
+		}
+
+		for (ItemStack kind : kinds) {
+			if (Compression.sameFamily(server, kind, stack)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether this crate is where {@code stack} belongs, as the network reckons it: it holds the
+	 * item in some slot, or its lock claims it. Compression widens both to the item's family, so
+	 * a crate of iron blocks with a compress upgrade is home to every nugget on the network.
+	 */
+	public boolean isHome(ItemStack stack) {
+		return claims(lockedItems(), stack) || claims(storedKinds(), stack);
+	}
+
+	/** Whether a compress upgrade puts both items on one chain — nugget, ingot and block are one. */
+	private boolean sameFamily(ItemStack a, ItemStack b) {
+		return compresses() && level instanceof ServerLevel server && Compression.sameFamily(server, a, b);
+	}
+
+	/**
+	 * The claim as the client should see it. With a compress upgrade every claimed kind brings its
+	 * family along, so the screen can predict that a nugget goes into a crate locked to blocks;
+	 * the client has no recipes to work that out for itself. The kinds actually claimed come
+	 * first, so the face keeps naming the first of them.
+	 */
+	private List<ItemStack> syncedClaim() {
+		List<ItemStack> claim = new ArrayList<>(lockedItems());
+
+		if (compresses() && level instanceof ServerLevel server) {
+			for (ItemStack kind : lockedItems()) {
+				for (Item member : Compression.family(server, kind.getItem())) {
+					ItemStack relative = new ItemStack(member);
+
+					if (!containsKind(claim, relative)) {
+						claim.add(relative);
+					}
+				}
+			}
+		}
+
+		return claim;
 	}
 
 	/** The distinct items in storage, one of each, in slot order: the kinds a lock claims. */
@@ -690,7 +779,9 @@ public class CrateBlockEntity extends BlockEntity
 	 *         caller should fall back to opening the crate
 	 */
 	public boolean installUpgrade(ItemStack stack) {
-		if (!(stack.getItem() instanceof CrateUpgradeItem)) {
+		if (!(stack.getItem() instanceof CrateUpgradeItem) || hasUpgrade(stack.getItem())) {
+			// An upgrade is installed or it is not; a second of the same adds nothing, and would
+			// only take a slot from one that does.
 			return false;
 		}
 
@@ -752,6 +843,69 @@ public class CrateBlockEntity extends BlockEntity
 		return anyUpgrade(CrateUpgrade::voidsOverflow);
 	}
 
+	/** Whether any installed upgrade crafts the contents up into their densest form. */
+	public boolean compresses() {
+		return anyUpgrade(CrateUpgrade::compresses);
+	}
+
+	/** Whether any installed upgrade strips enchantments and banks what they were worth. */
+	public boolean disenchants() {
+		return anyUpgrade(CrateUpgrade::disenchants);
+	}
+
+	/** Whether any installed upgrade combines worn tools and armour. */
+	public boolean repairs() {
+		return anyUpgrade(CrateUpgrade::repairs);
+	}
+
+	/** Experience the disenchant upgrade has banked, in points, waiting to be collected. */
+	public long storedExperience() {
+		return storedExperience;
+	}
+
+	/**
+	 * Hands the banked experience to {@code player}, all of it, as a right-click on the installed
+	 * disenchant upgrade asks. Points, not levels, so nothing is rounded away.
+	 *
+	 * @return whether there was anything to collect
+	 */
+	public boolean collectExperience(Player player) {
+		if (storedExperience <= 0) {
+			return false;
+		}
+
+		int paid = (int) Math.min(storedExperience, Integer.MAX_VALUE);
+		player.giveExperiencePoints(paid);
+		storedExperience -= paid;
+		setChanged();
+		return true;
+	}
+
+	/**
+	 * What the installed upgrades do to the contents, in the order that lets each feed the next:
+	 * an enchanted sword is stripped first, which makes it a plain one the repair may combine, and
+	 * compression runs last over whatever the others left. Server only, like every other rule here;
+	 * the client is shown the result.
+	 */
+	private void refine() {
+		if (!(level instanceof ServerLevel server)) {
+			return;
+		}
+
+		if (disenchants()) {
+			storedExperience += contents.disenchant(Disenchanting::hasRemovable, Disenchanting::stripped,
+					kind -> Disenchanting.roll(server.getRandom(), Disenchanting.worth(kind)));
+		}
+
+		if (repairs()) {
+			contents.repair();
+		}
+
+		if (compresses()) {
+			contents.compress(kind -> Compression.stepUp(server, kind.getItem()), this::isDisplaySlot);
+		}
+	}
+
 	private boolean anyUpgrade(Predicate<CrateUpgrade> flag) {
 		for (ItemStack installed : upgrades) {
 			if (installed.getItem() instanceof CrateUpgradeItem item
@@ -767,8 +921,10 @@ public class CrateBlockEntity extends BlockEntity
 	 * Whether this crate destroys {@code stack} rather than refusing it, once nothing has room.
 	 *
 	 * <p>Only ever true for an item one of the voided slots already holds — the item, as the lock
-	 * claims it, whatever its damage or enchantments. The worst a misrouted item can then do is
-	 * back the system up, which is recoverable, rather than vanish, which is not.
+	 * claims it, whatever its damage or enchantments, and with a compress upgrade the item's
+	 * family, since a crate full of iron blocks is as full of iron as it will ever be. The worst a
+	 * misrouted item can then do is back the system up, which is recoverable, rather than vanish,
+	 * which is not.
 	 */
 	public boolean isVoiding(ItemStack stack) {
 		if (!voidsOverflow()) {
@@ -778,7 +934,7 @@ public class CrateBlockEntity extends BlockEntity
 		for (int slot : voidedSlots()) {
 			ItemStack held = contents.visible(slot);
 
-			if (!held.isEmpty() && ItemStack.isSameItem(held, stack)) {
+			if (!held.isEmpty() && (ItemStack.isSameItem(held, stack) || sameFamily(held, stack))) {
 				return true;
 			}
 		}
@@ -921,6 +1077,10 @@ public class CrateBlockEntity extends BlockEntity
 		// into empty slots. A no-op while everything fits, so it never moves what a player placed.
 		contents.spread();
 
+		// Then the upgrades that work on the contents: strip, combine, compress. Each is a no-op
+		// without its upgrade, and each only ever acts on what has just arrived or just changed.
+		refine();
+
 		// The lock claims what the crate holds, or the first item into an empty one. Done before
 		// the preview, which reads the display choice this keeps current.
 		captureLockFilter();
@@ -929,7 +1089,7 @@ public class CrateBlockEntity extends BlockEntity
 		long previousCount = previewCount;
 		recomputePreview();
 
-		List<ItemStack> currentFilters = lockedItems();
+		List<ItemStack> currentFilters = syncedClaim();
 		boolean currentLocked = locks();
 		ItemStack currentGhost = ghostItem();
 		int currentMultiplier = stackMultiplier();
@@ -969,7 +1129,7 @@ public class CrateBlockEntity extends BlockEntity
 	 * cannot check for a lock itself.
 	 */
 	private void saveLockState(ValueOutput out, boolean resolved) {
-		List<ItemStack> filter = resolved ? lockedItems() : lockFilter;
+		List<ItemStack> filter = resolved ? syncedClaim() : lockFilter;
 
 		if (!filter.isEmpty()) {
 			out.store("lock_filter", ItemStack.CODEC.listOf(), filter);
@@ -1094,6 +1254,10 @@ public class CrateBlockEntity extends BlockEntity
 			data.store("upgrades", ItemStack.CODEC.listOf(), installed);
 		}
 
+		if (storedExperience > 0) {
+			data.putLong("stored_experience", storedExperience);
+		}
+
 		saveLockState(data, false);
 	}
 
@@ -1114,6 +1278,7 @@ public class CrateBlockEntity extends BlockEntity
 		}
 
 		loadLockState(data);
+		storedExperience = Math.max(0, data.getLongOr("stored_experience", 0L));
 		broadcastFilters = List.copyOf(lockedItems());
 
 		syncedLocked = data.getBooleanOr("locked", false);
@@ -1164,6 +1329,7 @@ public class CrateBlockEntity extends BlockEntity
 			return switch (index) {
 				case CrateMenu.DATA_LOCKED -> locks() ? 1 : 0;
 				case CrateMenu.DATA_REMOVABLE -> removableUpgrades();
+				case CrateMenu.DATA_EXPERIENCE -> (int) Math.min(storedExperience, Integer.MAX_VALUE);
 				default -> 0;
 			};
 		}
@@ -1258,6 +1424,7 @@ public class CrateBlockEntity extends BlockEntity
 		lockFilter.addAll(fitted.lockFilterStacks());
 		displaySlot = fitted.displaySlot();
 		displayItem = fitted.displayItemStack();
+		storedExperience = Math.max(0, fitted.storedExperience());
 
 		contents.clearContent();
 		components.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).copyInto(contents.items());
@@ -1291,7 +1458,8 @@ public class CrateBlockEntity extends BlockEntity
 			builder.set(LodestoreComponents.CRATE_OVERFLOW, overflow);
 		}
 
-		InstalledUpgrades fitted = InstalledUpgrades.of(installedUpgrades(), lockFilter, displaySlot, displayItem);
+		InstalledUpgrades fitted = InstalledUpgrades.of(installedUpgrades(), lockFilter, displaySlot, displayItem,
+				storedExperience);
 
 		if (!fitted.isEmpty()) {
 			builder.set(LodestoreComponents.CRATE_UPGRADES, fitted);
@@ -1308,5 +1476,6 @@ public class CrateBlockEntity extends BlockEntity
 		output.discard("lock_filter");
 		output.discard("display_slot");
 		output.discard("display_item");
+		output.discard("stored_experience");
 	}
 }

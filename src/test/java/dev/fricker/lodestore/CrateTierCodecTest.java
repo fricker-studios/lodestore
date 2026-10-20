@@ -54,9 +54,9 @@ class CrateTierCodecTest {
 
 	@Test
 	void tiersDecodeToTheirIntendedValues() throws IOException {
-		assertEquals(new CrateTier(false, 1, 1), decode("basic"));
-		assertEquals(new CrateTier(true, 2, 2), decode("sturdy"));
-		assertEquals(new CrateTier(true, 3, 3), decode("reinforced"));
+		assertEquals(new CrateTier(false, 1, 2), decode("basic"));
+		assertEquals(new CrateTier(true, 2, 4), decode("sturdy"));
+		assertEquals(new CrateTier(true, 3, 6), decode("reinforced"));
 	}
 
 	/**
@@ -140,6 +140,14 @@ class CrateTierCodecTest {
 
 		assertTrue(decode("basic").upgradeSlots() < decode("reinforced").upgradeSlots(),
 				"a reinforced crate should take more upgrades than a basic one, or the tier buys nothing");
+	}
+
+	/** Two, four and six: a basic crate takes a lock and one more, a reinforced one takes one of each shipped upgrade. */
+	@Test
+	void shippedTiersOfferTwoFourAndSix() throws IOException {
+		assertEquals(2, decode("basic").upgradeSlots());
+		assertEquals(4, decode("sturdy").upgradeSlots());
+		assertEquals(6, decode("reinforced").upgradeSlots());
 	}
 
 	/** An unresolved tier must accept no upgrades rather than silently allowing some. */

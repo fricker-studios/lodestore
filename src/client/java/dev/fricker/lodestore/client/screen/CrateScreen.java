@@ -23,6 +23,7 @@ import dev.fricker.lodestore.api.crate.UpgradeBehaviour;
 import dev.fricker.lodestore.block.CrateBlockEntity;
 import dev.fricker.lodestore.item.CrateUpgradeItem;
 import dev.fricker.lodestore.menu.CrateMenu;
+import dev.fricker.lodestore.storage.Disenchanting;
 
 /**
  * The crate screen: a vanilla chest body with Lodestore's upgrade column beside it.
@@ -38,6 +39,10 @@ import dev.fricker.lodestore.menu.CrateMenu;
  *
  * <p>With a stack upgrade a slot holds more than the one legal stack it shows, so the count drawn on
  * it is the slot's real total rather than the stack's, scaled down when four digits would not fit.
+ *
+ * <p>The disenchant upgrade banks experience, and the one picture of that is here: the installed
+ * upgrade draws the levels it holds where a stack would draw its count, in the experience bar's
+ * green, with the tooltip giving the points and the right-click that hands them over.
  */
 public class CrateScreen extends AbstractContainerScreen<CrateMenu> {
 	private static final Identifier CHEST_BACKGROUND =
@@ -70,6 +75,8 @@ public class CrateScreen extends AbstractContainerScreen<CrateMenu> {
 	private static final int SELECTING_TINT = 0x99FFFFFF;
 	/** A count is drawn no narrower than this, or it stops being legible at the usual GUI scale. */
 	private static final float MIN_COUNT_SCALE = 0.6F;
+	/** The experience bar's own green, for the levels the disenchant upgrade holds. */
+	private static final int EXPERIENCE_COLOUR = 0xFF80FF20;
 
 	private final int rows;
 
@@ -113,6 +120,18 @@ public class CrateScreen extends AbstractContainerScreen<CrateMenu> {
 
 	private static boolean locks(@Nullable CrateUpgrade upgrade) {
 		return upgrade != null && UpgradeBehaviour.LOCK.grantedBy(upgrade);
+	}
+
+	private static boolean compresses(@Nullable CrateUpgrade upgrade) {
+		return upgrade != null && UpgradeBehaviour.COMPRESS.grantedBy(upgrade);
+	}
+
+	private static boolean disenchants(@Nullable CrateUpgrade upgrade) {
+		return upgrade != null && UpgradeBehaviour.DISENCHANT.grantedBy(upgrade);
+	}
+
+	private static boolean repairs(@Nullable CrateUpgrade upgrade) {
+		return upgrade != null && UpgradeBehaviour.REPAIR.grantedBy(upgrade);
 	}
 
 	@Override
@@ -214,17 +233,40 @@ public class CrateScreen extends AbstractContainerScreen<CrateMenu> {
 		}
 
 		List<Component> hinted = new ArrayList<>(tooltip);
+		CrateUpgrade upgrade = upgradeOf(stack);
 
-		// An upgrade the contents still need stays put, and a slot that silently refuses a click
-		// looks broken; this is the one line that explains it.
+		// An upgrade the contents still need stays put, and so does a disenchant upgrade holding
+		// experience; a slot that silently refuses a click looks broken, so one line explains it.
 		if (!menu.removable(hoveredSlot.index - menu.storageEnd())) {
-			hinted.add(Component.translatable("lodestore.upgrade.needed").withStyle(ChatFormatting.RED));
+			hinted.add(Component.translatable(disenchants(upgrade) && menu.storedExperience() > 0
+					? "lodestore.upgrade.experience_held" : "lodestore.upgrade.needed").withStyle(ChatFormatting.RED));
+		}
+
+		// What the three upgrades that work on the contents do, since nothing else says so: an
+		// upgrade that quietly turns ingots into blocks with no word of warning looks like a bug.
+		if (compresses(upgrade)) {
+			hinted.add(Component.translatable("lodestore.upgrade.compresses").withStyle(ChatFormatting.GRAY));
+		}
+
+		if (repairs(upgrade)) {
+			hinted.add(Component.translatable("lodestore.upgrade.repairs").withStyle(ChatFormatting.GRAY));
+		}
+
+		if (disenchants(upgrade)) {
+			hinted.add(Component.translatable("lodestore.upgrade.disenchants").withStyle(ChatFormatting.GRAY));
+			int points = menu.storedExperience();
+
+			if (points > 0) {
+				hinted.add(Component.translatable("lodestore.upgrade.experience", Disenchanting.levels(points), points)
+						.withStyle(ChatFormatting.GREEN));
+				hinted.add(Component.translatable("lodestore.upgrade.collect_experience").withStyle(ChatFormatting.GRAY));
+			} else {
+				hinted.add(Component.translatable("lodestore.upgrade.no_experience").withStyle(ChatFormatting.DARK_GRAY));
+			}
 		}
 
 		// The stack upgrade's right-click sorts the crate; the lock's chooses the slot the face
 		// shows. Each says so where the gesture works, since neither is one the game teaches.
-		CrateUpgrade upgrade = upgradeOf(stack);
-
 		if (stacks(upgrade)) {
 			hinted.add(Component.translatable("lodestore.upgrade.compress").withStyle(ChatFormatting.GRAY));
 		}
@@ -258,46 +300,66 @@ public class CrateScreen extends AbstractContainerScreen<CrateMenu> {
 		CrateBlockEntity crate = crate();
 		ItemStack stack = slot.getItem();
 		boolean dragging = isQuickCrafting && quickCraftSlots.contains(slot);
+		CrateMenu menu = getMenu();
 
-		if (crate == null || dragging || slot.index >= getMenu().storageEnd()
+		// The disenchant upgrade wears the levels it holds the way a stack wears its count, in
+		// the experience bar's green so it cannot be read as a stack of upgrades.
+		if (slot.index >= menu.storageEnd() && slot.index < menu.upgradeEnd() && !stack.isEmpty()
+				&& disenchants(upgradeOf(stack)) && menu.storedExperience() > 0) {
+			drawWithCount(graphics, slot, stack, String.valueOf(Disenchanting.levels(menu.storedExperience())),
+					EXPERIENCE_COLOUR);
+			return;
+		}
+
+		if (crate == null || dragging || slot.index >= menu.storageEnd()
 				|| stack.isEmpty() || crate.remainder(slot.index) == 0) {
 			super.extractSlot(graphics, slot, mouseX, mouseY);
 			return;
 		}
 
-		String total = String.valueOf(stack.getCount() + crate.remainder(slot.index));
-		int width = font.width(total);
+		drawWithCount(graphics, slot, stack, String.valueOf(stack.getCount() + crate.remainder(slot.index)), -1);
+	}
+
+	/**
+	 * Vanilla's own slot drawing with {@code count} as the count text, shrunk to fit when it is
+	 * wider than the slot and anchored where vanilla anchors a count.
+	 */
+	private void drawWithCount(GuiGraphicsExtractor graphics, Slot slot, ItemStack stack, String count, int colour) {
+		int width = font.width(count);
 		int seed = slot.x + slot.y * imageWidth;
 		graphics.item(stack, slot.x, slot.y, seed);
 
-		if (width <= 16) {
-			graphics.itemDecorations(font, stack, slot.x, slot.y, total);
+		if (width <= 16 && colour == -1) {
+			graphics.itemDecorations(font, stack, slot.x, slot.y, count);
 			return;
 		}
 
 		// Bar and cooldown as vanilla draws them, with an empty count; then the count, shrunk.
 		graphics.itemDecorations(font, stack, slot.x, slot.y, "");
-		float scale = Math.max(MIN_COUNT_SCALE, 16.0F / width);
+		float scale = Math.min(1.0F, Math.max(MIN_COUNT_SCALE, 16.0F / width));
 		graphics.pose().pushMatrix();
 		graphics.pose().translate(slot.x + 17 - width * scale, slot.y + 9 + (font.lineHeight - 1) * (1.0F - scale));
 		graphics.pose().scale(scale, scale);
-		graphics.text(font, total, 0, 0, -1, true);
+		graphics.text(font, count, 0, 0, colour, true);
 		graphics.pose().popMatrix();
 	}
 
 	/**
 	 * Right-click the lock, then click a storage slot to show its item on the front face. Right-
-	 * click the stack upgrade to sort the crate.
+	 * click the stack upgrade to sort the crate, or the disenchant upgrade to collect what it holds.
 	 */
 	@Override
 	protected void slotClicked(Slot slot, int slotId, int button, ContainerInput input) {
 		CrateMenu menu = getMenu();
 
 		if (slot != null && button == 1 && slotId >= menu.storageEnd() && slotId < menu.upgradeEnd()) {
-			if (stacks(upgradeOf(slot.getItem()))) {
+			CrateUpgrade upgrade = upgradeOf(slot.getItem());
+
+			if (stacks(upgrade) || disenchants(upgrade)) {
 				// Rides the same validated button packet the lock's display choice does.
 				if (minecraft != null && minecraft.gameMode != null) {
-					minecraft.gameMode.handleInventoryButtonClick(menu.containerId, CrateMenu.SORT_BUTTON);
+					minecraft.gameMode.handleInventoryButtonClick(menu.containerId,
+							stacks(upgrade) ? CrateMenu.SORT_BUTTON : CrateMenu.COLLECT_BUTTON);
 				}
 
 				return;

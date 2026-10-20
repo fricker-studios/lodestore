@@ -1,15 +1,25 @@
 package dev.fricker.lodestore.storage;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
+import java.util.function.Function;
+import java.util.function.IntPredicate;
+import java.util.function.Predicate;
+import java.util.function.ToLongFunction;
+import java.util.function.UnaryOperator;
 
 import net.minecraft.core.NonNullList;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.Container;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 
@@ -43,6 +53,11 @@ import net.minecraft.world.level.storage.ValueOutput;
  * the block entity: a hopper finds its target by asking whether the block entity is a
  * {@code Container}, and the whole point is that it is not. The block entity owns the rules —
  * capacity, locks, nesting, voiding — and this class only asks.
+ *
+ * <p>Three mutations here change what the crate holds rather than where it is: {@link #compress},
+ * {@link #repair} and {@link #disenchant}, one per upgrade that asks for it. They are the only
+ * things in a crate that ever lower a count other than a withdrawal, and each runs only while its
+ * upgrade is installed.
  */
 public final class CrateContents implements Container {
 	/** The save key for the remainders. The same codec carries them on the dropped item. */
@@ -661,6 +676,418 @@ public final class CrateContents implements Container {
 		}
 
 		return needed <= empties;
+	}
+
+	// --- refining: what the compress, repair and disenchant upgrades do ----------------------
+	//
+	// The one place a crate changes what it holds rather than only where. Each works on totals
+	// through add and take, so the invariants hold throughout, and each puts its result where the
+	// same kind already is — "the right stack" — before it opens a new slot.
+
+	/** How many rungs a compression chain may climb in one go: nugget to ingot to block is two. */
+	private static final int MAX_COMPRESSION_RUNGS = 8;
+
+	/**
+	 * Crafts what the crate holds up its pathways as far as they go: nine nuggets into an ingot,
+	 * then nine ingots into a block, each rung only as far as the result has somewhere to land.
+	 *
+	 * <p>Only plain items — a stack with anything on it beyond the item is not the item the recipe
+	 * names — and only as many as make a whole result; the eight ingots left over stay ingots.
+	 * Sources are drained smallest first so a part stack clears before a full one is touched, and
+	 * slots for which {@code last} is true — the one the front face shows — last of all.
+	 *
+	 * @param steps the rung above a kind, or null if it compresses no further
+	 * @return whether anything changed
+	 */
+	public boolean compress(Function<ItemStack, Compression.@Nullable Step> steps, IntPredicate last) {
+		boolean changed = false;
+
+		for (int rung = 0; rung < MAX_COMPRESSION_RUNGS; rung++) {
+			if (!compressOnce(steps, last)) {
+				break;
+			}
+
+			changed = true;
+		}
+
+		return changed;
+	}
+
+	private boolean compressOnce(Function<ItemStack, Compression.@Nullable Step> steps, IntPredicate last) {
+		boolean changed = false;
+
+		for (ItemStack kind : plainKinds()) {
+			Compression.Step step = steps.apply(kind);
+
+			if (step == null) {
+				continue;
+			}
+
+			ItemStack dense = new ItemStack(step.to());
+
+			while (true) {
+				long batches = totalOf(kind) / step.count();
+
+				if (batches == 0) {
+					break;
+				}
+
+				int target = slotFor(dense);
+
+				if (target >= 0) {
+					long amount = Math.min(batches, room(target, dense));
+					takeKind(kind, amount * step.count(), last);
+					add(target, dense, amount);
+					changed = true;
+					continue;
+				}
+
+				// Nowhere yet — a crate full to the last slot with ingots — but draining a source
+				// slot makes room. Take batch by batch until one empties, never more batches than
+				// an empty slot could hold the results of, and put everything back if none does.
+				List<long[]> taken = new ArrayList<>();
+				long made = 0;
+				long most = Math.min(batches, Math.max(1, rules.capacity(0, dense)));
+
+				while (made < most && (target = slotFor(dense)) < 0) {
+					taken.addAll(takeKind(kind, step.count(), last));
+					made++;
+				}
+
+				if (target < 0) {
+					for (long[] piece : taken) {
+						add((int) piece[0], kind, piece[1]);
+					}
+
+					break;
+				}
+
+				add(target, dense, made);
+				changed = true;
+			}
+		}
+
+		return changed;
+	}
+
+	/**
+	 * Combines worn, unenchanted tools and armour of one kind into fewer, fuller ones, as a crafting
+	 * grid does: the two durabilities plus five percent of the maximum, capped at the maximum.
+	 *
+	 * <p>Two items are one kind for this when they differ in nothing but their damage, so a renamed
+	 * pickaxe is never merged into a plain one. Pairs are chosen to waste as little as possible:
+	 * first, for as long as any two still add up to under the maximum, the two that come closest
+	 * to it; then, once every pair would overshoot, the two most worn, which overshoot least, with
+	 * the fullest left as it is when the count is odd. Enchanted items are skipped altogether,
+	 * because combining them would strip the enchantments.
+	 *
+	 * @return whether anything changed
+	 */
+	public boolean repair() {
+		boolean changed = false;
+
+		while (true) {
+			List<ItemStack> bases = new ArrayList<>();
+			List<List<Integer>> groups = new ArrayList<>();
+
+			for (int slot = 0; slot < visible.size(); slot++) {
+				ItemStack kind = kindOf(slot);
+
+				if (kind.isEmpty() || !repairable(kind)) {
+					continue;
+				}
+
+				ItemStack base = kind.copyWithCount(1);
+				base.setDamageValue(0);
+				int index = -1;
+
+				for (int i = 0; i < bases.size(); i++) {
+					if (ItemStack.isSameItemSameComponents(bases.get(i), base)) {
+						index = i;
+						break;
+					}
+				}
+
+				if (index < 0) {
+					bases.add(base);
+					groups.add(new ArrayList<>());
+					index = bases.size() - 1;
+				}
+
+				groups.get(index).add(slot);
+			}
+
+			boolean combined = false;
+
+			for (List<Integer> group : groups) {
+				if (combineOne(group)) {
+					combined = true;
+					break;
+				}
+			}
+
+			if (!combined) {
+				return changed;
+			}
+
+			changed = true;
+		}
+	}
+
+	/** Worn, with a durability to combine, and nothing enchanted onto it. */
+	private static boolean repairable(ItemStack kind) {
+		return kind.has(DataComponents.MAX_DAMAGE) && kind.has(DataComponents.DAMAGE)
+				&& kind.getMaxDamage() > 0 && kind.getDamageValue() > 0
+				&& !EnchantmentHelper.hasAnyEnchantments(kind);
+	}
+
+	/** Combines one pair from a group of slots holding one repairable kind. False if none can be. */
+	private boolean combineOne(List<Integer> slots) {
+		// One entry per item: its durability, and the slot it is in.
+		List<long[]> items = new ArrayList<>();
+		int max = kindOf(slots.getFirst()).getMaxDamage();
+
+		for (int slot : slots) {
+			long durability = max - kindOf(slot).getDamageValue();
+
+			for (long i = 0; i < total(slot); i++) {
+				items.add(new long[] {durability, slot});
+			}
+		}
+
+		if (items.size() < 2) {
+			return false;
+		}
+
+		items.sort(Comparator.comparingLong(item -> item[0]));
+		int bonus = max * 5 / 100;
+		long limit = max - bonus;
+
+		// The fullest pair that still fits under the maximum, so nothing is wasted.
+		int low = 0;
+		int high = items.size() - 1;
+		int bestLow = -1;
+		int bestHigh = -1;
+		long best = -1;
+
+		while (low < high) {
+			long sum = items.get(low)[0] + items.get(high)[0];
+
+			if (sum <= limit) {
+				if (sum > best) {
+					best = sum;
+					bestLow = low;
+					bestHigh = high;
+				}
+
+				low++;
+			} else {
+				high--;
+			}
+		}
+
+		if (bestLow < 0) {
+			// Every pair overshoots. The two most worn make a full item and waste the least; with
+			// an odd count, pairing from the bottom leaves the fullest as it is.
+			bestLow = 0;
+			bestHigh = 1;
+		}
+
+		return combine(items.get(bestLow), items.get(bestHigh), max, bonus);
+	}
+
+	private boolean combine(long[] a, long[] b, int max, int bonus) {
+		int slotA = (int) a[1];
+		int slotB = (int) b[1];
+		ItemStack kindA = kindOf(slotA);
+		ItemStack kindB = kindOf(slotB);
+		ItemStack result = kindA.copyWithCount(1);
+		result.setDamageValue((int) Math.max(max - (a[0] + b[0] + bonus), 0));
+
+		take(slotA, 1);
+		take(slotB, 1);
+		int target = slotFor(result);
+
+		if (target < 0) {
+			add(slotA, kindA, 1);
+			add(slotB, kindB, 1);
+			return false;
+		}
+
+		add(target, result, 1);
+		return true;
+	}
+
+	/**
+	 * Strips the enchantments off everything that has one to strip, and says what they were worth.
+	 *
+	 * <p>Per slot: every item in it is the same, so the whole total is stripped at once and each
+	 * one is valued on its own. The stripped stack then joins any slot already holding its plain
+	 * kind — a stripped book goes with the books — before it stays where it was.
+	 *
+	 * @param enchanted  whether a kind has anything to take off
+	 * @param strip      one of a kind with its enchantments gone
+	 * @param worthOfOne the experience one item of a kind pays out
+	 * @return the experience banked
+	 */
+	public long disenchant(Predicate<ItemStack> enchanted, UnaryOperator<ItemStack> strip,
+			ToLongFunction<ItemStack> worthOfOne) {
+		long banked = 0;
+
+		for (int slot = 0; slot < visible.size(); slot++) {
+			ItemStack kind = kindOf(slot);
+
+			if (kind.isEmpty() || !enchanted.test(kind)) {
+				continue;
+			}
+
+			ItemStack plain = strip.apply(kind);
+
+			if (plain.isEmpty()) {
+				continue;
+			}
+
+			long count = total(slot);
+
+			for (long i = 0; i < count; i++) {
+				banked += worthOfOne.applyAsLong(kind);
+			}
+
+			visible.set(slot, ItemStack.EMPTY);
+			remainder[slot] = 0;
+			add(slot, plain, count);
+			gather(slot);
+		}
+
+		return banked;
+	}
+
+	/** The distinct kinds here that carry nothing beyond their item, one copy each, in slot order. */
+	private List<ItemStack> plainKinds() {
+		List<ItemStack> kinds = new ArrayList<>();
+
+		for (int slot = 0; slot < visible.size(); slot++) {
+			ItemStack kind = kindOf(slot);
+
+			if (kind.isEmpty() || !kind.getComponentsPatch().isEmpty()) {
+				continue;
+			}
+
+			boolean seen = false;
+
+			for (ItemStack known : kinds) {
+				if (ItemStack.isSameItemSameComponents(known, kind)) {
+					seen = true;
+					break;
+				}
+			}
+
+			if (!seen) {
+				kinds.add(kind);
+			}
+		}
+
+		return kinds;
+	}
+
+	/** Everything of one kind, across every slot holding it. */
+	private long totalOf(ItemStack kind) {
+		long sum = 0;
+
+		for (int slot = 0; slot < visible.size(); slot++) {
+			ItemStack held = kindOf(slot);
+
+			if (!held.isEmpty() && ItemStack.isSameItemSameComponents(held, kind)) {
+				sum += total(slot);
+			}
+		}
+
+		return sum;
+	}
+
+	/**
+	 * Takes {@code amount} of a kind from the slots holding it, smallest total first and the slots
+	 * {@code last} names after all the others, and says what came from where so it can be put back.
+	 */
+	private List<long[]> takeKind(ItemStack kind, long amount, IntPredicate last) {
+		List<Integer> sources = new ArrayList<>();
+
+		for (int slot = 0; slot < visible.size(); slot++) {
+			ItemStack held = kindOf(slot);
+
+			if (!held.isEmpty() && ItemStack.isSameItemSameComponents(held, kind)) {
+				sources.add(slot);
+			}
+		}
+
+		sources.sort(Comparator.<Integer>comparingInt(slot -> last.test(slot) ? 1 : 0)
+				.thenComparingLong(this::total));
+		List<long[]> taken = new ArrayList<>();
+
+		for (int slot : sources) {
+			if (amount <= 0) {
+				break;
+			}
+
+			long piece = take(slot, amount);
+
+			if (piece > 0) {
+				taken.add(new long[] {slot, piece});
+				amount -= piece;
+			}
+		}
+
+		return taken;
+	}
+
+	/**
+	 * A slot that will take {@code stack}: one already holding it with room, else an empty one that
+	 * may. Earliest first in each case. -1 if there is none.
+	 */
+	private int slotFor(ItemStack stack) {
+		for (int slot = 0; slot < visible.size(); slot++) {
+			ItemStack held = kindOf(slot);
+
+			if (!held.isEmpty() && ItemStack.isSameItemSameComponents(held, stack) && room(slot, stack) > 0) {
+				return slot;
+			}
+		}
+
+		for (int slot = 0; slot < visible.size(); slot++) {
+			if (kindOf(slot).isEmpty() && room(slot, stack) > 0) {
+				return slot;
+			}
+		}
+
+		return -1;
+	}
+
+	/**
+	 * Moves what {@code source} holds into other slots already holding the same kind, as far as
+	 * they have room, earliest first. What finds no room stays. This is what lands a transformed
+	 * stack in the right stack rather than beside it.
+	 */
+	private void gather(int source) {
+		ItemStack kind = kindOf(source);
+
+		for (int target = 0; target < visible.size() && total(source) > 0; target++) {
+			if (target == source) {
+				continue;
+			}
+
+			ItemStack other = kindOf(target);
+
+			if (other.isEmpty() || !ItemStack.isSameItemSameComponents(kind, other)) {
+				continue;
+			}
+
+			long amount = Math.min(total(source), room(target, kind));
+
+			if (amount > 0) {
+				take(source, amount);
+				add(target, kind, amount);
+			}
+		}
 	}
 
 	/**
