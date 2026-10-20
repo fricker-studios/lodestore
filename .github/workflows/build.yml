@@ -45,16 +45,17 @@ jobs:
           distribution: temurin
           cache: gradle
 
-      # On a pull_request event github.sha is the ephemeral merge commit, which
-      # matches nothing visible in the PR. Use the real head commit so the
-      # artifact name can actually be correlated with what was pushed.
+      # The artifact is named for where it came from and which run built it: the pull
+      # request's number, or main, plus the run number. The jar inside already carries the
+      # commit in its git-describe version, and the nearest tag with it, so a sha in the
+      # artifact name said nothing the jar did not — and left a rebuilt commit with two
+      # artifacts of one name.
       - name: Resolve build metadata
         id: meta
         run: |
           set -euo pipefail
-          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
-          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
-          echo "short=${SHA:0:7}" >> "$GITHUB_OUTPUT"
+          SOURCE="${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.ref_name }}"
+          echo "label=${SOURCE}-run${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: Build and test
         run: ./gradlew build --stacktrace
@@ -63,7 +64,7 @@ jobs:
         id: upload
         uses: actions/upload-artifact@v7
         with:
-          name: lodestore-${{ steps.meta.outputs.short }}
+          name: lodestore-${{ steps.meta.outputs.label }}
           path: |
             build/libs/*.jar
             !build/libs/*-sources.jar
@@ -77,9 +78,9 @@ jobs:
           {
             echo "## Mod jar"
             echo
-            echo "**[Download lodestore-${{ steps.meta.outputs.short }}](${{ steps.upload.outputs.artifact-url }})**"
+            echo "**[Download lodestore-${{ steps.meta.outputs.label }}](${{ steps.upload.outputs.artifact-url }})**"
             echo
-            echo "Commit \`${{ steps.meta.outputs.short }}\`. Unzip and drop the jar into \`.minecraft/mods\` next to Fabric API."
+            echo "Unzip and drop the jar into \`.minecraft/mods\` next to Fabric API."
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Skipped for fork pull requests, whose tokens are read-only.
@@ -90,13 +91,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           URL: ${{ steps.upload.outputs.artifact-url }}
-          SHORT: ${{ steps.meta.outputs.short }}
+          LABEL: ${{ steps.meta.outputs.label }}
         run: |
           set -euo pipefail
           gh pr comment "${{ github.event.pull_request.number }}" \
             --edit-last --create-if-none \
-            --body "🧱 **Test build ready** — [lodestore-${SHORT}](${URL})
+            --body "🧱 **Test build ready** — [lodestore-${LABEL}](${URL})
 
-          Built from \`${SHORT}\`. Unzip and drop the jar into \`.minecraft/mods\` alongside Fabric API (Minecraft 26.2, Fabric Loader 0.19.3+).
+          Unzip and drop the jar into \`.minecraft/mods\` alongside Fabric API (Minecraft 26.2, Fabric Loader 0.19.3+).
 
           <sub>Updated automatically on each push.</sub>"

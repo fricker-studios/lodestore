@@ -46,8 +46,10 @@ brew install --cask temurin@25
 ## Getting a build
 
 Every pull request and every push to `main` builds the mod and attaches the jar to the workflow
-run. Open the run from the Actions tab or the PR's checks, download the `lodestore-<sha>` artifact,
-and drop the jar into `.minecraft/mods` next to Fabric API.
+run. Open the run from the Actions tab or the PR's checks, download the
+`lodestore-pr<number>-run<run>` artifact — `lodestore-main-run<run>` for a push to `main` — and
+drop the jar into `.minecraft/mods` next to Fabric API. The artifact is named for the pull request
+and the run that built it, so two runs never share a name; the commit is in the jar's own filename.
 
 Tagged commits publish a GitHub Release with the jar attached:
 
