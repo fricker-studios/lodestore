@@ -6,6 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.entity.EntityTypes;
@@ -20,6 +21,9 @@ import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import dev.fricker.lodestore.block.CrateBlockEntity;
 import dev.fricker.lodestore.block.DepositBoxBlockEntity;
 import dev.fricker.lodestore.block.InterfaceBoxBlockEntity;
+import dev.fricker.lodestore.network.PullMode;
+import dev.fricker.lodestore.menu.InterfaceMenu;
+import net.minecraft.server.level.ServerPlayer;
 import dev.fricker.lodestore.network.NetworkEntry;
 import dev.fricker.lodestore.network.NetworkView;
 import dev.fricker.lodestore.network.StorageNetwork;
@@ -591,6 +595,125 @@ public class StorageNetworkGameTests {
 		}
 
 		helper.succeed();
+	}
+
+	// --- taking out through the interface -----------------------------------------------
+
+	/**
+	 * A click on a cell takes a stack of that kind onto the cursor; a right-click half of one; a
+	 * cursor already holding the kind is topped up to a stack, and one holding something else is
+	 * left alone. A kind the network does not hold yields nothing.
+	 */
+	@GameTest
+	public void aClickOnTheInterfaceTakesAStackOut(GameTestHelper helper) {
+		CrateBlockEntity home = crate(helper, CRATE, Items.COBBLESTONE, 100);
+		ServerPlayer player = (ServerPlayer) helper.makeMockServerPlayer(GameType.SURVIVAL);
+		InterfaceMenu menu = openInterface(helper, player);
+		ItemVariant cobble = ItemVariant.of(Items.COBBLESTONE);
+
+		expect(helper, menu.pull(player, cobble, PullMode.STACK), true, "a stack should come out");
+		expect(helper, menu.getCarried().is(Items.COBBLESTONE) && menu.getCarried().getCount() == 64, true,
+				"the cursor should hold a stack of cobblestone, holds " + describe(menu.getCarried()));
+
+		if (count(home, Items.COBBLESTONE) != 36) {
+			throw helper.assertionException("the crate should be down to 36, holds " + count(home, Items.COBBLESTONE));
+		}
+
+		expect(helper, menu.pull(player, cobble, PullMode.HALF), false, "a full cursor has no room for more");
+		menu.setCarried(ItemStack.EMPTY);
+		expect(helper, menu.pull(player, cobble, PullMode.HALF), true, "half a stack should come out");
+		expect(helper, menu.getCarried().getCount() == 32 && count(home, Items.COBBLESTONE) == 4, true,
+				"a right-click should take 32 and leave 4; cursor " + describe(menu.getCarried()) + ", crate "
+						+ count(home, Items.COBBLESTONE));
+
+		expect(helper, menu.pull(player, cobble, PullMode.STACK), true, "the cursor should be topped up");
+		expect(helper, menu.getCarried().getCount() == 36 && count(home, Items.COBBLESTONE) == 0, true,
+				"topping up should take the last 4; cursor " + describe(menu.getCarried()));
+
+		menu.setCarried(new ItemStack(Items.DIRT, 3));
+		home.contents().setItem(0, new ItemStack(Items.COBBLESTONE, 10));
+		home.setChanged();
+		expect(helper, menu.pull(player, cobble, PullMode.STACK), false, "a cursor holding dirt must not take cobblestone");
+		expect(helper, menu.getCarried().is(Items.DIRT) && count(home, Items.COBBLESTONE) == 10, true,
+				"a refused pull must change nothing");
+
+		menu.setCarried(ItemStack.EMPTY);
+		expect(helper, menu.pull(player, ItemVariant.of(Items.DIAMOND), PullMode.STACK), false,
+				"a kind the network does not hold yields nothing");
+		expect(helper, menu.getCarried().isEmpty(), true, "nothing should be on the cursor");
+		helper.succeed();
+	}
+
+	/**
+	 * A shift-click puts a stack into the inventory, drawing a stacked crate's parked remainder
+	 * before the stack it shows; with no room in the inventory nothing comes out at all, and the
+	 * crate is not left short of what the player never received.
+	 */
+	@GameTest
+	public void aShiftClickOnTheInterfaceFillsTheInventory(GameTestHelper helper) {
+		CrateBlockEntity home = place(helper, CRATE, LodestoreBlocks.BASIC_CRATE);
+		home.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE));
+
+		try (Transaction transaction = Transaction.openOuter()) {
+			home.storage().insert(ItemVariant.of(Items.COBBLESTONE), 200, transaction);
+			transaction.commit();
+		}
+
+		// Survival: a creative player's inventory throws away what it has no room for, which
+		// would make the no-room case below pass for the wrong reason.
+		ServerPlayer player = (ServerPlayer) helper.makeMockServerPlayer(GameType.SURVIVAL);
+		InterfaceMenu menu = openInterface(helper, player);
+
+		expect(helper, menu.pull(player, ItemVariant.of(Items.COBBLESTONE), PullMode.TO_INVENTORY), true,
+				"a stack should go to the inventory");
+
+		if (player.getInventory().countItem(Items.COBBLESTONE) != 64 || count(home, Items.COBBLESTONE) != 136
+				|| home.remainder(0) != 72) {
+			throw helper.assertionException("expected 64 in the inventory, 136 in the crate with 72 parked; got "
+					+ player.getInventory().countItem(Items.COBBLESTONE) + ", " + count(home, Items.COBBLESTONE)
+					+ " with " + home.remainder(0) + " parked");
+		}
+
+		// Fill every slot of the inventory with something else, then ask again.
+		for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
+			if (player.getInventory().getItem(slot).isEmpty()) {
+				player.getInventory().setItem(slot, new ItemStack(Items.DIRT, 64));
+			}
+		}
+
+		boolean pulled = menu.pull(player, ItemVariant.of(Items.COBBLESTONE), PullMode.TO_INVENTORY);
+		expect(helper, pulled, false, "with no room in the inventory nothing should come out; free slot "
+				+ player.getInventory().getFreeSlot() + ", size " + player.getInventory().getContainerSize()
+				+ ", cobblestone in inventory " + player.getInventory().countItem(Items.COBBLESTONE)
+				+ ", crate " + count(home, Items.COBBLESTONE) + ", cursor " + describe(menu.getCarried()));
+
+		if (count(home, Items.COBBLESTONE) != 136) {
+			throw helper.assertionException("a pull the inventory could not take left the crate at "
+					+ count(home, Items.COBBLESTONE) + " rather than 136");
+		}
+
+		helper.succeed();
+	}
+
+	/** The interface box at BOX, linked to CRATE, opened for {@code player} as a right-click would open it. */
+	private static InterfaceMenu openInterface(GameTestHelper helper, ServerPlayer player) {
+		helper.setBlock(BOX, LodestoreBlocks.INTERFACE_BOX.defaultBlockState());
+		link(helper, LINK_A, LINK_B);
+		InterfaceBoxBlockEntity box = helper.getBlockEntity(BOX, InterfaceBoxBlockEntity.class);
+		InterfaceMenu menu = (InterfaceMenu) box.createMenu(1, player.getInventory(), player);
+
+		if (menu == null) {
+			throw helper.assertionException("the interface box refused to open");
+		}
+
+		player.containerMenu = menu;
+		return menu;
+	}
+
+	private static void expect(GameTestHelper helper, boolean actual, boolean expected, String message) {
+		if (actual != expected) {
+			throw helper.assertionException(message);
+		}
 	}
 
 	// --- helpers -------------------------------------------------------------------------

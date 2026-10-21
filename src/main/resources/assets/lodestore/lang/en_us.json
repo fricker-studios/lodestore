@@ -21,6 +21,7 @@
   "lodestore.interface.no_crates": "No crates on this network",
   "lodestore.interface.nothing_stored": "Nothing stored yet",
   "lodestore.interface.stored": "%s in storage",
+  "lodestore.interface.take": "Click for a stack, right-click for half, shift-click to your inventory",
   "lodestore.slot.stored": "%s of %s in this slot",
   "lodestore.upgrade.choose_display": "Right-click to choose the slot shown on the front",
   "lodestore.upgrade.collect_experience": "Right-click to collect the experience",

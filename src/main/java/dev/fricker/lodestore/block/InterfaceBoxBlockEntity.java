@@ -20,7 +20,7 @@ import dev.fricker.lodestore.network.StorageNetwork;
 import dev.fricker.lodestore.registry.LodestoreBlockEntities;
 
 /**
- * An interface box: a window onto the network, and the way things will come out of it.
+ * An interface box: a window onto the network, and the way things come out of it.
  *
  * <p>Holds nothing and ticks never. It exists so that there is a block to right-click, and so that
  * the menu it opens has a position to walk the network from; the walk itself happens while the

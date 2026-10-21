@@ -723,7 +723,7 @@ box**. Crates join it by touching a connection block, or a device.
 |---|---|---|
 | Connection block | planks and iron nuggets around redstone, eight at a time | carries the network; nothing else |
 | Deposit box | a hopper over a basic crate | a hopper for the network: pulls from whatever sits on top of it into one row of plain slots, and what is in them flows to its home crate, one item a tick each way |
-| Interface box | a glass pane over a basic crate over redstone | opens a scrolling view of everything the crates hold, one cell per kind; nothing goes in through it |
+| Interface box | a glass pane over a basic crate over redstone | opens a scrolling view of everything the crates hold, one cell per kind, and hands out what is clicked; nothing goes in through it |
 
 A network has no object of its own. Whichever device needs it walks from where it stands, breadth-
 first through the connection blocks it touches, and every crate touching any of those — or the
@@ -783,8 +783,18 @@ to fit the cell — `1.5k`, `12k`, `2M`, always rounded *down* so a cell never c
 is — and exact in the tooltip. An empty view says which kind of empty it is: no crates reached, or
 crates with nothing in them, since only the first is something the player should go and fix.
 
-The view is read-only in this iteration: the deposit box is the way in, and the crates themselves
-are the way out.
+**Taking out.** A cell takes clicks the way a slot does: a left-click puts a stack of that kind on
+the cursor, a right-click half a stack, a shift-click a stack straight into the inventory — as much
+as there is, and onto a cursor already holding the same kind as far as the stack has room. The
+click goes to the server as a request by *kind* rather than by cell, since the view the client
+clicked may be a refresh behind the one the server has since sent, and an index into the wrong
+view would hand over the wrong item; a kind cannot be wrong, only absent. The server takes it from
+the crates nearest the box, a slot's parked remainder before the stack it shows, in one
+transaction. For a shift-click the inventory's room is measured first and only that much is
+taken, rather than taking a stack and seeing what fits: vanilla's `Inventory#add` throws away what
+a creative player has no room for, and nothing taken out of a crate may be thrown away. Then the
+view goes out again at once rather than at the next refresh, so the count follows the click. Nothing goes in this way. The deposit box is the network's mouth, and a click on the view
+with something carried does nothing.
 
 ### Not yet
 
@@ -913,7 +923,11 @@ it unless the home voids, and a full voiding overflow crate destroys everything 
 first and a full one is skipped; only connection blocks conduct, not a device or stone; a hopper
 fills a deposit box and a hopper under it takes nothing; and the interface sums every crate it
 reaches, parked remainders included, and reports no crates rather than an empty network when it
-stands alone. `CountFormatTest` pins the abbreviation, rounding down included.
+stands alone. Taking out through it: a click takes a stack onto the cursor and a right-click half,
+a cursor already holding the kind is topped up and one holding something else is left alone, a
+kind the network lacks yields nothing; a shift-click fills the inventory from a stacked crate's
+parked remainder first, and with no room in the inventory nothing comes out and the crate is not
+left short. `CountFormatTest` pins the abbreviation, rounding down included.
 
 **Client gametests.** Three of them. One builds a row of crates — one of each tier, plus a locked
 crate with stock and a locked crate that has been emptied — and screenshots it into
