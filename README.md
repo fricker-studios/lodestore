@@ -73,7 +73,9 @@ cannot read it with a 404, and the scripts say so.
 tag at once, from the jars the GitHub releases already carry — never a rebuild. The same workflow
 uploads the gallery from `docs/modrinth/gallery/`, whose `gallery.json` gives each picture its
 title and caption in order; the pictures are the client screenshot test's, copied in once they have
-been looked at.
+been looked at. It can also set the project icon, `docs/modrinth/icon.png`: the sturdy crate as the
+inventory draws it, rendered at logo size from the crate's own textures by
+`tools/sprites/make_icon.py`, which does on paper what the `gui` display transform does in a slot.
 
 The tag is the single source of truth for the version. A release passes it through as `-Pversion`,
 so the jar filename and the version inside `fabric.mod.json` cannot drift apart; every other build
@@ -220,6 +222,7 @@ things.
 | `src/main/resources/assets/lodestore/textures/` | the PNGs, which are the source of truth |
 | `tools/sprites/make_textures.py` | blocks and items |
 | `tools/sprites/make_gui.py` | the screen's upgrade panel |
+| `tools/sprites/make_icon.py` | the Modrinth icon, the sturdy crate drawn as an inventory slot draws it |
 
 The scripts are an authoring aid, not a build step — nothing runs them. Re-running one overwrites
 its PNGs, so anything edited by hand afterwards has to go back into the script or it is lost.
