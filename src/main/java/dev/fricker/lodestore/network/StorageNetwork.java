@@ -184,6 +184,29 @@ public final class StorageNetwork {
 	}
 
 	/**
+	 * Takes up to {@code maxAmount} of {@code variant} out of the crates, nearest first, inside
+	 * {@code transaction}. The way out through the interface box. A crate's storage drains a slot's
+	 * parked remainder before the stack it shows, so a pull never leaves a stacked slot looking
+	 * fuller than it is.
+	 *
+	 * @return how many came out
+	 */
+	public static long extract(Level level, BlockPos origin, ItemVariant variant, long maxAmount,
+			TransactionContext transaction) {
+		long extracted = 0;
+
+		for (CrateBlockEntity crate : crates(level, origin)) {
+			if (extracted >= maxAmount) {
+				break;
+			}
+
+			extracted += crate.storage().extract(variant, maxAmount - extracted, transaction);
+		}
+
+		return extracted;
+	}
+
+	/**
 	 * Everything the network a device at {@code origin} belongs to holds, one entry per kind of
 	 * item, most numerous first.
 	 *
