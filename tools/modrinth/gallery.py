@@ -6,8 +6,9 @@
 The directory's `gallery.json` lists the images in the order they should appear, each with the
 title and description Modrinth shows under it. Idempotent by title: an image whose title the
 project's gallery already has is skipped, so the whole set can be re-sent after adding one.
-Replacing a picture means removing the old one on Modrinth first, or giving the new one a new
-title — a gallery entry's image cannot be changed through the API, only its text.
+With --replace, an entry whose title the manifest names is taken down first and the manifest's
+picture sent in its place — a gallery entry's image cannot be changed through the API, only its
+text, so a re-shot picture under the same title has to go up as a new entry.
 
 The images themselves come from the client screenshot test, MarketingScreenshotsClientTest,
 copied in from build/clientGametest/screenshots/ once they have been looked at.
@@ -57,6 +58,8 @@ def main():
     parser.add_argument("--dir", default="docs/modrinth/gallery", type=pathlib.Path)
     parser.add_argument("--project", default=os.environ.get("MODRINTH_PROJECT") or "lodestore",
                         help="the Modrinth project slug or id; defaults to $MODRINTH_PROJECT, then 'lodestore'")
+    parser.add_argument("--replace", action="store_true",
+                        help="remove a gallery entry whose title the manifest names before sending the manifest's picture")
     parser.add_argument("--dry-run", action="store_true", help="print what would be sent and stop")
     args = parser.parse_args()
 
@@ -77,12 +80,18 @@ def main():
         sys.exit("MODRINTH_TOKEN is not set")
 
     project = request("GET", f"/project/{args.project}", token)
-    present = {item.get("title") for item in project.get("gallery", [])}
+    present = {item.get("title"): item.get("url") for item in project.get("gallery", [])}
 
     for ordering, entry in enumerate(manifest):
         if entry["title"] in present:
-            print(f"gallery already has '{entry['title']}'; skipped")
-            continue
+            if not args.replace:
+                print(f"gallery already has '{entry['title']}'; skipped")
+                continue
+
+            # A gallery entry's picture cannot be changed in place, only its text, so a new
+            # picture under an old title means taking the old entry down first.
+            request("DELETE", f"/project/{project['id']}/gallery?{urllib.parse.urlencode({'url': present[entry['title']]})}", token)
+            print(f"removed the old '{entry['title']}'")
 
         image = args.dir / entry["file"]
         query = urllib.parse.urlencode({

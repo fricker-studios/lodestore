@@ -17,6 +17,10 @@ on:
         description: "Also upload docs/modrinth/gallery/"
         type: boolean
         default: false
+      replace_gallery:
+        description: "Take down gallery entries the manifest names before uploading, so re-shot pictures replace old ones"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -77,4 +81,4 @@ jobs:
         env:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           MODRINTH_PROJECT: ${{ vars.MODRINTH_PROJECT }}
-        run: python3 tools/modrinth/gallery.py
+        run: python3 tools/modrinth/gallery.py ${{ inputs.replace_gallery && '--replace' || '' }}

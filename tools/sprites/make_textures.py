@@ -216,66 +216,107 @@ IRON_BAND = ["GWWGNIIIIIINGWWG", "GWWGIIIIIIIIGWWG"]
 
 # ------------------------------------------------------------ network blocks
 #
-# The network is iron and copper where the crates are oak: a connection block is a dark iron
-# plate with a copper conduit crossing it, so a run of them reads as one line from any side, and
-# the two devices are crates with that same iron and copper bolted on.
+# The network wears the crates' own hardware in other metals. A connection block is spruce with a
+# copper bracket over every corner and a copper coupling in the middle of every face, so a run of
+# them reads as one line of pipe from any side. The deposit box is oak in brass bands with a funnel
+# let into its top and an iron plate on each side pointing the way in. The interface box is an
+# iron-plated housing with a screen in a brass bezel on its front, lit teal: what its own screen
+# shows when opened.
 
-CONNECTION_BLOCK = (
-    ["GGGGGGGGGGGGGGGG",
-     "GNBBBBBjkBBBBBNG"]
-    + ["GBBBBBBjkBBBBBBG"] * 5
-    + ["GjjjjjjjjjjjjjjG",
-       "GkkkkkkkkkkkkkkG"]
-    + ["GBBBBBBjkBBBBBBG"] * 5
-    + ["GNBBBBBjkBBBBBNG",
-       "GGGGGGGGGGGGGGGG"]
+
+def bands(boards, lit, body, rivet, middle=False):
+    """Straps of a metal round the edge of a face, and across the middle both ways if asked."""
+    g = [list(r) for r in boards]
+    which = [(0, 1), (14, 15)] + ([(7, 8)] if middle else [])
+    for a, b in which:
+        for i in range(16):
+            g[a][i] = lit
+            g[b][i] = body
+            g[i][a] = lit
+            g[i][b] = body
+    for a, b in which:
+        for c, d in which:
+            g[a][c] = lit
+            g[a][d] = lit
+            g[b][c] = rivet
+            g[b][d] = body
+    return [''.join(r) for r in g]
+
+
+# The connection block: spruce with a copper bracket over every corner, the same on every face,
+# since any face may be the one the next block joins. Nothing in the middle — it carries the
+# network and does nothing else, and its face says as much.
+COPPER_BRACKET = [
+    "jjjj",
+    "jYkl",
+    "jk~~",
+    "ll~~",
+]
+CONNECTION_BLOCK = corners(framed(SPRUCE_BOARDS, 'm', 'd', 's', 's'), COPPER_BRACKET)
+
+# The deposit box is a hopper for the network and is drawn as one: gunmetal, an iron rim round a
+# bowl on top that steps down to the bore, and on each side the wide upper box narrowing to a
+# neck, as a hopper's side does. No wood and no brass — it is a machine among the crates.
+DEPOSIT_BOX_TOP = (
+    ["IIIIIIIIIIIIIIII",
+     "INNNNNNNNNNNNNNI",
+     "INBBBBBBBBBBBBNI",
+     "INBxxxxxxxxxxBNI",
+     "INBxxxxxxxxxxBNI"]
+    + ["INBxxJJJJJJxxBNI"] * 6
+    + ["INBxxxxxxxxxxBNI",
+       "INBxxxxxxxxxxBNI",
+       "INBBBBBBBBBBBBNI",
+       "INNNNNNNNNNNNNNI",
+       "IIIIIIIIIIIIIIII"]
+)
+DEPOSIT_BOX_SIDE = (
+    ["IIIIIIIIIIIIIIII",
+     "NNNNNNNNNNNNNNNN",
+     "QJJJJJJJJJJJJJJx",
+     "QJQJJJJJJJJJJQJx",
+     "QJJJJJJJJJJJJJJx",
+     "QJJJJJJJJJJJJJJx",
+     "QJQJJJJJJJJJJQJx",
+     "xxxxxxxxxxxxxxxx"]
+    + ["xxxxxQJJJJJxxxxx"] * 7
+    + ["xxxxxxxxxxxxxxxx"]
+)
+DEPOSIT_BOX_BOTTOM = (
+    ["xxxxxxxxxxxxxxxx"] * 4
+    + ["xxxxQQQQQQQQxxxx"]
+    + ["xxxxQJJJJJJxxxxx"] * 6
+    + ["xxxxxxxxxxxxxxxx"] * 5
 )
 
-# The deposit box is a crate with a hopper's mouth let into its top and a copper arrow pointing
-# down each side: things go in here and leave downward, into the network.
-_MOUTH = [
-    "GGGGGGGGGG",
-    "GNNNNNNNNG",
-    "GNSSSSSSNG",
-    "GNSXXXXSNG",
-    "GNSXXXXSNG",
-    "GNSXXXXSNG",
-    "GNSXXXXSNG",
-    "GNSSSSSSNG",
-    "GNNNNNNNNG",
-    "GGGGGGGGGG",
+# The interface box: an iron housing, plated and riveted, with the screen let into the front
+# behind a brass bezel. Nine lit cells on dark glass, the grid its own screen draws.
+_IRON_HOUSING = framed(["G" * 16] * 16, 'N', 'G', 'B', 'I')
+INTERFACE_BOX_FRONT = overlay(_IRON_HOUSING, 2, 2, [
+    "YYYYYYYYYYYY",
+    "YttttttttttO",
+    "YtnptnptnptO",
+    "YtpptpptpptO",
+    "YttttttttttO",
+    "YtnptnptnptO",
+    "YtpptpptpptO",
+    "YttttttttttO",
+    "YtnptnptnptO",
+    "YtpptpptpptO",
+    "YttttttttttO",
+    "YOOOOOOOOOOO",
+])
+# A brass dial on each side, and a brass plate across the top.
+_DIAL = [
+    "~YYYY~",
+    "YOOOOO",
+    "YOYYOO",
+    "YOYYOO",
+    "YOOOOO",
+    "~OOOO~",
 ]
-DEPOSIT_BOX_TOP = overlay(OAK_TOP, 3, 3, _MOUTH)
-
-_ARROW = [
-    "~~~~~~jk~~~~~~",
-    "~~~~~~jk~~~~~~",
-    "~~~~~~jk~~~~~~",
-    "~~jkkkkkkkkk~~",
-    "~~~jkkkkkkk~~~",
-    "~~~~jkkkkk~~~~",
-    "~~~~~jkkk~~~~~",
-    "~~~~~~jk~~~~~~",
-]
-DEPOSIT_BOX_SIDE = overlay(OAK_PLANKS, 0, 0, IRON_BAND)
-DEPOSIT_BOX_SIDE = overlay(DEPOSIT_BOX_SIDE, 4, 1, _ARROW)
-
-# The interface box is a crate whose front panel is a screen: dark glass with a grid of lit
-# cells, which is what its own screen shows when opened.
-_SCREEN = [
-    "tttttttttttt",
-    "tCCttCCttCCt",
-    "tCCttCCttCCt",
-    "tttttttttttt",
-    "tCCttCCttCCt",
-    "tCCttCCttCCt",
-    "tttttttttttt",
-    "tCCttCCttCCt",
-    "tCCttCCttCCt",
-    "tttttttttttt",
-]
-INTERFACE_BOX_FRONT = overlay(BASIC_FRONT, 3, 2, _SCREEN)
-INTERFACE_BOX_SIDE = overlay(OAK_PLANKS, 0, 0, IRON_BAND)
+INTERFACE_BOX_SIDE = overlay(_IRON_HOUSING, 5, 5, _DIAL)
+INTERFACE_BOX_TOP = overlay(_IRON_HOUSING, 6, 4, ["YYYYYYYY", "YOOOOOOO", "YOOOOOOO", "OOOOOOOO"])
 
 # ------------------------------------------------------------- upgrade sprites
 
@@ -403,8 +444,10 @@ BLOCKS = {
     "connection_block": CONNECTION_BLOCK,
     "deposit_box_top": DEPOSIT_BOX_TOP,
     "deposit_box_side": DEPOSIT_BOX_SIDE,
+    "deposit_box_bottom": DEPOSIT_BOX_BOTTOM,
     "interface_box_front": INTERFACE_BOX_FRONT,
     "interface_box_side": INTERFACE_BOX_SIDE,
+    "interface_box_top": INTERFACE_BOX_TOP,
 }
 LOCK_UPGRADE = plate(LOCK_MOTIF)
 
