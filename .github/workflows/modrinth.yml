@@ -4,8 +4,8 @@ name: Modrinth
 #
 # A tag pushed today is published by release.yml as part of the release. This workflow is for
 # everything else: the releases that predate the Modrinth project, a release whose Modrinth step
-# failed, and the gallery images, which live in docs/modrinth/gallery/. Both scripts are
-# idempotent, so "all" is always a safe answer.
+# failed, the gallery images, which live in docs/modrinth/gallery/, and the project icon,
+# docs/modrinth/icon.png. Every script is idempotent, so "all" is always a safe answer.
 on:
   workflow_dispatch:
     inputs:
@@ -19,6 +19,10 @@ on:
         default: false
       replace_gallery:
         description: "Take down gallery entries the manifest names before uploading, so re-shot pictures replace old ones"
+        type: boolean
+        default: false
+      icon:
+        description: "Also set the project icon from docs/modrinth/icon.png"
         type: boolean
         default: false
 
@@ -82,3 +86,10 @@ jobs:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           MODRINTH_PROJECT: ${{ vars.MODRINTH_PROJECT }}
         run: python3 tools/modrinth/gallery.py ${{ inputs.replace_gallery && '--replace' || '' }}
+
+      - name: Set icon
+        if: ${{ inputs.icon }}
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_PROJECT: ${{ vars.MODRINTH_PROJECT }}
+        run: python3 tools/modrinth/icon.py
