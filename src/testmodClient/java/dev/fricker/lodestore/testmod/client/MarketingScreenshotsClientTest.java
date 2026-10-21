@@ -86,8 +86,8 @@ public class MarketingScreenshotsClientTest implements FabricClientGameTest {
 			context.waitTicks(80);
 			shot(context, "modrinth-crates-close");
 
-			// The network corner: deposit box under its chest, interface box, connection blocks.
-			singleplayer.getServer().runCommand("tp @p 3.6 " + (Y + 1.4) + " 4.6 150 18");
+			// The network end of the row: interface box, deposit box under its chest, connection blocks.
+			singleplayer.getServer().runCommand("tp @p 3.0 " + (Y + 1.0) + " 4.8 198 16");
 			context.waitTicks(80);
 			shot(context, "modrinth-network");
 
@@ -123,12 +123,12 @@ public class MarketingScreenshotsClientTest implements FabricClientGameTest {
 			context.waitTicks(20);
 
 			// The interface box's view of the whole room.
-			singleplayer.getServer().runCommand("tp @p 5.5 " + (Y + 0.0) + " 3.5 180 0");
+			singleplayer.getServer().runCommand("tp @p 4.5 " + (Y + 0.0) + " 3.5 180 0");
 			context.waitTicks(40);
 			singleplayer.getServer().runOnServer(server -> {
 				ServerPlayer player = server.getPlayerList().getPlayers().getFirst();
 
-				if (server.overworld().getBlockEntity(new BlockPos(5, Y, 0)) instanceof InterfaceBoxBlockEntity box) {
+				if (server.overworld().getBlockEntity(new BlockPos(4, Y, 0)) instanceof InterfaceBoxBlockEntity box) {
 					player.openMenu(box);
 				}
 			});
@@ -189,20 +189,22 @@ public class MarketingScreenshotsClientTest implements FabricClientGameTest {
 			level.setBlockAndUpdate(new BlockPos(x, Y + 4, 1), trim);
 		}
 
-		// The network runs inside the wall, behind both rows, and out to the devices.
-		for (int x = -3; x <= 4; x++) {
+		// The network runs inside the wall, behind both rows, and the devices continue the bottom
+		// row along it so both fronts face the room: the interface box, then the deposit box with
+		// a chest feeding it from above, then a connection block in the open to show what carries
+		// the network, with another over the interface box.
+		for (int x = -3; x <= 6; x++) {
 			for (int y = Y; y <= Y + 1; y++) {
 				level.setBlockAndUpdate(new BlockPos(x, y, -1), LodestoreBlocks.CONNECTION_BLOCK.defaultBlockState());
 			}
 		}
 
-		level.setBlockAndUpdate(new BlockPos(4, Y, 0), LodestoreBlocks.CONNECTION_BLOCK.defaultBlockState());
-		level.setBlockAndUpdate(new BlockPos(4, Y, 1), LodestoreBlocks.CONNECTION_BLOCK.defaultBlockState());
-		level.setBlockAndUpdate(new BlockPos(4, Y + 1, 0), LodestoreBlocks.CONNECTION_BLOCK.defaultBlockState());
-		level.setBlockAndUpdate(new BlockPos(5, Y, 0), LodestoreBlocks.INTERFACE_BOX.defaultBlockState()
+		level.setBlockAndUpdate(new BlockPos(4, Y, 0), LodestoreBlocks.INTERFACE_BOX.defaultBlockState()
 				.setValue(InterfaceBoxBlock.FACING, Direction.SOUTH));
-		level.setBlockAndUpdate(new BlockPos(5, Y, 1), LodestoreBlocks.DEPOSIT_BOX.defaultBlockState());
-		level.setBlockAndUpdate(new BlockPos(5, Y + 1, 1), Blocks.CHEST.defaultBlockState());
+		level.setBlockAndUpdate(new BlockPos(4, Y + 1, 0), LodestoreBlocks.CONNECTION_BLOCK.defaultBlockState());
+		level.setBlockAndUpdate(new BlockPos(5, Y, 0), LodestoreBlocks.DEPOSIT_BOX.defaultBlockState());
+		level.setBlockAndUpdate(new BlockPos(5, Y + 1, 0), Blocks.CHEST.defaultBlockState());
+		level.setBlockAndUpdate(new BlockPos(6, Y, 0), LodestoreBlocks.CONNECTION_BLOCK.defaultBlockState());
 
 		// Top row: the reinforced crate the screen opens in the middle.
 		stocked(level, new BlockPos(-3, Y + 1, 0), LodestoreBlocks.STURDY_CRATE, Items.GOLD_INGOT, 384, true);
@@ -222,7 +224,7 @@ public class MarketingScreenshotsClientTest implements FabricClientGameTest {
 		lockedAndEmpty(level, new BlockPos(2, Y, 0), LodestoreBlocks.STURDY_CRATE, Items.ENDER_PEARL);
 		stocked(level, new BlockPos(3, Y, 0), LodestoreBlocks.BASIC_CRATE, Items.BONE, 160, false);
 
-		// The eight upgrades in a row of frames above the crates.
+		// The eight upgrades in a row of frames above the crates and the devices.
 		List<Item> upgrades = List.of(LodestoreItems.LOCK_UPGRADE, LodestoreItems.VOID_UPGRADE,
 				LodestoreItems.STACK_UPGRADE, LodestoreItems.STACK_UPGRADE_2, LodestoreItems.STACK_UPGRADE_3,
 				LodestoreItems.COMPRESS_UPGRADE, LodestoreItems.DISENCHANT_UPGRADE, LodestoreItems.REPAIR_UPGRADE);

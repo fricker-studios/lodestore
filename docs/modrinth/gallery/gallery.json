@@ -9,7 +9,7 @@
   {
     "file": "crates-close.png",
     "title": "The three tiers",
-    "description": "Basic, sturdy and reinforced crates, each face showing its item and count; a locked crate draws its count in gold.",
+    "description": "Basic, sturdy and reinforced crates, each with its item on the label; told apart by the hardware bolted on.",
     "featured": false,
     "ordering": 1
   },
@@ -37,7 +37,7 @@
   {
     "file": "network.png",
     "title": "The network",
-    "description": "Connection blocks carry the network; a deposit box sorts what you drop in to the crate that already holds it, and an interface box shows everything at once.",
+    "description": "Connection blocks carry the network; the deposit box is a hopper for it, sorting what you drop in to the crate that already holds it, and the interface box shows everything at once.",
     "featured": false,
     "ordering": 5
   },
