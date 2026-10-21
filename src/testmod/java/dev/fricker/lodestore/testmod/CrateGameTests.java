@@ -56,6 +56,7 @@ import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
 import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
+import dev.fricker.lodestore.block.CrateBlock;
 import dev.fricker.lodestore.block.CrateBlockEntity;
 import dev.fricker.lodestore.item.InstalledUpgrades;
 import dev.fricker.lodestore.registry.LodestoreBlocks;
@@ -117,6 +118,58 @@ public class CrateGameTests {
 		if (crate.contents().getContainerSize() != crate.storageSize()) {
 			throw helper.assertionException("the contents are a different size from the storage: "
 					+ crate.contents().getContainerSize() + " against " + crate.storageSize());
+		}
+
+		helper.succeed();
+	}
+
+	// --- the face ----------------------------------------------------------
+
+	/**
+	 * A locked crate says so on its face through the {@code locked} block state, which the block
+	 * entity keeps true to the upgrades: true once a lock goes in, false once it comes out, and
+	 * untouched by anything else that changes the crate.
+	 */
+	@GameTest
+	public void theFaceShowsWhetherALockIsIn(GameTestHelper helper) {
+		BlockPos pos = new BlockPos(1, 1, 1);
+		CrateBlockEntity crate = place(helper, pos, LodestoreBlocks.STURDY_CRATE);
+
+		if (helper.getBlockState(pos).getValue(CrateBlock.LOCKED)) {
+			throw helper.assertionException("a new crate's face shows a lock");
+		}
+
+		crate.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
+
+		if (helper.getBlockState(pos).getValue(CrateBlock.LOCKED)) {
+			throw helper.assertionException("a void upgrade made the face show a lock");
+		}
+
+		crate.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE));
+
+		if (!helper.getBlockState(pos).getValue(CrateBlock.LOCKED)) {
+			throw helper.assertionException("installing a lock did not change the face");
+		}
+
+		if (helper.getBlockEntity(pos, CrateBlockEntity.class) != crate) {
+			throw helper.assertionException("changing the face replaced the block entity");
+		}
+
+		crate.contents().setItem(0, new ItemStack(Items.DIAMOND, 5));
+		crate.setChanged();
+
+		if (!helper.getBlockState(pos).getValue(CrateBlock.LOCKED)) {
+			throw helper.assertionException("putting something in a locked crate cleared its face");
+		}
+
+		for (int slot = 0; slot < crate.upgradeContainer().getContainerSize(); slot++) {
+			if (crate.upgradeContainer().getItem(slot).is(LodestoreItems.LOCK_UPGRADE)) {
+				crate.upgradeContainer().removeItem(slot, 1);
+			}
+		}
+
+		if (helper.getBlockState(pos).getValue(CrateBlock.LOCKED)) {
+			throw helper.assertionException("taking the lock out did not change the face back");
 		}
 
 		helper.succeed();

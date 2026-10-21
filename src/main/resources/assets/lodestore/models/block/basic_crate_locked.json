@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "front": "lodestore:block/basic_crate_front_locked",
+    "side": "lodestore:block/basic_crate_side",
+    "top": "lodestore:block/basic_crate_top"
+  }
+}

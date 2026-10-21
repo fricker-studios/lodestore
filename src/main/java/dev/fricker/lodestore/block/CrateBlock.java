@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.BlockHitResult;
 
@@ -32,9 +33,15 @@ import dev.fricker.lodestore.item.CrateUpgradeItem;
  * upward and one under a ceiling shows it down. The property is vanilla's own {@code facing},
  * which the four horizontal values a crate used to be limited to are a subset of, so a crate
  * saved before it could face up or down loads facing where it did.
+ *
+ * <p>Whether a lock is in is a block state too, {@code locked}, because the face shows it: the
+ * four rivets just inside its corners turn gold while a lock upgrade is installed. The block
+ * entity keeps the state true to the upgrades. A state rather than something the renderer draws
+ * because it is then the model's, drawn with the chunk and costing nothing per frame.
  */
 public class CrateBlock extends Block implements EntityBlock {
 	public static final EnumProperty<Direction> FACING = BlockStateProperties.FACING;
+	public static final BooleanProperty LOCKED = BlockStateProperties.LOCKED;
 
 	private final int rows;
 	private final ResourceKey<CrateTier> tierKey;
@@ -43,7 +50,7 @@ public class CrateBlock extends Block implements EntityBlock {
 		super(properties);
 		this.rows = rows;
 		this.tierKey = tierKey;
-		registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH));
+		registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(LOCKED, false));
 	}
 
 	public int rows() {
@@ -56,7 +63,7 @@ public class CrateBlock extends Block implements EntityBlock {
 
 	@Override
 	protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-		builder.add(FACING);
+		builder.add(FACING, LOCKED);
 	}
 
 	/** Faces the player, the way a barrel does: look down at the floor and the label faces up. */

@@ -358,6 +358,25 @@ _DIAL = [
 INTERFACE_BOX_SIDE = overlay(_IRON_HOUSING, 5, 5, _DIAL)
 INTERFACE_BOX_TOP = overlay(_IRON_HOUSING, 6, 4, ["YYYYYYYY", "YOOOOOOO", "YOOOOOOO", "OOOOOOOO"])
 
+# A locked crate says so on its face: the four rivets just inside the corners turn gold, the
+# lock upgrade's own colour, which the screen also tints a locked slot. Inside the border rather
+# than on it so the mark is in the woodwork, not a frame drawn round the block, and the same four
+# pixels on every tier so the eye learns one place to look.
+
+
+def locked(front, colour='Y'):
+    """The front with its corner rivets in the lock's colour."""
+    g = [list(r) for r in front]
+    for r in (1, 14):
+        for c in (1, 14):
+            g[r][c] = colour
+    return [''.join(r) for r in g]
+
+
+BASIC_FRONT_LOCKED = locked(BASIC_FRONT)
+STURDY_FRONT_LOCKED = locked(STURDY_FRONT)
+REINFORCED_FRONT_LOCKED = locked(REINFORCED_FRONT)
+
 # ------------------------------------------------------------- upgrade sprites
 
 
@@ -511,6 +530,9 @@ BLOCKS = {
     "reinforced_crate_front": REINFORCED_FRONT,
     "reinforced_crate_side": REINFORCED_SIDE,
     "reinforced_crate_top": REINFORCED_TOP,
+    "basic_crate_front_locked": BASIC_FRONT_LOCKED,
+    "sturdy_crate_front_locked": STURDY_FRONT_LOCKED,
+    "reinforced_crate_front_locked": REINFORCED_FRONT_LOCKED,
     "connection_block_side": CONNECTION_BLOCK_SIDE,
     "connection_block_end": CONNECTION_BLOCK_END,
     "connection_block_end_lit": CONNECTION_BLOCK_END_LIT,

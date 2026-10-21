@@ -189,7 +189,12 @@ read as clutter at any distance, and the exact figure is in the screen and the i
 
 A crate faces any of the six ways, as a barrel does: look down at the floor when placing one and
 its label faces up, look up at a ceiling and it faces down. The icon tips with it, its top toward
-north, rather than turning.
+north, rather than turning. A locked crate says so on its face: the four rivets just inside its
+corners turn gold, the lock upgrade's own colour, while a lock is installed — the same four
+pixels on every tier, inside the border rather than on it, so the mark is in the woodwork rather
+than a frame drawn round the block. It is a block state, `locked`, kept true to the upgrades by
+the block entity, so it is the model's and costs nothing per frame; the count the face used to
+carry is gone, and this is what tells a locked crate from an unlocked one at a glance.
 
 The network wears the crates' hardware in other metals. A connection block is spruce with a copper
 bracket over every corner, and on its front and back a small redstone indicator in a gunmetal
