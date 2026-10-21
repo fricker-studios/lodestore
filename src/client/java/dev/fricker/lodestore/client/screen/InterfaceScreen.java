@@ -14,9 +14,13 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+
 import dev.fricker.lodestore.menu.InterfaceMenu;
 import dev.fricker.lodestore.network.CountFormat;
+import dev.fricker.lodestore.network.NetworkPullPayload;
 import dev.fricker.lodestore.network.NetworkView;
+import dev.fricker.lodestore.network.PullMode;
 
 /**
  * The interface box's screen: the double chest's body, with the network's view drawn into the grid
@@ -29,6 +33,10 @@ import dev.fricker.lodestore.network.NetworkView;
  *
  * <p>The body is vanilla's own double-chest texture, blitted the way the crate screen blits it, so
  * the two look like one family. Only the scrollbar's strip is drawn here, in vanilla's greys.
+ *
+ * <p>A cell takes clicks the way a slot does — a stack, half a stack, a stack to the inventory —
+ * and sends each as a request by kind; the server does the taking and the view comes back
+ * changed. Nothing is predicted here, since the cursor and the counts are both the server's.
  */
 public class InterfaceScreen extends AbstractContainerScreen<InterfaceMenu> {
 	private static final Identifier CHEST_BACKGROUND =
@@ -221,6 +229,7 @@ public class InterfaceScreen extends AbstractContainerScreen<InterfaceMenu> {
 		List<Component> lines = new ArrayList<>(getTooltipFromContainerItem(stack));
 		lines.add(Component.translatable("lodestore.interface.stored",
 				CountFormat.exact(getMenu().view().entries().get(index).count())).withStyle(ChatFormatting.GRAY));
+		lines.add(Component.translatable("lodestore.interface.take").withStyle(ChatFormatting.DARK_GRAY));
 		graphics.setTooltipForNextFrame(font, lines, stack.getTooltipImage(), mouseX, mouseY);
 	}
 
@@ -257,6 +266,20 @@ public class InterfaceScreen extends AbstractContainerScreen<InterfaceMenu> {
 			draggingThumb = true;
 			dragThumbTo(event.y());
 			return true;
+		}
+
+		// A click on a cell with an empty cursor asks for that kind. With something carried it is
+		// not a deposit — nothing goes in through this box — so it falls through and does nothing.
+		if ((event.button() == 0 || event.button() == 1) && getMenu().getCarried().isEmpty()) {
+			int index = hoveredIndex(event.x(), event.y());
+
+			if (index >= 0) {
+				PullMode mode = event.hasShiftDown() ? PullMode.TO_INVENTORY
+						: event.button() == 1 ? PullMode.HALF : PullMode.STACK;
+				ClientPlayNetworking.send(new NetworkPullPayload(getMenu().containerId,
+						getMenu().view().entries().get(index).kind(), mode));
+				return true;
+			}
 		}
 
 		return super.mouseClicked(event, doubleClick);
