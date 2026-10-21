@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "P": "minecraft:piston",
+    "I": "minecraft:iron_ingot"
+  },
+  "pattern": [
+    " P ",
+    "PIP",
+    " I "
+  ],
+  "result": {
+    "id": "lodestore:compress_upgrade"
+  }
+}

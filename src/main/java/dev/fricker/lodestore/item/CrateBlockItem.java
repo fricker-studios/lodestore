@@ -13,6 +13,7 @@ import net.minecraft.world.level.block.Block;
 import dev.fricker.lodestore.block.CrateBlockEntity;
 import dev.fricker.lodestore.registry.LodestoreComponents;
 import dev.fricker.lodestore.storage.CrateOverflow;
+import dev.fricker.lodestore.storage.Disenchanting;
 
 /**
  * A crate in item form.
@@ -22,7 +23,8 @@ import dev.fricker.lodestore.storage.CrateOverflow;
  * never asked. A broken crate whose slots were holding more than a stack would otherwise show the
  * stacks and say nothing about the rest, which is exactly the kind of quiet undercount a player
  * would eventually mistake for loss. The upgrades it carries are listed for the same reason: they
- * stay in the crate when it is broken, and nothing else would say they are there.
+ * stay in the crate when it is broken, and nothing else would say they are there — nor that the
+ * disenchant upgrade among them is holding experience.
  */
 public class CrateBlockItem extends BlockItem {
 	public CrateBlockItem(Block block, Properties properties) {
@@ -60,6 +62,13 @@ public class CrateBlockItem extends BlockItem {
 			for (ItemStack upgrade : fitted.upgradeStacks()) {
 				tooltip.accept(Component.literal("  ").append(upgrade.getHoverName()).withStyle(ChatFormatting.GRAY));
 			}
+		}
+
+		// Experience the disenchant upgrade banked rides with the crate too, and is as invisible
+		// as a parked count without a line to say so.
+		if (fitted != null && fitted.storedExperience() > 0 && display.shows(LodestoreComponents.CRATE_UPGRADES)) {
+			tooltip.accept(Component.translatable("lodestore.crate.experience",
+					Disenchanting.levels(fitted.storedExperience())).withStyle(ChatFormatting.GREEN));
 		}
 	}
 }

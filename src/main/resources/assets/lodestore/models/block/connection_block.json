@@ -1,6 +1,7 @@
 {
-  "parent": "minecraft:block/cube_all",
+  "parent": "minecraft:block/cube_column",
   "textures": {
-    "all": "lodestore:block/connection_block"
+    "end": "lodestore:block/connection_block_end",
+    "side": "lodestore:block/connection_block_side"
   }
 }

@@ -2,7 +2,7 @@
   "type": "minecraft:crafting_shaped",
   "key": {
     "P": "#minecraft:planks",
-    "N": "minecraft:iron_nugget",
+    "N": "minecraft:copper_nugget",
     "R": "minecraft:redstone"
   },
   "pattern": [

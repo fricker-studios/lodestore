@@ -20,6 +20,7 @@ import dev.fricker.lodestore.registry.LodestoreCreativeTab;
 import dev.fricker.lodestore.menu.LodestoreMenus;
 import dev.fricker.lodestore.registry.LodestoreItems;
 import dev.fricker.lodestore.registry.LodestoreNetworking;
+import dev.fricker.lodestore.storage.Compression;
 import dev.fricker.lodestore.util.PersistenceSelfCheck;
 
 /**
@@ -48,6 +49,10 @@ public class Lodestore implements ModInitializer {
 		LodestoreCreativeTab.initialize();
 		// Last, so every id it redirects to already exists.
 		LodestoreAliases.initialize();
+
+		// The compress upgrade reads its pathways off the recipes, and forgets them when they
+		// reload.
+		Compression.initialize();
 
 		// A container that never writes its contents fails silently — nothing throws and
 		// nothing looks wrong until a reload. Check once per server start, on both a

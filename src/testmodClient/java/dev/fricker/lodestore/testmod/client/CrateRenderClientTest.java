@@ -5,11 +5,13 @@ import org.slf4j.LoggerFactory;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
@@ -67,10 +69,25 @@ public class CrateRenderClientTest implements FabricClientGameTest {
 				single(level, new BlockPos(-2, Y, 0), LodestoreBlocks.STURDY_CRATE, Items.DIAMOND, 128);
 				mixed(level, new BlockPos(0, Y, 0), LodestoreBlocks.REINFORCED_CRATE);
 
-				// The two lock states. Both draw their count in the lock's gold rather than white.
+				// The two lock states: one with stock, one emptied and still naming its item.
 				lockedWithContents(level, new BlockPos(2, Y, 0), LodestoreBlocks.STURDY_CRATE,
 						Items.REDSTONE, 192);
 				lockedAndEmptied(level, new BlockPos(4, Y, 0), LodestoreBlocks.BASIC_CRATE, Items.EMERALD);
+
+				// One set into the floor facing up, and one under a slab facing down, off to the
+				// side: the label and icon have to tip with the crate rather than turn.
+				level.setBlockAndUpdate(new BlockPos(7, Y - 1, 4), LodestoreBlocks.STURDY_CRATE.defaultBlockState()
+						.setValue(CrateBlock.FACING, Direction.UP));
+				if (level.getBlockEntity(new BlockPos(7, Y - 1, 4)) instanceof CrateBlockEntity up) {
+					up.contents().setItem(0, new ItemStack(Items.GOLD_INGOT, 40));
+					up.setChanged();
+				}
+				level.setBlockAndUpdate(new BlockPos(7, Y + 2, 6), LodestoreBlocks.REINFORCED_CRATE.defaultBlockState()
+						.setValue(CrateBlock.FACING, Direction.DOWN));
+				if (level.getBlockEntity(new BlockPos(7, Y + 2, 6)) instanceof CrateBlockEntity down) {
+					down.contents().setItem(0, new ItemStack(Items.DIAMOND, 12));
+					down.setChanged();
+				}
 			});
 
 			// Only now that there is a floor to stand on: a creative player teleported into
@@ -89,10 +106,15 @@ public class CrateRenderClientTest implements FabricClientGameTest {
 			context.waitTicks(60);
 			LOGGER.info("[lodestore] tier close-up -> {}", context.takeScreenshot("crate-tiers-close"));
 
-			// The pair that only the lock produces: gold count, and a filter on an empty face.
+			// The pair that only the lock produces: a filter still drawn on an empty face.
 			singleplayer.getServer().runCommand("tp @p 3.0 " + Y + " 5.0 180 13");
 			context.waitTicks(60);
 			LOGGER.info("[lodestore] lock close-up -> {}", context.takeScreenshot("crate-locks-close"));
+
+			// The vertical pair, from where both faces are in view.
+			singleplayer.getServer().runCommand("tp @p 7.5 " + (Y + 0.6) + " 2.0 0 35");
+			context.waitTicks(60);
+			LOGGER.info("[lodestore] vertical close-up -> {}", context.takeScreenshot("crate-vertical-close"));
 
 			// Back to creative: a spectator cannot be given a menu.
 			singleplayer.getServer().runCommand("gamemode creative @p");
@@ -128,6 +150,19 @@ public class CrateRenderClientTest implements FabricClientGameTest {
 			context.getInput().setCursorPos(cursor[0], cursor[1]);
 			context.waitTicks(20);
 			LOGGER.info("[lodestore] tooltip screenshot -> {}", context.takeScreenshot("crate-upgrade-tooltip"));
+
+			// The disenchant upgrade draws the levels it holds on itself, in green, and its tooltip
+			// gives the points and the right-click that collects them. Second row, first column.
+			int[] disenchant = context.computeOnClient(client -> {
+				double scale = client.getWindow().getGuiScale();
+				int left = (client.getWindow().getGuiScaledWidth() - (176 + 66)) / 2;
+				int top = (client.getWindow().getGuiScaledHeight() - (114 + 6 * 18)) / 2;
+				return new int[] {(int) ((left + 184 + 8) * scale), (int) ((top + 18 + 18 + 8) * scale)};
+			});
+
+			context.getInput().setCursorPos(disenchant[0], disenchant[1]);
+			context.waitTicks(20);
+			LOGGER.info("[lodestore] disenchant screenshot -> {}", context.takeScreenshot("crate-disenchant-tooltip"));
 
 			// A slot of a stacked crate draws its real total, and the tooltip says out of how much.
 			// Both are things only a picture can check. Worth one of its own.
@@ -165,7 +200,7 @@ public class CrateRenderClientTest implements FabricClientGameTest {
 		return crate;
 	}
 
-	/** A locked crate with stock in it: same icon as any other, but a gold count. */
+	/** A locked crate with stock in it: the same face as any other, since the count is no longer drawn. */
 	private static void lockedWithContents(ServerLevel level, BlockPos pos, Block block, Item item, int amount) {
 		CrateBlockEntity crate = single(level, pos, block, item, amount);
 
@@ -216,6 +251,19 @@ public class CrateRenderClientTest implements FabricClientGameTest {
 		crate.chooseDisplaySlot(0);
 		crate.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE));
 		crate.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE));
+
+		// A fourth, on the second row, with something in the bank so the green count has a value
+		// to draw: an enchanted sword put in after the upgrade is stripped on arrival.
+		crate.installUpgrade(new ItemStack(LodestoreItems.DISENCHANT_UPGRADE));
+		ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
+		sword.enchant(level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.SHARPNESS), 5);
+		crate.contents().setItem(4, sword);
+		crate.setChanged();
+
+		// A fifth, destructive: the compress upgrade wears a red wash while it may follow the
+		// one-way pathways, which is the one visible difference between the two settings.
+		crate.installUpgrade(new ItemStack(LodestoreItems.COMPRESS_UPGRADE));
+		crate.toggleDestructiveCompression();
 
 		// Slot 0 is filled to its four stacks: the stacked-slot screenshot hovers it, and the slot
 		// should draw 256 where a plain one would draw 64, with the tooltip saying out of how much.

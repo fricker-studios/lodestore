@@ -1,0 +1,84 @@
+name: Modrinth
+
+# Publishes tagged builds that are already GitHub releases to Modrinth, and the gallery.
+#
+# A tag pushed today is published by release.yml as part of the release. This workflow is for
+# everything else: the releases that predate the Modrinth project, a release whose Modrinth step
+# failed, and the gallery images, which live in docs/modrinth/gallery/. Both scripts are
+# idempotent, so "all" is always a safe answer.
+on:
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: "Tags to publish, space-separated, or 'all' for every v* tag that has a release"
+        default: all
+        required: true
+      gallery:
+        description: "Also upload docs/modrinth/gallery/"
+        type: boolean
+        default: false
+      replace_gallery:
+        description: "Take down gallery entries the manifest names before uploading, so re-shot pictures replace old ones"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to Modrinth
+    runs-on: arc-runner-fricker-amd64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Every tag, so 'all' can list them and each tag's gradle.properties can be read.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Publish versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          # The project's slug, or its id from the Modrinth project settings page when the slug
+          # is not enough — a repository variable, so it needs no change here.
+          MODRINTH_PROJECT: ${{ vars.MODRINTH_PROJECT }}
+          TAGS: ${{ inputs.tags }}
+        run: |
+          set -euo pipefail
+
+          if [ "$TAGS" = "all" ]; then
+            TAGS="$(git tag --list 'v*' --sort=creatordate | tr '\n' ' ')"
+          fi
+
+          for tag in $TAGS; do
+            version="${tag#v}"
+            dir="dist/$tag"
+            mkdir -p "$dir"
+
+            # The jar the release carries, never a rebuild: what Modrinth gets is byte for byte
+            # what GitHub has. A tag with no release is a tag that was never released, and is
+            # reported rather than skipped silently.
+            gh release download "$tag" --dir "$dir" --pattern "lodestore-${version}.jar"
+            gh release view "$tag" --json body -q .body > "$dir/changelog.md"
+
+            # The Minecraft version the jar was built against is the one in gradle.properties
+            # at that tag, so an old release is filed under the game version it was for.
+            game="$(git show "$tag:gradle.properties" | sed -n 's/^minecraft_version=//p')"
+
+            python3 tools/modrinth/publish.py --tag "$tag" --jar "$dir/lodestore-${version}.jar" \
+              --changelog "$dir/changelog.md" --game-version "${game:-26.2}"
+          done
+
+      - name: Upload gallery
+        if: ${{ inputs.gallery }}
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_PROJECT: ${{ vars.MODRINTH_PROJECT }}
+        run: python3 tools/modrinth/gallery.py ${{ inputs.replace_gallery && '--replace' || '' }}

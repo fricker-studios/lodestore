@@ -18,6 +18,12 @@ public final class LodestoreCrateUpgrades {
 	/** Levels differ only in how deep a slot goes; the behaviour is the same. */
 	public static final ResourceKey<CrateUpgrade> STACK_2 = key("stack_2");
 	public static final ResourceKey<CrateUpgrade> STACK_3 = key("stack_3");
+	/** Crafts the contents up their reversible pathways: nuggets to ingots to blocks. */
+	public static final ResourceKey<CrateUpgrade> COMPRESS = key("compress");
+	/** Strips enchantments off what goes in and banks the experience for the player. */
+	public static final ResourceKey<CrateUpgrade> DISENCHANT = key("disenchant");
+	/** Combines worn, unenchanted tools and armour into fewer, fuller ones. */
+	public static final ResourceKey<CrateUpgrade> REPAIR = key("repair");
 
 	private LodestoreCrateUpgrades() {
 	}

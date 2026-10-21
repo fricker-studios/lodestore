@@ -9,7 +9,13 @@ package dev.fricker.lodestore.api.crate;
 public enum UpgradeBehaviour {
 	LOCK,
 	VOID,
-	STACK;
+	STACK,
+	/** Crafts what the crate holds up its reversible pathways: nuggets to ingots to blocks. */
+	COMPRESS,
+	/** Strips enchantments off what goes in and banks the experience for the player. */
+	DISENCHANT,
+	/** Combines worn, unenchanted tools and armour into fewer, fuller ones. */
+	REPAIR;
 
 	/** Whether {@code upgrade} grants this behaviour. */
 	public boolean grantedBy(CrateUpgrade upgrade) {
@@ -17,6 +23,9 @@ public enum UpgradeBehaviour {
 			case LOCK -> upgrade.locksContents();
 			case VOID -> upgrade.voidsOverflow();
 			case STACK -> upgrade.stacks();
+			case COMPRESS -> upgrade.compresses();
+			case DISENCHANT -> upgrade.disenchants();
+			case REPAIR -> upgrade.repairs();
 		};
 	}
 }

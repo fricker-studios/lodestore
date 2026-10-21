@@ -13,9 +13,6 @@ import net.minecraft.core.Direction;
 public class CrateRenderState extends BlockEntityRenderState {
 	public Direction facing = Direction.NORTH;
 	public boolean blank = true;
-	public long amount;
-	/** Whether the crate is locked, which tints the count. */
-	public boolean locked;
 	/** Whether what is drawn is the lock's filter rather than real contents. */
 	public boolean ghost;
 	public final ItemStackRenderState item = new ItemStackRenderState();
