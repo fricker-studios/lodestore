@@ -1,8 +1,213 @@
 {
-  "parent": "minecraft:block/cube_bottom_top",
+  "parent": "minecraft:block/block",
   "textures": {
-    "top": "lodestore:block/deposit_box_top",
-    "bottom": "lodestore:block/deposit_box_bottom",
-    "side": "lodestore:block/deposit_box_side"
-  }
+    "particle": "lodestore:block/deposit_box_back",
+    "back": "lodestore:block/deposit_box_back",
+    "flank": "lodestore:block/deposit_box_flank",
+    "front": "lodestore:block/deposit_box_front",
+    "spout": "lodestore:block/deposit_box_spout"
+  },
+  "elements": [
+    {
+      "__comment": "The body: a crate half a block deep, its back the mouth, the spout on its front.",
+      "from": [
+        0,
+        0,
+        8
+      ],
+      "to": [
+        16,
+        16,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": "#front",
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ]
+        },
+        "south": {
+          "texture": "#back",
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "cullface": "south"
+        },
+        "west": {
+          "texture": "#flank",
+          "uv": [
+            0,
+            0,
+            16,
+            8
+          ],
+          "rotation": 90,
+          "cullface": "west"
+        },
+        "east": {
+          "texture": "#flank",
+          "uv": [
+            0,
+            0,
+            16,
+            8
+          ],
+          "rotation": 90,
+          "cullface": "east"
+        },
+        "up": {
+          "texture": "#flank",
+          "uv": [
+            0,
+            0,
+            16,
+            8
+          ],
+          "cullface": "up"
+        },
+        "down": {
+          "texture": "#flank",
+          "uv": [
+            0,
+            0,
+            16,
+            8
+          ],
+          "cullface": "down"
+        }
+      }
+    },
+    {
+      "__comment": "The funnel: the wide part of the spout.",
+      "from": [
+        3,
+        3,
+        4
+      ],
+      "to": [
+        13,
+        13,
+        8
+      ],
+      "faces": {
+        "north": {
+          "texture": "#spout",
+          "uv": [
+            3,
+            3,
+            13,
+            13
+          ]
+        },
+        "west": {
+          "texture": "#spout",
+          "uv": [
+            0,
+            3,
+            4,
+            13
+          ]
+        },
+        "east": {
+          "texture": "#spout",
+          "uv": [
+            0,
+            3,
+            4,
+            13
+          ]
+        },
+        "up": {
+          "texture": "#spout",
+          "uv": [
+            0,
+            3,
+            4,
+            13
+          ],
+          "rotation": 90
+        },
+        "down": {
+          "texture": "#spout",
+          "uv": [
+            0,
+            3,
+            4,
+            13
+          ],
+          "rotation": 90
+        }
+      }
+    },
+    {
+      "__comment": "The neck: the narrow end, pointing into the block the box feeds.",
+      "from": [
+        6,
+        6,
+        0
+      ],
+      "to": [
+        10,
+        10,
+        4
+      ],
+      "faces": {
+        "north": {
+          "texture": "#spout",
+          "uv": [
+            6,
+            6,
+            10,
+            10
+          ],
+          "cullface": "north"
+        },
+        "west": {
+          "texture": "#spout",
+          "uv": [
+            12,
+            6,
+            16,
+            10
+          ]
+        },
+        "east": {
+          "texture": "#spout",
+          "uv": [
+            12,
+            6,
+            16,
+            10
+          ]
+        },
+        "up": {
+          "texture": "#spout",
+          "uv": [
+            12,
+            6,
+            16,
+            10
+          ],
+          "rotation": 90
+        },
+        "down": {
+          "texture": "#spout",
+          "uv": [
+            12,
+            6,
+            16,
+            10
+          ],
+          "rotation": 90
+        }
+      }
+    }
+  ]
 }

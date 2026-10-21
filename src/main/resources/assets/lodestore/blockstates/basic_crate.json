@@ -1,26 +1,49 @@
 {
   "variants": {
-    "facing=north": {
+    "facing=north,locked=false": {
       "model": "lodestore:block/basic_crate"
     },
-    "facing=east": {
+    "facing=east,locked=false": {
       "model": "lodestore:block/basic_crate",
       "y": 90
     },
-    "facing=south": {
+    "facing=south,locked=false": {
       "model": "lodestore:block/basic_crate",
       "y": 180
     },
-    "facing=west": {
+    "facing=west,locked=false": {
       "model": "lodestore:block/basic_crate",
       "y": 270
     },
-    "facing=up": {
+    "facing=up,locked=false": {
       "model": "lodestore:block/basic_crate",
       "x": 270
     },
-    "facing=down": {
+    "facing=down,locked=false": {
       "model": "lodestore:block/basic_crate",
+      "x": 90
+    },
+    "facing=north,locked=true": {
+      "model": "lodestore:block/basic_crate_locked"
+    },
+    "facing=east,locked=true": {
+      "model": "lodestore:block/basic_crate_locked",
+      "y": 90
+    },
+    "facing=south,locked=true": {
+      "model": "lodestore:block/basic_crate_locked",
+      "y": 180
+    },
+    "facing=west,locked=true": {
+      "model": "lodestore:block/basic_crate_locked",
+      "y": 270
+    },
+    "facing=up,locked=true": {
+      "model": "lodestore:block/basic_crate_locked",
+      "x": 270
+    },
+    "facing=down,locked=true": {
+      "model": "lodestore:block/basic_crate_locked",
       "x": 90
     }
   }

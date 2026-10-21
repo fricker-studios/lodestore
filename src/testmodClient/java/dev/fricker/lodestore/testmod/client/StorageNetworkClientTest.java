@@ -25,6 +25,7 @@ import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
 import dev.fricker.lodestore.block.CrateBlock;
 import dev.fricker.lodestore.block.CrateBlockEntity;
+import dev.fricker.lodestore.block.DepositBoxBlock;
 import dev.fricker.lodestore.block.DepositBoxBlockEntity;
 import dev.fricker.lodestore.block.InterfaceBoxBlock;
 import dev.fricker.lodestore.block.InterfaceBoxBlockEntity;
@@ -71,10 +72,11 @@ public class StorageNetworkClientTest implements FabricClientGameTest {
 
 				// The three network blocks side by side, facing the camera, with the crates behind
 				// them on a run of connection blocks: the interface in the middle, the deposit box
-				// to its left, a bare connection block to its right.
+				// to its left with its spout into the run, a bare connection block to its right.
 				level.setBlockAndUpdate(INTERFACE, LodestoreBlocks.INTERFACE_BOX.defaultBlockState()
 						.setValue(InterfaceBoxBlock.FACING, Direction.SOUTH));
-				level.setBlockAndUpdate(new BlockPos(-2, Y, 0), LodestoreBlocks.DEPOSIT_BOX.defaultBlockState());
+				level.setBlockAndUpdate(new BlockPos(-2, Y, 0), LodestoreBlocks.DEPOSIT_BOX.defaultBlockState()
+						.setValue(DepositBoxBlock.FACING, Direction.NORTH));
 				level.setBlockAndUpdate(new BlockPos(2, Y, 0), LodestoreBlocks.CONNECTION_BLOCK.defaultBlockState());
 
 				for (int x = -2; x <= 2; x++) {

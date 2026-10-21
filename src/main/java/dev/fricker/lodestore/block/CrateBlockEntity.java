@@ -1117,6 +1117,16 @@ public class CrateBlockEntity extends BlockEntity
 		// the preview, which reads the display choice this keeps current.
 		captureLockFilter();
 
+		// The face shows whether a lock is in — its corner rivets turn gold — through a block
+		// state, so it is the model's. Every change to the upgrades passes through here, and the
+		// state is only touched when it is wrong, so this is one block update per lock put in or
+		// taken out, never one per change to the contents.
+		BlockState state = getBlockState();
+
+		if (state.getBlock() instanceof CrateBlock && state.getValue(CrateBlock.LOCKED) != locks()) {
+			level.setBlock(worldPosition, state.setValue(CrateBlock.LOCKED, locks()), Block.UPDATE_ALL);
+		}
+
 		ItemStack previousItem = previewItem;
 		long previousCount = previewCount;
 		recomputePreview();

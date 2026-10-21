@@ -218,8 +218,8 @@ IRON_BAND = ["GWWGNIIIIIINGWWG", "GWWGIIIIIIIIGWWG"]
 #
 # The network wears the crates' own hardware in other metals. A connection block is spruce with a
 # copper bracket over every corner and a copper coupling in the middle of every face, so a run of
-# them reads as one line of pipe from any side. The deposit box is oak in brass bands with a funnel
-# let into its top and an iron plate on each side pointing the way in. The interface box is an
+# them reads as one line of pipe from any side. The deposit box is a crate-like body in iron straps
+# with a gunmetal spout on its front, pointing into the block it feeds. The interface box is an
 # iron-plated housing with a screen in a brass bezel on its front, lit teal: what its own screen
 # shows when opened.
 
@@ -269,41 +269,66 @@ CONNECTION_BLOCK_END_LIT = overlay(CONNECTION_BLOCK_SIDE, 6, 6, [
     "xxxx",
 ])
 
-# The deposit box is a hopper for the network and is drawn as one: gunmetal, an iron rim round a
-# bowl on top that steps down to the bore, and on each side the wide upper box narrowing to a
-# neck, as a hopper's side does. No wood and no brass — it is a machine among the crates.
-DEPOSIT_BOX_TOP = (
-    ["IIIIIIIIIIIIIIII",
-     "INNNNNNNNNNNNNNI",
-     "INBBBBBBBBBBBBNI",
-     "INBxxxxxxxxxxBNI",
-     "INBxxxxxxxxxxBNI"]
-    + ["INBxxJJJJJJxxBNI"] * 6
-    + ["INBxxxxxxxxxxBNI",
-       "INBxxxxxxxxxxBNI",
-       "INBBBBBBBBBBBBNI",
-       "INNNNNNNNNNNNNNI",
-       "IIIIIIIIIIIIIIII"]
+# The deposit box is a hopper for the network and is built as one: a crate-like body half a block
+# deep with an iron spout on its front, pointing into the block it feeds. The body is oak in iron
+# straps — a crate's boards in the network's metal — with its mouth, a dark square opening, on
+# the back. The spout is gunmetal: a funnel stepping down to a neck, a machine part on a crate.
+# The model is drawn pointing north, so the textures here are its front, back, flanks and spout
+# rather than top, side and bottom; the block state turns it the other five ways.
+_STRAPPED = bands(OAK_BOARDS, 'I', 'N', 'W')
+DEPOSIT_BOX_BACK = overlay(_STRAPPED, 4, 4, [
+    "QQQQQQQQ",
+    "QxxxxxxJ",
+    "QxxxxxxJ",
+    "QxxxxxxJ",
+    "QxxxxxxJ",
+    "QxxxxxxJ",
+    "QxxxxxxJ",
+    "QJJJJJJJ",
+])
+DEPOSIT_BOX_FRONT = overlay(_STRAPPED, 2, 2, [
+    "IIIIIIIIIIII",
+    "INNNNNNNNNNG",
+    "INNNNNNNNNNG",
+    "INNNNNNNNNNG",
+    "INNNNNNNNNNG",
+    "INNNNNNNNNNG",
+    "INNNNNNNNNNG",
+    "INNNNNNNNNNG",
+    "INNNNNNNNNNG",
+    "INNNNNNNNNNG",
+    "INNNNNNNNNNG",
+    "IGGGGGGGGGGG",
+])
+# The flanks are a strip, sixteen by eight, in the top half: a strap, one pixel and riveted, along
+# each edge of the body with the boards between. The sides take it turned on end, the top and bottom as it is.
+DEPOSIT_BOX_FLANK = (
+    ["IWIIIIIIIIIIIIWI"]
+    + OAK_BOARDS[3:9]
+    + ["GWGGGGGGGGGGGGWG"]
+    + ["N" * 16] * 8
 )
-DEPOSIT_BOX_SIDE = (
-    ["IIIIIIIIIIIIIIII",
-     "NNNNNNNNNNNNNNNN",
-     "QJJJJJJJJJJJJJJx",
-     "QJQJJJJJJJJJJQJx",
-     "QJJJJJJJJJJJJJJx",
-     "QJJJJJJJJJJJJJJx",
-     "QJQJJJJJJJJJJQJx",
-     "xxxxxxxxxxxxxxxx"]
-    + ["xxxxxQJJJJJxxxxx"] * 7
-    + ["xxxxxxxxxxxxxxxx"]
-)
-DEPOSIT_BOX_BOTTOM = (
-    ["xxxxxxxxxxxxxxxx"] * 4
-    + ["xxxxQQQQQQQQxxxx"]
-    + ["xxxxQJJJJJJxxxxx"] * 6
-    + ["xxxxxxxxxxxxxxxx"] * 5
-)
-
+# The spout's texture holds three pieces, each read by its own patch: the funnel's face, a ring
+# from (3, 3) to (13, 13) with the neck's dark end in the middle; the funnel's sides, four wide
+# down the left edge; and the neck's sides, four square at the right.
+DEPOSIT_BOX_SPOUT = [
+    "JJJJJJJJJJJJJJJJ",
+    "JJJJJJJJJJJJJJJJ",
+    "JJJJJJJJJJJJJJJJ",
+    "xJJQQQQQQQQQQJJJ",
+    "xJJQJJJJJJJJxJJJ",
+    "xJJQJJJJJJJJxJJJ",
+    "xJJQJJQQQQJJxJJQ",
+    "xJJQJJQxxJJJxJJQ",
+    "xJJQJJQxxJJJxJJQ",
+    "xJJQJJQJJJJJxJJQ",
+    "xJJQJJJJJJJJxJJJ",
+    "xJJQJJJJJJJJxJJJ",
+    "xJJQxxxxxxxxxJJJ",
+    "JJJJJJJJJJJJJJJJ",
+    "JJJJJJJJJJJJJJJJ",
+    "JJJJJJJJJJJJJJJJ",
+]
 # The interface box: an iron housing, plated and riveted, with the screen let into the front
 # behind a brass bezel. Nine lit cells on dark glass, the grid its own screen draws.
 _IRON_HOUSING = framed(["G" * 16] * 16, 'N', 'G', 'B', 'I')
@@ -333,20 +358,69 @@ _DIAL = [
 INTERFACE_BOX_SIDE = overlay(_IRON_HOUSING, 5, 5, _DIAL)
 INTERFACE_BOX_TOP = overlay(_IRON_HOUSING, 6, 4, ["YYYYYYYY", "YOOOOOOO", "YOOOOOOO", "OOOOOOOO"])
 
+# A locked crate says so on its face: the four rivets just inside the corners turn gold, the
+# lock upgrade's own colour, which the screen also tints a locked slot. Inside the border rather
+# than on it so the mark is in the woodwork, not a frame drawn round the block, and the same four
+# pixels on every tier so the eye learns one place to look.
+
+
+def locked(front, colour='Y'):
+    """The front with its corner rivets in the lock's colour."""
+    g = [list(r) for r in front]
+    for r in (1, 14):
+        for c in (1, 14):
+            g[r][c] = colour
+    return [''.join(r) for r in g]
+
+
+BASIC_FRONT_LOCKED = locked(BASIC_FRONT)
+STURDY_FRONT_LOCKED = locked(STURDY_FRONT)
+REINFORCED_FRONT_LOCKED = locked(REINFORCED_FRONT)
+
 # ------------------------------------------------------------- upgrade sprites
 
 
-def plate(inner_rows, light="W", mid="N", dark="G"):
-    """A carrier plate, bevelled light-to-dark, holding a 12x10 motif.
+def hexagon(inner_rows, light="W", mid="N", dark="G"):
+    """A hexagonal carrier, point up and point down, holding a 12x10 motif.
+
+    It is not a square: the corners are air, so in a slot or a hotbar an upgrade is a shape before
+    it is a picture, and not one more block among blocks. The light falls from the top left, so
+    the two upper faces are lit and the two lower faces shaded, as every bevel in the mod is.
 
     The metal names the upgrade's level: iron, then copper, then diamond. Colour carries that at a
     glance in a hotbar, where a numeral would be four pixels tall and unreadable.
+
+    A motif's 'N' pixels are the carrier showing through, not paint: a motif that reaches the
+    carrier's edge leaves the edge alone.
     """
-    assert len(inner_rows) == 10
-    rows = ["." * 16, "." + light * 14 + ".", "." + light + mid * 12 + dark + "."]
-    rows += ["." + light + inner.replace("N", mid) + dark + "." for inner in inner_rows]
-    rows += ["." + light + mid * 12 + dark + ".", "." + dark * 14 + ".", "." * 16]
-    return rows
+    assert len(inner_rows) == 10 and all(len(r) == 12 for r in inner_rows)
+    rows = [
+        ".......WW.......",
+        ".....WWNNWW.....",
+        "...WWNNNNNNWW...",
+        ".WWNNNNNNNNNNWW.",
+        "WNNNNNNNNNNNNNNG",
+        "WNNNNNNNNNNNNNNG",
+        "WNNNNNNNNNNNNNNG",
+        "WNNNNNNNNNNNNNNG",
+        "WNNNNNNNNNNNNNNG",
+        "WNNNNNNNNNNNNNNG",
+        "WNNNNNNNNNNNNNNG",
+        "WNNNNNNNNNNNNNNG",
+        ".GGNNNNNNNNNNGG.",
+        "...GGNNNNNNGG...",
+        ".....GGNNGG.....",
+        ".......GG.......",
+    ]
+    rows = [r.replace("W", light).replace("N", mid).replace("G", dark) for r in rows]
+    grid = [list(r) for r in rows]
+
+    for dr, inner in enumerate(inner_rows):
+        for dc, ch in enumerate(inner):
+            if ch != "N":
+                grid[3 + dr][2 + dc] = ch
+
+    return ["".join(r) for r in grid]
 
 
 LOCK_MOTIF = [
@@ -363,10 +437,10 @@ LOCK_MOTIF = [
 ]
 
 # The void reads as a hole rather than a symbol: a round aperture sunk through the
-# same iron plate the lock sits on, purple at the rim and near-black at the centre.
+# same iron the lock sits on, purple at the rim and near-black at the centre.
 # A lock and a hole are not easily confused at inventory size, which matters when
 # one of the two destroys things.
-VOID_UPGRADE = plate([
+VOID_UPGRADE = hexagon([
     "NNNNNNNNNNNN",
     "NNNNVVVVNNNN",
     "NNVVvvvvVVNN",
@@ -394,18 +468,18 @@ STACK_MOTIF = [
     "NNUUUUUUUUuN",
     "NNNNNNNNNNNN",
 ]
-# Levels two and three are the same pile on a richer plate, exactly as the lock's levels are.
-STACK_UPGRADE = plate(STACK_MOTIF)
-STACK_UPGRADE_2 = plate(STACK_MOTIF, "j", "k", "l")
-STACK_UPGRADE_3 = plate(STACK_MOTIF, "n", "p", "q")
+# Levels two and three are the same pile on a richer metal, exactly as the lock's levels are.
+STACK_UPGRADE = hexagon(STACK_MOTIF)
+STACK_UPGRADE_2 = hexagon(STACK_MOTIF, "j", "k", "l")
+STACK_UPGRADE_3 = hexagon(STACK_MOTIF, "n", "p", "q")
 
 # The three upgrades that work on the contents each wear a picture of the thing they stand in
 # for. Compress is a copper arrow pressing down onto a dark slab: the deposit box's arrow, since
-# that is the one "things go this way" mark the mod already has. Disenchant is a lapis book with a
-# clasp — the enchanting table's blue, on the enchanted book's shape — because what it takes off is
-# what that table puts on. Repair is an anvil in silhouette, the block everyone already knows
-# repairs things, even though the arithmetic is the crafting grid's.
-COMPRESS_UPGRADE = plate([
+# that is the one "things go this way" mark the mod already has. Disenchant is a bottle o'
+# enchanting, because what it takes off an item it keeps as levels, and that bottle is what
+# levels look like in the game. Repair is a pickaxe over a full durability bar: the bar is the
+# one place a player already watches a tool's health, and this is what it looks like mended.
+COMPRESS_UPGRADE = hexagon([
     "NNNNNjkNNNNN",
     "NNNNNjkNNNNN",
     "NNjkkkkkkkNN",
@@ -418,30 +492,30 @@ COMPRESS_UPGRADE = plate([
     "NBBBBBBBBBBN",
 ])
 
-DISENCHANT_UPGRADE = plate([
-    "NNNNNNNNNNNN",
-    "NNbbbbbbbbNN",
-    "NNbbbbbbbbNN",
-    "NNbbbbbbbbNN",
-    "NNaaaaaaaaNN",
-    "NNbbbbbbbbNN",
-    "NNbbbbbbbbNN",
-    "NNbbbbbbbbNN",
-    "NNcWWWWWWcNN",
-    "NNNNNNNNNNNN",
+DISENCHANT_UPGRADE = hexagon([
+    "NNNNN22NNNNN",
+    "NNNNNiiNNNNN",
+    "NNNNN11NNNNN",
+    "NNNNiwwiNNNN",
+    "NNNiwwwwiNNN",
+    "NNiwwwwwwiNN",
+    "NNiwwyyywiNN",
+    "NNiwyyyyyiNN",
+    "NN1yyyyyy1NN",
+    "NNN111111NNN",
 ])
 
-REPAIR_UPGRADE = plate([
-    "NNNNNNNNNNNN",
-    "NNWWWWWWWWWN",
-    "NNBBBBBBBBBN",
+REPAIR_UPGRADE = hexagon([
     "NNNBBBBBBNNN",
-    "NNNNNBBBNNNN",
-    "NNNNNBBBNNNN",
-    "NNNNBBBBBNNN",
-    "NNNBBBBBBBNN",
-    "NNBBBBBBBBBN",
+    "NBBWWWWWWBBN",
+    "BBWNN22NNWBB",
+    "NNNNN22NNNNN",
+    "NNNNN22NNNNN",
+    "NNNNN22NNNNN",
+    "NNNNN33NNNNN",
     "NNNNNNNNNNNN",
+    "NwwwwwwwwwwN",
+    "NyyyyyyyyyyN",
 ])
 
 # ------------------------------------------------------------------------ main
@@ -456,17 +530,21 @@ BLOCKS = {
     "reinforced_crate_front": REINFORCED_FRONT,
     "reinforced_crate_side": REINFORCED_SIDE,
     "reinforced_crate_top": REINFORCED_TOP,
+    "basic_crate_front_locked": BASIC_FRONT_LOCKED,
+    "sturdy_crate_front_locked": STURDY_FRONT_LOCKED,
+    "reinforced_crate_front_locked": REINFORCED_FRONT_LOCKED,
     "connection_block_side": CONNECTION_BLOCK_SIDE,
     "connection_block_end": CONNECTION_BLOCK_END,
     "connection_block_end_lit": CONNECTION_BLOCK_END_LIT,
-    "deposit_box_top": DEPOSIT_BOX_TOP,
-    "deposit_box_side": DEPOSIT_BOX_SIDE,
-    "deposit_box_bottom": DEPOSIT_BOX_BOTTOM,
+    "deposit_box_back": DEPOSIT_BOX_BACK,
+    "deposit_box_front": DEPOSIT_BOX_FRONT,
+    "deposit_box_flank": DEPOSIT_BOX_FLANK,
+    "deposit_box_spout": DEPOSIT_BOX_SPOUT,
     "interface_box_front": INTERFACE_BOX_FRONT,
     "interface_box_side": INTERFACE_BOX_SIDE,
     "interface_box_top": INTERFACE_BOX_TOP,
 }
-LOCK_UPGRADE = plate(LOCK_MOTIF)
+LOCK_UPGRADE = hexagon(LOCK_MOTIF)
 
 ITEMS = {
     "lock_upgrade": LOCK_UPGRADE,

@@ -27,6 +27,7 @@ import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
 import dev.fricker.lodestore.block.ConnectionBlock;
+import dev.fricker.lodestore.block.DepositBoxBlock;
 import dev.fricker.lodestore.block.CrateBlock;
 import dev.fricker.lodestore.block.CrateBlockEntity;
 import dev.fricker.lodestore.block.InterfaceBoxBlock;
@@ -193,9 +194,10 @@ public class MarketingScreenshotsClientTest implements FabricClientGameTest {
 
 		// The network runs inside the wall, behind both rows, and the devices continue the bottom
 		// row along it so both fronts face the room: the interface box, then a connection block in
-		// the open — the only way from the deposit box beyond it into the wall, so its indicator
-		// lights while the chest above the box drains into the crates — then the deposit box. A
-		// second connection block over the interface box hangs off the line and stays dark.
+		// the open — the only way from the deposit box into the wall, so its indicator lights
+		// while the chest drains into the crates — and the deposit box on top of it, spout down
+		// into it, under its chest. A second connection block over the interface box hangs off
+		// the line and stays dark.
 		for (int x = -3; x <= 5; x++) {
 			for (int y = Y; y <= Y + 1; y++) {
 				level.setBlockAndUpdate(new BlockPos(x, y, -1), LodestoreBlocks.CONNECTION_BLOCK.defaultBlockState());
@@ -208,10 +210,12 @@ public class MarketingScreenshotsClientTest implements FabricClientGameTest {
 				.setValue(InterfaceBoxBlock.FACING, Direction.SOUTH));
 		level.setBlockAndUpdate(new BlockPos(4, Y + 1, 0), facingRoom);
 		level.setBlockAndUpdate(new BlockPos(5, Y, 0), facingRoom);
-		level.setBlockAndUpdate(new BlockPos(6, Y, 0), LodestoreBlocks.DEPOSIT_BOX.defaultBlockState());
-		level.setBlockAndUpdate(new BlockPos(6, Y + 1, 0), Blocks.CHEST.defaultBlockState());
+		level.setBlockAndUpdate(new BlockPos(5, Y + 1, 0), LodestoreBlocks.DEPOSIT_BOX.defaultBlockState()
+				.setValue(DepositBoxBlock.FACING, Direction.DOWN));
+		level.setBlockAndUpdate(new BlockPos(5, Y + 2, 0), Blocks.CHEST.defaultBlockState()
+				.setValue(net.minecraft.world.level.block.ChestBlock.FACING, Direction.SOUTH));
 
-		if (level.getBlockEntity(new BlockPos(6, Y + 1, 0)) instanceof ChestBlockEntity chest) {
+		if (level.getBlockEntity(new BlockPos(5, Y + 2, 0)) instanceof ChestBlockEntity chest) {
 			for (int slot = 0; slot < chest.getContainerSize(); slot++) {
 				chest.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
 			}

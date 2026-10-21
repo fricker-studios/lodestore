@@ -30,7 +30,7 @@ PALETTE = {
     'P': (0x8A, 0x5C, 0xB8, 255),
     'V': (0x4A, 0x2E, 0x6B, 255),
     'v': (0x17, 0x10, 0x24, 255),
-    # copper and diamond, for the higher upgrade levels' carrier plates
+    # copper and diamond, for the higher upgrade levels' carriers
     'j': (0xF0, 0xA8, 0x78, 255),
     'k': (0xC9, 0x7A, 0x4E, 255),
     'l': (0x8E, 0x52, 0x30, 255),
@@ -62,6 +62,15 @@ PALETTE = {
     # the connection block's indicator lamp, dark and lit
     'f': (0x5E, 0x16, 0x12, 255),
     'E': (0xFF, 0x5A, 0x44, 255),
+    # experience (disenchant upgrade): the bottle o' enchanting's green, bright and deep
+    'w': (0x9C, 0xF5, 0x3E, 255),
+    'y': (0x5E, 0xB0, 0x2A, 255),
+    # glass, lit and shaded, for the bottle
+    'i': (0xC8, 0xE8, 0xF0, 255),
+    '1': (0x7A, 0x9E, 0xA8, 255),
+    # stick: the handles and corks on the upgrades' motifs
+    '2': (0x8A, 0x6A, 0x3E, 255),
+    '3': (0x5A, 0x3E, 0x22, 255),
     # redstone (future upgrades)
     'R': (0xE0, 0x4A, 0x3C, 255),
     'r': (0x9E, 0x2A, 0x22, 255),
