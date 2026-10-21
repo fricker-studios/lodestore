@@ -46,11 +46,6 @@ OAK_TOP = [
     "MMMKMLHKLDMKMMLK",
 ]
 
-# All three tiers are the same oak. Sturdy is that oak stained a shade down, so the
-# step up in tier reads tonally as well as by the hardware bolted to it.
-DARKEN = str.maketrans({'H': 'M', 'L': 'D', 'M': 'D', 'D': 'K', 'K': 'S', 'S': 'X', 'X': 'X'})
-DARK_PLANKS = [row.translate(DARKEN) for row in OAK_PLANKS]
-DARK_TOP = [row.translate(DARKEN) for row in OAK_TOP]
 
 
 def overlay(grid, top, left, patch):
@@ -63,94 +58,161 @@ def overlay(grid, top, left, patch):
     return [''.join(row) for row in out]
 
 
-# ------------------------------------------------------------------- the front
+# ------------------------------------------------------------------- the crates
 #
-# The renderer floats the stored item at roughly texture rows 2-10 and draws the
-# count in white just under it, around row 12. So the middle of the face is a
-# plain recessed panel: anything busy there competes with the icon, and anything
-# light there swallows the count. Tier is signalled entirely by the frame.
+# Three tiers, told apart by hardware the way the recipes describe them. Basic is light oak:
+# edge boards nailed round horizontal planks, and on the front a terracotta label in a pale
+# frame. Sturdy is spruce, a shade darker, with a riveted iron L-bracket over every corner, a
+# pale cross-brace on each side, and the label framed in iron. Reinforced is near-black wood
+# caged in iron straps, riveted where they cross, the label held by the straps themselves.
+#
+# The label sits where the renderer floats the stored item and draws the count beneath it, so
+# it is flat and a single warm tone: anything busy there competes with the icon, anything pale
+# there swallows the white count. Terracotta is dark enough for the count and warm enough that
+# an iron ingot or a diamond still pops against it.
 
-PANEL_GRAIN = [
-    "KKKDKKKKDK",
-    "KKKDKKKKDK",
-    "DKKDKKKKDK",
-    "KKKKKKKDKK",
-    "KKDKKKKDKK",
-    "KKDKKKKKKK",
-    "KKKKKKKKDK",
-    "DKKKKDKKKK",
-    "KKKKKDKKKK",
-    "KKDKKKKKKK",
+
+def mirror_h(patch):
+    return [row[::-1] for row in patch]
+
+
+def mirror_v(patch):
+    return patch[::-1]
+
+
+def corners(grid, patch):
+    """Stamps `patch` over the top-left corner and its mirrors over the other three."""
+    n = len(patch)
+    grid = overlay(grid, 0, 0, patch)
+    grid = overlay(grid, 0, 16 - n, mirror_h(patch))
+    grid = overlay(grid, 16 - n, 0, mirror_v(patch))
+    grid = overlay(grid, 16 - n, 16 - n, mirror_v(mirror_h(patch)))
+    return grid
+
+
+# Horizontal planks, three rows a board with a dark seam between, in light oak.
+OAK_BOARDS = [
+    "LHLLMLHLLMLLHLML", "MLMMLMMLMMLMMLMM", "DDDDDDDDDDDDDDDD",
+    "LMLHLMLLHLMLLMHL", "MMLMMMLMMMLMMMML", "DDDDDDDDDDDDDDDD",
+    "HLMLLHLMLLMHLLML", "LMMLMMMLMMMLMMLM", "DDDDDDDDDDDDDDDD",
+    "LLHLMLLMHLLMLHLM", "MLMMMLMMLMMMLMMM", "DDDDDDDDDDDDDDDD",
+    "LHLMLLHLLMLHLLML", "MLMMLMMLMMMLMMLM", "DDDDDDDDDDDDDDDD",
+    "LMLLHLMLLHLMLLHL",
 ]
 
-
-def front(top_rows, bottom_rows, sides):
-    """Builds a crate face: 2px frame, then a panel inset with a lit bottom-right."""
-    assert len(sides) == 12
-    rows = list(top_rows)
-    for i, (left, right) in enumerate(sides):
-        if i == 0:
-            panel = "S" * 12           # top of the inset, in shadow
-        elif i == 11:
-            panel = "S" + "M" * 11     # bottom of the inset, catching light
-        else:
-            panel = "S" + PANEL_GRAIN[i - 1] + "M"
-        rows.append(left + panel + right)
-    rows.extend(bottom_rows)
-    return rows
+# The same boards in spruce for the sturdy tier, and nearly black for the reinforced one,
+# where they are only what shows between the iron.
+SPRUCE_BOARDS = [row.translate(str.maketrans({'H': 'm', 'L': 'm', 'M': 'd', 'D': 's'})) for row in OAK_BOARDS]
+DEEP_BOARDS = [row.translate(str.maketrans({'H': 'm', 'L': 'd', 'M': 'd', 'D': 's'})) for row in OAK_BOARDS]
 
 
-BASIC_FRONT = front(
-    ["HLMLHMLMMLHMLMLH", "MLDMMLMDLMMDLMDM"],
-    ["MDLMMDMLDMMLMDLM", "XSXXSXXSXXSXXSXS"],
-    [("ML", "LM"), ("LM", "ML"), ("MD", "LM"), ("LM", "MD"),
-     ("ML", "LM"), ("LD", "ML"), ("ML", "LM"), ("LM", "ML"),
-     ("MD", "LM"), ("LM", "MD"), ("ML", "LM"), ("LM", "ML")],
-)
+def framed(boards, light, mid, seam, nail):
+    """Edge boards two pixels wide round the planks, a nail in each corner, a seam inside."""
+    g = [list(r) for r in boards]
+    for i in range(16):
+        for j in (0, 15):
+            g[j][i] = light if (i % 4) != 3 else mid
+            g[i][j] = light if (i % 4) != 1 else mid
+        for j in (1, 14):
+            g[j][i] = mid
+            g[i][j] = mid
+    for r in (1, 14):
+        for c in (1, 14):
+            g[r][c] = nail
+    for i in range(2, 14):
+        g[2][i] = seam
+        g[13][i] = seam
+        g[i][2] = seam
+        g[i][13] = seam
+    return [''.join(r) for r in g]
 
-# Sturdy: the same frame a shade darker, with an L-bracket bolted over each corner —
-# where the extra ring of planks in its recipe went.
-STURDY_FRONT = front(
-    [r.translate(DARKEN) for r in ["HLMLHMLMMLHMLMLH", "MLDMMLMDLMMDLMDM"]],
-    [r.translate(DARKEN) for r in ["MDLMMDMLDMMLMDLM", "XSXXSXXSXXSXXSXS"]],
-    [(l.translate(DARKEN), r.translate(DARKEN)) for l, r in
-     [("ML", "LM"), ("LM", "ML"), ("MD", "LM"), ("LM", "MD"),
-      ("ML", "LM"), ("LD", "ML"), ("ML", "LM"), ("LM", "ML"),
-      ("MD", "LM"), ("LM", "MD"), ("ML", "LM"), ("LM", "ML")]],
-)
-_ARM = ["XXXXX", "XXXXX", "XX~~~", "XX~~~", "XX~~~"]
-_MIRROR = [r[::-1] for r in _ARM]
-for _r, _c, _patch in ((0, 0, _ARM), (0, 11, _MIRROR),
-                       (11, 0, _ARM[::-1]), (11, 11, _MIRROR[::-1])):
-    STURDY_FRONT = overlay(STURDY_FRONT, _r, _c, _patch)
 
-# Reinforced: iron banding with rivets at the corners and halfway down each side.
-REINFORCED_FRONT = front(
-    ["GWWGNIIIIIINGWWG", "GWWGIIIIIIIIGWWG"],
-    ["GWWGIIIIIIIIGWWG", "GWWGNIIIIIINGWWG"],
-    [("GI", "IG"), ("IN", "NI"), ("IN", "NI"), ("GI", "IG"),
-     ("WW", "WW"), ("WW", "WW"), ("GI", "IG"), ("IN", "NI"),
-     ("IN", "NI"), ("NI", "IN"), ("IN", "NI"), ("GI", "IG")],
-)
+def label(grid, frame, size, inner='A', shadow='z', light='Z'):
+    """The recessed terracotta panel, centred: a one-pixel frame, a shadow along the top and
+    left inside it, a lit edge along the bottom and right."""
+    off = (16 - size) // 2
+    g = [list(r) for r in grid]
+    for i in range(size):
+        g[off][off + i] = frame
+        g[off + size - 1][off + i] = frame
+        g[off + i][off] = frame
+        g[off + i][off + size - 1] = frame
+    for r in range(off + 1, off + size - 1):
+        for c in range(off + 1, off + size - 1):
+            g[r][c] = inner
+    for i in range(off + 1, off + size - 1):
+        g[off + 1][i] = shadow
+        g[i][off + 1] = shadow
+        g[off + size - 2][i] = light if i > off + 1 else shadow
+        g[i][off + size - 2] = light if i > off + 1 else shadow
+    return [''.join(r) for r in g]
 
-# ------------------------------------------------------------ sides and tops
 
-BASIC_SIDE, BASIC_TOP = OAK_PLANKS, OAK_TOP
+# Basic: oak, nailed, labelled; the lid's boards run the other way.
+BASIC_SIDE = framed(OAK_BOARDS, 'L', 'M', 'K', 'X')
+BASIC_TOP = framed([''.join(OAK_BOARDS[x][y] for x in range(16)) for y in range(16)], 'L', 'M', 'K', 'X')
+BASIC_FRONT = label(BASIC_SIDE, 'H', 10)
 
-# Battens down the sides, in the same near-black as the brackets on the face.
-STURDY_SIDE = overlay(DARK_PLANKS, 0, 2, ["XS"] * 16)
-STURDY_SIDE = overlay(STURDY_SIDE, 0, 12, ["SX"] * 16)
-STURDY_TOP = overlay(DARK_TOP, 0, 2, ["XS"] * 16)
-STURDY_TOP = overlay(STURDY_TOP, 0, 12, ["SX"] * 16)
+# Sturdy: a gunmetal L-bracket over every corner, five pixels an arm and two thick, with a
+# rivet — darker than the spruce it is bolted to, so it reads as old steel against the
+# reinforced tier's iron rather than a lighter shade of the same.
+BRACKET = [
+    "QQQQQ",
+    "QGJJx",
+    "QJ~~~",
+    "QJ~~~",
+    "xx~~~",
+]
+_STURDY_BASE = framed(SPRUCE_BOARDS, 'h', 'm', 's', 's')
+STURDY_FRONT = label(corners(_STURDY_BASE, BRACKET), 'J', 10)
+for _r, _c in ((3, 3), (3, 12), (12, 3), (12, 12)):
+    STURDY_FRONT = overlay(STURDY_FRONT, _r, _c, ["Q"])
+STURDY_TOP = corners(_STURDY_BASE, BRACKET)
 
+# Each side carries a cross-brace: two pale boards corner to corner, each with a shadowed edge.
+_BRACE = [list('~' * 16) for _ in range(16)]
+for _i in range(2, 14):
+    for _d, _ch in ((0, 'L'), (1, 'M'), (2, 'd')):
+        if 2 <= _i + _d <= 13:
+            _BRACE[_i + _d][_i] = _ch
+            _BRACE[_i + _d][15 - _i] = _ch
+_BRACE = [''.join(r) for r in _BRACE]
+STURDY_SIDE = corners(overlay(_STURDY_BASE, 0, 0, _BRACE), BRACKET)
+
+
+def straps(boards, middle=True):
+    """Iron straps round the edge and, unless the front's label is there, across the middle
+    both ways, a lit edge on each; where they cross, a rivet with the rust it has shed."""
+    g = [list(r) for r in boards]
+    bands = [(0, 1), (14, 15)] + ([(7, 8)] if middle else [])
+    for a, b in bands:
+        for i in range(16):
+            g[a][i] = 'N'
+            g[b][i] = 'G'
+            g[i][a] = 'N'
+            g[i][b] = 'G'
+    for a, b in bands:
+        for c, d in bands:
+            g[a][c] = 'N'
+            g[a][d] = 'N'
+            g[b][c] = 'I'
+            g[b][d] = 'l'
+    return [''.join(r) for r in g]
+
+
+# Reinforced: the cage, in an iron a shade under bright. The front's label sits where the
+# middle straps would cross, the same size as every tier's, framed in the same iron with a
+# rivet at the middle of each side and rust in the corners.
+REINFORCED_SIDE = straps(DEEP_BOARDS)
+REINFORCED_TOP = straps(DEEP_BOARDS)
+REINFORCED_FRONT = label(straps(DEEP_BOARDS, middle=False), 'G', 10)
+for _r, _c in ((3, 7), (3, 8), (12, 7), (12, 8), (7, 3), (8, 3), (7, 12), (8, 12)):
+    REINFORCED_FRONT = overlay(REINFORCED_FRONT, _r, _c, ["I"])
+for _r, _c in ((3, 3), (3, 12), (12, 3), (12, 12)):
+    REINFORCED_FRONT = overlay(REINFORCED_FRONT, _r, _c, ["l"])
+
+# The band the network blocks wear, and the plain planks they are built on.
 IRON_BAND = ["GWWGNIIIIIINGWWG", "GWWGIIIIIIIIGWWG"]
-REINFORCED_SIDE = overlay(OAK_PLANKS, 0, 0, IRON_BAND)
-REINFORCED_SIDE = overlay(REINFORCED_SIDE, 14, 0, IRON_BAND[::-1])
-
-CORNER_PLATE = ["WWG", "WNG", "GGG"]
-REINFORCED_TOP = OAK_TOP
-for r, c in ((0, 0), (0, 13), (13, 0), (13, 13)):
-    REINFORCED_TOP = overlay(REINFORCED_TOP, r, c, CORNER_PLATE)
 
 # ------------------------------------------------------------ network blocks
 #

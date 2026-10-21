@@ -27,9 +27,14 @@ import dev.fricker.lodestore.item.CrateUpgradeItem;
 /**
  * A crate block. Structure (how many rows it opens) is fixed per block; behaviour (whether it
  * keeps its contents, and what it may contain) is datapack-driven via {@link CrateTier}.
+ *
+ * <p>Faces any of the six ways, as a barrel does, so a crate set into a floor shows its label
+ * upward and one under a ceiling shows it down. The property is vanilla's own {@code facing},
+ * which the four horizontal values a crate used to be limited to are a subset of, so a crate
+ * saved before it could face up or down loads facing where it did.
  */
 public class CrateBlock extends Block implements EntityBlock {
-	public static final EnumProperty<Direction> FACING = BlockStateProperties.HORIZONTAL_FACING;
+	public static final EnumProperty<Direction> FACING = BlockStateProperties.FACING;
 
 	private final int rows;
 	private final ResourceKey<CrateTier> tierKey;
@@ -54,9 +59,10 @@ public class CrateBlock extends Block implements EntityBlock {
 		builder.add(FACING);
 	}
 
+	/** Faces the player, the way a barrel does: look down at the floor and the label faces up. */
 	@Override
 	public BlockState getStateForPlacement(BlockPlaceContext context) {
-		return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+		return defaultBlockState().setValue(FACING, context.getNearestLookingDirection().getOpposite());
 	}
 
 	@Override
