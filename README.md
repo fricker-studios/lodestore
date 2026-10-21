@@ -191,6 +191,15 @@ A crate faces any of the six ways, as a barrel does: look down at the floor when
 its label faces up, look up at a ceiling and it faces down. The icon tips with it, its top toward
 north, rather than turning.
 
+The network wears the crates' hardware in other metals. A connection block is spruce with a copper
+bracket over every corner, the same on every face, since any face may be the one the next block
+joins, and nothing in the middle: it carries the network and does nothing else. The deposit box is
+a hopper for the network and is drawn as one: gunmetal, an iron rim round a bowl on top that steps
+down to the bore, and on each side the wide upper box narrowing to a neck — no wood and no brass,
+a machine among the crates. The interface box is an iron housing, plated and riveted,
+with its screen let into the front behind a brass bezel: nine cells lit teal on dark glass, the grid
+its own screen draws, with a brass dial on each side and a brass plate across the top.
+
 Upgrades share a carrier: every one sits on the same bevelled iron plate, so they read as one
 family of hardware rather than a drawer of unrelated trinkets, and only the motif differs — a gold
 padlock, a dark aperture, a green pile, a copper arrow pressing on a slab, a lapis book, an anvil.

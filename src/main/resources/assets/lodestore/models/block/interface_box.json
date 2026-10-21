@@ -3,6 +3,6 @@
   "textures": {
     "front": "lodestore:block/interface_box_front",
     "side": "lodestore:block/interface_box_side",
-    "top": "lodestore:block/basic_crate_top"
+    "top": "lodestore:block/interface_box_top"
   }
 }
