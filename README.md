@@ -46,14 +46,34 @@ brew install --cask temurin@25
 ## Getting a build
 
 Every pull request and every push to `main` builds the mod and attaches the jar to the workflow
-run. Open the run from the Actions tab or the PR's checks, download the `lodestore-<sha>` artifact,
-and drop the jar into `.minecraft/mods` next to Fabric API.
+run. Open the run from the Actions tab or the PR's checks, download the artifact and drop the jar
+into `.minecraft/mods` next to Fabric API. The artifact and the jar inside it are named for the
+pull request and the run that built them, the two numbers run together — pull request 57's twelfth
+run is `lodestore-5712` — or for the run number alone on a push to `main`, so two runs never share
+a name. Only the file name: the version inside the jar is still the nearest tag's, below.
 
 Tagged commits publish a GitHub Release with the jar attached:
 
 ```bash
 git tag v0.2.0 && git push origin v0.2.0
 ```
+
+The same tag publishes the jar to [Modrinth](https://modrinth.com/project/lodestore), with the
+release notes GitHub generated as the changelog: a release candidate goes up as a beta, a bare
+version as a release, both needing Fabric API and filed under the Minecraft version in
+`gradle.properties`. The step needs a `MODRINTH_TOKEN` repository secret — a Modrinth token with the *Read projects*,
+*Read versions*, *Create versions*, *Write versions* and *Write projects* scopes — the fourth sets
+each version's environment, client and server, which the create call cannot; the last is for the
+gallery — and
+skips without one. The project is found by its `lodestore` slug, or by the id in the
+`MODRINTH_PROJECT` repository variable when one is set; a draft project answers a token that
+cannot read it with a 404, and the scripts say so.
+`tools/modrinth/publish.py` does the upload and is idempotent, so the *Modrinth* workflow
+(`.github/workflows/modrinth.yml`, run by hand from the Actions tab) can re-send any tag, or every
+tag at once, from the jars the GitHub releases already carry — never a rebuild. The same workflow
+uploads the gallery from `docs/modrinth/gallery/`, whose `gallery.json` gives each picture its
+title and caption in order; the pictures are the client screenshot test's, copied in once they have
+been looked at.
 
 The tag is the single source of truth for the version. A release passes it through as `-Pversion`,
 so the jar filename and the version inside `fabric.mod.json` cannot drift apart; every other build
@@ -80,9 +100,9 @@ Crates are working containers with a GUI.
 
 | Tier | Behaves like | Size | Upgrade slots | On break | May contain |
 |---|---|---|---|---|---|
-| Basic | chest | 27 | 1 | contents spill | empty crates |
-| Sturdy | shulker box | 27 | 2 | contents stay inside | empty crates |
-| Reinforced | shulker box | 54 | 3 | contents stay inside | empty crates, and sturdy ones with contents |
+| Basic | chest | 27 | 2 | contents spill | empty crates |
+| Sturdy | shulker box | 27 | 4 | contents stay inside | empty crates |
+| Reinforced | shulker box | 54 | 6 | contents stay inside | empty crates, and sturdy ones with contents |
 
 Crates can be joined into a network; see [The network](#the-network).
 
@@ -152,18 +172,38 @@ Donkeys, llamas, decorated pots and other mods' storage are not covered.
 
 ### Sprites
 
-Every tier has its own front, side and top texture. They are one family of oak separated by the
-hardware bolted to it, which is what the recipes describe: basic is plain, sturdy is a shade darker
-with black L-brackets over each corner, and reinforced is iron-banded with rivets. Tone alone would
-not survive being seen across a dark room, and hardware alone would not read at a glance.
+Every tier has its own front, side and top texture, told apart by the hardware bolted on, which is
+what the recipes describe. Basic is light oak: edge boards nailed round horizontal planks, the lid's
+boards running across. Sturdy is spruce, a shade darker, with a gunmetal L-bracket riveted over
+every corner — darker than the wood, so it reads as old steel rather than a lighter grade of the
+reinforced tier's iron — and a pale cross-brace on each side. Reinforced is near-black wood caged
+in iron straps, riveted and rust-stained where they cross. Tone alone would not survive being seen
+across a dark room, and hardware alone would not read at a glance.
 
-The middle of each front is a flat recessed panel on purpose. The renderer floats the stored item
-across roughly the middle half of the face and draws the count just below it, so anything busy there
-competes with the icon and anything light there swallows the count.
+Every front carries the same label: a ten-pixel terracotta panel, centred, framed in pale oak,
+gunmetal or iron by tier. The renderer draws the stored item centred on it, and nothing else — no
+count — so the label is flat and one warm tone on purpose: anything busy there competes with the
+icon, and terracotta is dark enough for the icon to stand off while warm enough that iron and
+diamonds still pop. The count went when the label came: a number across a panel the item sits on
+read as clutter at any distance, and the exact figure is in the screen and the interface box.
 
-Upgrades share a carrier: both sit on the same bevelled iron plate, so they read as one family of
-hardware rather than two unrelated trinkets, and only the motif differs — a gold padlock against a
-dark aperture. The two are deliberately unlike at inventory size, which matters when one of them
+A crate faces any of the six ways, as a barrel does: look down at the floor when placing one and
+its label faces up, look up at a ceiling and it faces down. The icon tips with it, its top toward
+north, rather than turning.
+
+The network wears the crates' hardware in other metals. A connection block is spruce with a copper
+bracket over every corner, and on its front and back a small redstone indicator in a gunmetal
+bezel, dark until items pass through and bright while they do. The deposit box is
+a hopper for the network and is drawn as one: gunmetal, an iron rim round a bowl on top that steps
+down to the bore, and on each side the wide upper box narrowing to a neck — no wood and no brass,
+a machine among the crates. The interface box is an iron housing, plated and riveted,
+with its screen let into the front behind a brass bezel: nine cells lit teal on dark glass, the grid
+its own screen draws, with a brass dial on each side and a brass plate across the top.
+
+Upgrades share a carrier: every one sits on the same bevelled iron plate, so they read as one
+family of hardware rather than a drawer of unrelated trinkets, and only the motif differs — a gold
+padlock, a dark aperture, a green pile, a copper arrow pressing on a slab, a lapis book, an anvil.
+The lock and the void are deliberately unlike at inventory size, which matters when one of them
 destroys things.
 
 | Where | What |
@@ -193,6 +233,10 @@ hotbar.
 | Reinforced crate | a sturdy crate and eight iron ingots |
 | Lock upgrade | gold nuggets around an iron ingot, over a second ingot |
 | Void upgrade | obsidian around an iron ingot, over a second ingot |
+| Stack upgrade | chests in the same shape; levels II and III wrap the previous level in copper, then diamond |
+| Compress upgrade | pistons in the same shape |
+| Disenchant upgrade | lapis lazuli in the same shape |
+| Repair upgrade | grindstones in the same shape |
 
 Each recipe ships an advancement that reveals it in the recipe book once you are holding any of its
 ingredients — planks or an iron nugget for a basic crate, an iron ingot or a sturdy crate for a
@@ -251,11 +295,17 @@ per upgrade.
 | Stack | a slot holds 4 stacks; an item that does not stack, 8 | the whole crate |
 | Stack II | 8 stacks, or 16 of an unstackable | the whole crate |
 | Stack III | 16 stacks, or 32 of an unstackable | the whole crate |
+| Compress | crafts what it holds up into its densest form — nuggets to ingots to blocks — along pathways that craft back the other way | the whole crate |
+| Disenchant | strips the enchantments off what goes in and banks the experience they were worth, for the player to collect | the whole crate |
+| Repair | combines worn, unenchanted tools and armour of a kind into fewer, fuller ones | the whole crate |
 
 The lock and the void change *what the crate accepts*; the stack upgrade changes *how much it
 holds*, and it is the one upgrade that could not be another flag enforced through a vanilla hook,
 because vanilla has no per-slot capacity hook. It needed [the storage layer](#the-storage-layer),
-and [Why the storage layer exists](#why-the-storage-layer-exists) is the evidence for that.
+and [Why the storage layer exists](#why-the-storage-layer-exists) is the evidence for that. The
+last three change *what it holds*: they are the only things in a crate that ever lower a count
+other than a withdrawal, and each runs only while its upgrade is installed; see
+[Refining](#refining).
 
 No upgrade is aimed at particular slots. Voiding and stacking are properties of the crate: a
 crate either discards its overflow or it does not, and either holds deep stacks or it does not, and
@@ -268,8 +318,11 @@ JSON. The lock used to come in three levels too, reaching one, two and three row
 it stopped being aimed at slots, since with the whole crate covered a higher level would have
 nothing left to add.
 
-How many upgrades a crate holds at once is its tier's business, not the upgrade's: one for basic,
-two for sturdy, three for reinforced.
+How many upgrades a crate holds at once is its tier's business, not the upgrade's: two for basic,
+four for sturdy, six for reinforced — enough for a reinforced crate to take one of every shipped
+upgrade, and no more than the screen's panel draws in two rows of three. A second of the same
+upgrade is refused, by the crate and by the column, since an upgrade is installed or it is not and
+a duplicate would only take a slot from one that does.
 
 Install by dragging an upgrade into the column, or by right-clicking the crate while holding one —
 the latter is the single exception to "right-clicking opens the crate whatever is in hand", because
@@ -281,15 +334,22 @@ the tiers whose contents ride inside the dropped item they would duplicate along
 else. They stay in the crate when it is broken, for every tier, in a component of their own — see
 [Status](#status).
 
-The storage also refuses upgrades as goods, through both of its doors, and the upgrade slots are
-marked *fake* — a vanilla flag that changes only how the screen draws the item, and the first thing
-Inventory Profiles Next checks when it decides which slots make up a container's sortable area,
-read from its decompiled `AreaTypes`. The two together are what keep a sorter out of the column.
-Before them, a sort treated the column as more slots of the same chest, lifted the upgrade out,
-found nowhere in the grid that would take it, and left it on the cursor. A shift-clicked upgrade
-still goes to the column, as it always did. Should an IPN version stop honouring the flag, its
-`config/inventoryprofilesnext/SlotIntegrationHints.json` takes
+Spare upgrades are goods like any other: the grid takes them by hand and by hopper, so a crate is
+where a player keeps them. The upgrade slots are marked *fake* — a vanilla flag that changes only
+how the screen draws the item, and the first thing Inventory Profiles Next checks when it decides
+which slots make up a container's sortable area, read from its decompiled `AreaTypes` — which is
+what keeps a sorter out of the column. The storage used to refuse upgrades as goods as a second
+guard, so that a sort which lifted an installed upgrade would find nowhere in the grid to put it;
+that cost players the one obvious place to store them, and the flag is the guard that works. A
+shift-clicked upgrade goes to the column first, and into the grid only when the column will not
+take it — full, or already holding one of the same. Should an IPN version stop honouring the flag,
+its `config/inventoryprofilesnext/SlotIntegrationHints.json` takes
 `{"dev.fricker.lodestore.menu.UpgradeSlot": {"ignore": true}}` and does the same by name.
+
+Dropping an upgrade into the column works with either button. A right-click on an installed upgrade
+is a gesture of its own — sort, collect, choose the face's slot — but only with an empty cursor:
+with something carried it is vanilla's way of placing one, and for a while the screen swallowed it,
+so a right-clicked upgrade never landed while a left-clicked one did.
 
 #### Choosing the slot the face shows
 
@@ -322,6 +382,12 @@ durability, and nothing good is unenchanted. The deposit box's notion of a home 
 rule, and so does the void upgrade: a full voiding crate of bows destroys the worn bow it has no
 room for, as it would a new one.
 
+With a compress upgrade beside it, a claim is on the item's whole *family*: a crate locked to iron
+blocks takes nuggets and ingots too, because blocks are what it is about to make of them, and the
+network's notion of a home and the void upgrade widen the same way. The client is sent the claim
+with the family already spelled out, since it has no recipes to work it out from, so the screen
+still predicts the nugget going in rather than flickering.
+
 It is enforced in `CrateBlockEntity#canStore`, next to the nesting rule and for the same reason: a
 filter applied only by the screen would be bypassed by piping items in. Both doors into a crate ask
 it — the storage's insert, which is what hoppers, droppers and pipes reach, and the menu's
@@ -338,8 +404,7 @@ The front face shows one item and holds it still, rather than cycling through th
 that is whatever the crate holds most of; with a slot chosen through the lock, it is that slot's
 item, counted across the whole crate. The face follows the slot rather than the item, so putting
 something else in that slot changes what it shows. Once the crate is emptied the face keeps naming
-the chosen item — or, with nothing chosen, the first one claimed — drawn smaller, and a locked
-crate's count is tinted in the lock's gold.
+the chosen item — or, with nothing chosen, the first one claimed — drawn smaller.
 
 A crate saved while the lock was aimed at slots carries the slots it covered and a claim per slot.
 The slots are dropped on load; the claims are kept, joined by whatever else the crate holds, which
@@ -368,6 +433,73 @@ and discarded what was written to it — with the container one slot larger than
 comparator having to know the difference. Fabric's hopper patch never asks a storage whether it is
 full, so none of that is needed now: the slot, the size mismatch and the comparator caveat are gone.
 Inserting into one slot's view directly never voids, because that caller asked a specific slot.
+
+#### Refining
+
+Three upgrades work on what the crate holds rather than on what it accepts or how much. They run
+in `CrateBlockEntity#setChanged`, which every door into the crate passes through — a hand, a
+hopper, a pipe, the network — once per change and on the server only, in the order that lets each
+feed the next: strip, then combine, then compress. An enchanted half-worn bow dropped into a crate
+with all three installed is stripped, combined with the other half-worn bow, and leaves the crate
+as one plain full bow with the enchantment's worth in the bank.
+
+Each puts its result where the same kind already is — the right stack — before it opens a new
+slot, through the same `room` that a hopper asks, so under a stack upgrade a repaired bow joins the
+full bows parked in one slot and a stripped book joins the books. Every count moved goes through
+`CrateContents`'s own `add` and `take`, so the slot invariants hold throughout and nothing is ever
+constructed over a legal stack.
+
+**Compressing.** The crate crafts what it holds up into its densest form, as far as it goes: nine
+nuggets into an ingot, then nine ingots into a block. Only along pathways that craft back the other
+way. Nine iron ingots make a block and the block makes nine ingots, so ingots may be compressed
+freely — nothing is lost, and the player can always have the ingots back. Nine bone meal and a
+bone block are the same. But a bone crafts into bone meal and never back, four quartz become a
+block that cannot be uncrafted, and so do four amethyst shards: each of those is a decision to
+destroy the loose form, and a crate must not make it on the player's behalf. Requiring the return
+recipe is what draws that line, for every item in the game and in every other mod, without a list
+to keep. The pathways are read off the recipes through `RecipeManager#getRecipeFor` with a grid of
+the one item and then with the result alone — the lookup a crafting table makes, on public API —
+built in one pass over the recipes and kept until they reload. A recipe counts only when every
+ingredient is the same single item — a tag of planks is not an item — and only as the table would
+actually resolve a grid of that item. Only plain items are compressed; a renamed ingot is not the
+ingot the recipe names. What does not make a whole block stays loose, and a result that has
+nowhere to land is not made — except that a crate full to the last slot with ingots drains one
+slot of them to make the room, since otherwise the one crate most in need of compressing would be
+the one that could not.
+
+The line can be crossed on purpose. Right-click the installed compress upgrade and the crate
+follows the one-way pathways too — *destructive* compression: four quartz into a block, four
+shards into an amethyst block, nine snowballs or nine ice into their blocks, and bones into bone
+blocks. Bones are the one shape of pathway that starts with a split rather than a grid — a bone
+crafts into three bone meal, and bone meal and the bone block craft into each other — so three
+bones make a block and the odd bone stays a bone. A split counts only when it lands in a pair like
+that; a log splits into planks, but planks and a crafting table are not a pair, so logs stay logs
+however the setting is set. The setting is the upgrade's, for one crate: the upgrade wears a red
+wash in the screen while it is on, its tooltip says which table is in force, it rides on the crate
+item with the upgrade, and taking the upgrade out forgets it, so a compress upgrade moved to
+another crate starts off safe. The lock, the void and the network's homes follow the wider family
+while it is on — a crate locked to bone blocks takes bones — and not otherwise.
+
+**Disenchanting.** Whatever goes in with an enchantment on it comes out without, and the crate
+banks what the enchantment was worth — the grindstone's own arithmetic, roll included, so the
+upgrade is a grindstone that runs itself rather than a better one. Curses stay on, as they do at a
+grindstone. An enchanted book with nothing left on it becomes a plain book. The bank is drawn on
+the installed upgrade in the crate screen as the levels it holds, in the experience bar's green
+where a stack would draw its count, and the upgrade's tooltip gives the points and the gesture:
+right-click the installed upgrade to collect it all. The upgrade cannot be taken out while the bank
+holds anything, and its tooltip says so; breaking the crate carries the bank on the item alongside
+the upgrades, and the item's tooltip says how many levels ride with it.
+
+**Repairing.** Worn, unenchanted tools and armour of one kind are combined into fewer, fuller ones,
+as a crafting grid does: the two durabilities plus five percent of the maximum, capped. Two items
+are one kind when they differ in nothing but their damage, so a renamed pickaxe is never merged
+into a plain one. Pairs are chosen to waste as little as possible: for as long as any two still add
+up to under the maximum, the two that come closest to it are combined; once every pair would
+overshoot, the two most worn make a full item and overshoot least, with the fullest left as it is
+when the count is odd. Four iron pickaxes at 225, 150, 125 and 100 of 250 come out as one full and
+one at 237, where pairing the fullest with whatever was left would have thrown a third away.
+Enchanted items are skipped altogether, because combining them would strip the enchantments; with
+a disenchant upgrade beside it they are stripped first and then combined.
 
 #### Stacking
 
@@ -399,7 +531,7 @@ own, in empty slots, so the crate looks as it would have without the upgrade. An
 contents still need cannot be taken out: the slot refuses the pickup, on both sides, and its
 tooltip says why. Whatever a pack change leaves with nowhere to go stays parked, over capacity,
 where it reports no room and drains normally. Nothing in a crate ever lowers a count except a
-withdrawal.
+withdrawal — and the three refining upgrades, each of which the player installed to do exactly that.
 
 Hoppers and pipes top up a slot already holding an item before they open a new one, so a line
 into a stacked crate fills it deep rather than wide. A sorter that honours
@@ -598,20 +730,22 @@ box**. Crates join it by touching a connection block, or a device.
 
 | Block | Made of | Does |
 |---|---|---|
-| Connection block | planks and iron nuggets around redstone, eight at a time | carries the network; nothing else |
+| Connection block | planks and copper nuggets around redstone, eight at a time | carries the network, and shows items passing through it |
 | Deposit box | a hopper over a basic crate | a hopper for the network: pulls from whatever sits on top of it into one row of plain slots, and what is in them flows to its home crate, one item a tick each way |
-| Interface box | a glass pane over a basic crate over redstone | opens a scrolling view of everything the crates hold, one cell per kind; nothing goes in through it |
+| Interface box | a glass pane over a basic crate over redstone | opens a scrolling view of everything the crates hold, one cell per kind, and hands out what is clicked; nothing goes in through it |
 
 A network has no object of its own. Whichever device needs it walks from where it stands, breadth-
 first through the connection blocks it touches, and every crate touching any of those — or the
-device itself — is a member. Only connection blocks conduct: two devices side by side are not on one
+device itself — is a member. The walk keeps, for each crate, the connection blocks between the
+device and it, which is what the indicators below are lit along. Only connection blocks conduct: two devices side by side are not on one
 network, and neither is a crate on the far side of a device. The walk is capped at 4,096 connection
 blocks and stays inside loaded chunks. Walking afresh costs a few hundred block lookups a second
 per deposit box with something to move, and cannot go stale; a graph kept up to date as blocks are
 placed and broken would be cheaper and would also be one more thing to get wrong.
 
 **Home, then overflow.** An item flows out of a deposit box first to a crate that is its *home*:
-one that already holds that item, in any slot, or whose lock claims it. Where an item has two homes
+one that already holds that item, in any slot, or whose lock claims it — or, with a compress
+upgrade, any item of its family, so a crate of iron blocks is home to the network's nuggets. Where an item has two homes
 the nearer one fills first, and a full one is skipped for the next. Failing a home, it goes to
 *overflow*: any unlocked crate on the network, nearest first. Attaching an unlocked crate is the
 deliberate act that makes it overflow — a locked crate has said what it is for, an unlocked one has
@@ -626,6 +760,16 @@ overflow crate with a void upgrade means everything with no home is destroyed. H
 tried before any home voids, across the whole network, so a full voiding crate near the box cannot
 destroy what a crate further along had room for. The order is `StorageNetwork#insertOne`'s, and
 both devices feed through it.
+
+**The indicators.** A connection block's front and back carry a redstone indicator, facing toward
+and away from the player who placed it as an observer's do, never up or down. The indicator lights while items are passing through the
+block — down the line from the deposit box to the crate that took the item, or back from the crate
+that gave to the interface box — and goes out half a second after the last one. `ConnectionFlow`
+keeps, per level, the moment each lit block last saw an item: lighting is a block state change
+and costs a block update, so it happens once when the flow starts and once when it stops; a pulse
+on a block already lit only refreshes its moment, and the block's own scheduled tick asks whether
+to run on or go dark. It is a light only: it powers nothing, so a run of connection blocks never
+ticks redstone it happens to touch.
 
 **Rate.** One item a tick, which is what a hopper minecart pulls at in 26.x — `MinecartHopper` has
 no cooldown any more, only a once-per-frame flag — and eight times a hopper block. The walk is
@@ -659,8 +803,18 @@ to fit the cell — `1.5k`, `12k`, `2M`, always rounded *down* so a cell never c
 is — and exact in the tooltip. An empty view says which kind of empty it is: no crates reached, or
 crates with nothing in them, since only the first is something the player should go and fix.
 
-The view is read-only in this iteration: the deposit box is the way in, and the crates themselves
-are the way out.
+**Taking out.** A cell takes clicks the way a slot does: a left-click puts a stack of that kind on
+the cursor, a right-click half a stack, a shift-click a stack straight into the inventory — as much
+as there is, and onto a cursor already holding the same kind as far as the stack has room. The
+click goes to the server as a request by *kind* rather than by cell, since the view the client
+clicked may be a refresh behind the one the server has since sent, and an index into the wrong
+view would hand over the wrong item; a kind cannot be wrong, only absent. The server takes it from
+the crates nearest the box, a slot's parked remainder before the stack it shows, in one
+transaction. For a shift-click the inventory's room is measured first and only that much is
+taken, rather than taking a stack and seeing what fits: vanilla's `Inventory#add` throws away what
+a creative player has no room for, and nothing taken out of a crate may be thrown away. Then the
+view goes out again at once rather than at the next refresh, so the count follows the click. Nothing goes in this way. The deposit box is the network's mouth, and a click on the view
+with something carried does nothing.
 
 ### Not yet
 
@@ -670,8 +824,8 @@ A *more slots* upgrade. Container size is structural, decided before the level's
 reachable, so it cannot just be another flag in the registry the way stack depth is. The storage layer answers how much a slot holds, not how many slots there are.
 
 The front face shows whichever item the crate holds most of, counted across every slot holding it,
-unless a slot has been chosen through the lock. Choosing what a crate displays without a lock
-installed is not here.
+unless a slot has been chosen through the lock; the count decides which item, and is no longer
+drawn. Choosing what a crate displays without a lock installed is not here.
 
 That preview is synced on its own — one stack and a count — rather than by broadcasting the
 inventory, so the payload is the same whether the crate holds one item or fifty-four stacks, and a
@@ -732,8 +886,8 @@ crate's grid is fake and a plain one's is not; it spreads what was parked into l
 when taken out, cannot be taken out while the contents need it, and goes back in; a moved stack
 stays where it is put; an aborted insert leaves no trace; the
 comparator measures each slot against its own capacity; the three levels give the right numbers to
-a block, a pearl and a sword, and the deepest decides; upgrades are refused as goods through both
-doors. Migration gets a pair of its own: a tag written in the old shape by hand
+a block, a pearl and a sword, and the deepest decides; upgrades are taken as goods through both
+doors, and a shift-clicked one goes to the column first and into the grid once the column refuses it. Migration gets a pair of its own: a tag written in the old shape by hand
 loads unchanged, its per-slot lock claim carried over to the whole crate, and the same tag with a
 remainder table restores the count; and an old claim on a slot since emptied survives the move. A
 reinforced drawer's block state, a sturdy drawer item with parked counts, and a drawer's block entity,
@@ -760,21 +914,49 @@ raised before asserting that the hopper ignored it, and it was confirmed to meas
 arithmetic rather than a blanket refusal by starting the slot below the item's own maximum and
 watching the hopper fill it to exactly 64 and stop.
 
+**The refining upgrades**, in `RefiningUpgradeGameTests`, each against a control that must not
+change: nine ingots become a block and the rest stay loose; nuggets climb through ingots to a
+block; bones, quartz and amethyst are left alone in the same crate, at the same moment, as bone
+meal and wheat are compressed; a renamed ingot is not compressed; new blocks join the blocks
+already there; a crate full to the last slot with ingots still compresses; a crate locked to
+blocks refuses a nugget until the compress upgrade goes in, then takes nuggets by hand and by
+hopper while still refusing dirt, and is the network's home for them; a full voiding crate of
+blocks refuses nuggets until it compresses, then voids them. Destructively: bones, quartz and
+shards become their blocks once the setting is on and not before, three bones to a bone block with
+the odd bone left; logs and planks never become anything; the setting survives a save and a break,
+goes when the upgrade comes out, and is what the menu's button toggles; a crate locked to bone
+blocks takes bones only once the setting is on. An enchanted sword is stripped and
+the bank grows by between half and all of the grindstone's figure; a stripped book joins the
+books; curses stay on and an item with only a curse is worth nothing; collecting through the
+menu's button hands the player every point, empties the bank and frees the upgrade, which could
+not be taken out before; the bank survives a save and a break; a hopper's sword is stripped on
+arrival. Two half bows make one full one; enchanted bows are left alone; four pickaxes are paired
+to waste the least; a repaired bow joins the full bows parked under a stack upgrade; a named bow
+is not combined with a plain one; the disenchant upgrade feeds the repair. And the column: two,
+four and six slots, a reinforced crate taking one of every upgrade, and a second of the same refused.
+
 **The network**, in `StorageNetworkGameTests`, each flow with its control alongside: a deposit box
 fills the crate holding its item and not a connected crate holding something else, nor an
 unconnected crate holding the same thing; an item with nowhere to go stays, and a lock's claim on
 an empty crate counts as a home; an unlocked crate takes what has no home, a full home spills into
 it unless the home voids, and a full voiding overflow crate destroys everything homeless; the rate is one a tick, measured over thirty; the nearer home fills
-first and a full one is skipped; only connection blocks conduct, not a device or stone; a hopper
+first and a full one is skipped; only connection blocks conduct, not a device or stone; an item flowing from the box lights the
+connection blocks on its line and not a branch off it, and the line goes dark once the flow
+stops, as it does after a single pull through the interface; a hopper
 fills a deposit box and a hopper under it takes nothing; and the interface sums every crate it
 reaches, parked remainders included, and reports no crates rather than an empty network when it
-stands alone. `CountFormatTest` pins the abbreviation, rounding down included.
+stands alone. Taking out through it: a click takes a stack onto the cursor and a right-click half,
+a cursor already holding the kind is topped up and one holding something else is left alone, a
+kind the network lacks yields nothing; a shift-click fills the inventory from a stacked crate's
+parked remainder first, and with no room in the inventory nothing comes out and the crate is not
+left short. `CountFormatTest` pins the abbreviation, rounding down included.
 
 **Client gametests.** Three of them. One builds a row of crates — one of each tier, plus a locked
 crate with stock and a locked crate that has been emptied — and screenshots it into
 `build/clientGametest/screenshots/`: the row, a close-up of the tier sprites, a close-up of the two
-lock states, the open screen, the upgrade hint, and a stacked slot drawing its real total with the
-tooltip saying out of how much. Icon placement, orientation, which sprite
+lock states, the open screen, the upgrade hint, the disenchant upgrade drawing the levels it holds
+in green with its tooltip, and a stacked slot drawing its real total with the tooltip saying out of
+how much. Icon placement, orientation, which sprite
 ended up on which face and "renders at all" are failure modes no assertion catches. The other quits to the title screen and
 reopens the same save, which is the only way to exercise a real disconnect: server gametests never
 round-trip a block entity through a save file, so anything that only breaks across a save and load

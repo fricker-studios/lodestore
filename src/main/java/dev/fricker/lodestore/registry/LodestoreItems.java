@@ -51,6 +51,27 @@ public final class LodestoreItems {
 	public static final CrateUpgradeItem STACK_UPGRADE_3 = new CrateUpgradeItem(
 			new Item.Properties().setId(STACK_UPGRADE_3_KEY), LodestoreCrateUpgrades.STACK_3);
 
+	public static final ResourceKey<Item> COMPRESS_UPGRADE_KEY = itemKey("compress_upgrade");
+	/**
+	 * Crafts what the crate holds into its densest form — nuggets into ingots, ingots into
+	 * blocks — along pathways that craft back the other way, and no others.
+	 */
+	public static final CrateUpgradeItem COMPRESS_UPGRADE = new CrateUpgradeItem(
+			new Item.Properties().setId(COMPRESS_UPGRADE_KEY), LodestoreCrateUpgrades.COMPRESS);
+
+	public static final ResourceKey<Item> DISENCHANT_UPGRADE_KEY = itemKey("disenchant_upgrade");
+	/**
+	 * Strips the enchantments off whatever is put in the crate and banks the experience they were
+	 * worth, which a right-click on the installed upgrade hands over.
+	 */
+	public static final CrateUpgradeItem DISENCHANT_UPGRADE = new CrateUpgradeItem(
+			new Item.Properties().setId(DISENCHANT_UPGRADE_KEY), LodestoreCrateUpgrades.DISENCHANT);
+
+	public static final ResourceKey<Item> REPAIR_UPGRADE_KEY = itemKey("repair_upgrade");
+	/** Combines worn, unenchanted tools and armour of a kind into fewer, fuller ones. */
+	public static final CrateUpgradeItem REPAIR_UPGRADE = new CrateUpgradeItem(
+			new Item.Properties().setId(REPAIR_UPGRADE_KEY), LodestoreCrateUpgrades.REPAIR);
+
 	private LodestoreItems() {
 	}
 
@@ -61,6 +82,9 @@ public final class LodestoreItems {
 		Registry.register(BuiltInRegistries.ITEM, STACK_UPGRADE_KEY, STACK_UPGRADE);
 		Registry.register(BuiltInRegistries.ITEM, STACK_UPGRADE_2_KEY, STACK_UPGRADE_2);
 		Registry.register(BuiltInRegistries.ITEM, STACK_UPGRADE_3_KEY, STACK_UPGRADE_3);
+		Registry.register(BuiltInRegistries.ITEM, COMPRESS_UPGRADE_KEY, COMPRESS_UPGRADE);
+		Registry.register(BuiltInRegistries.ITEM, DISENCHANT_UPGRADE_KEY, DISENCHANT_UPGRADE);
+		Registry.register(BuiltInRegistries.ITEM, REPAIR_UPGRADE_KEY, REPAIR_UPGRADE);
 	}
 
 	private static ResourceKey<Item> itemKey(String name) {

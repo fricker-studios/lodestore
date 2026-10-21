@@ -14,12 +14,14 @@
 			"dev.fricker.lodestore.testmod.CrateGameTests",
 			"dev.fricker.lodestore.testmod.StackCeilingGameTests",
 			"dev.fricker.lodestore.testmod.StorageLayerGameTests",
+			"dev.fricker.lodestore.testmod.RefiningUpgradeGameTests",
 			"dev.fricker.lodestore.testmod.StorageNetworkGameTests"
 		],
 		"fabric-client-gametest": [
 			"dev.fricker.lodestore.testmod.client.CrateRenderClientTest",
 			"dev.fricker.lodestore.testmod.client.CratePersistenceClientTest",
-			"dev.fricker.lodestore.testmod.client.StorageNetworkClientTest"
+			"dev.fricker.lodestore.testmod.client.StorageNetworkClientTest",
+			"dev.fricker.lodestore.testmod.client.MarketingScreenshotsClientTest"
 		]
 	},
 	"depends": {

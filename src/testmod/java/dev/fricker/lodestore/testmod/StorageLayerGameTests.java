@@ -735,35 +735,41 @@ public class StorageLayerGameTests {
 	}
 
 	/**
-	 * Upgrades are hardware, not goods: the storage refuses them through both doors.
+	 * A crate keeps spare upgrades like any other goods, through both doors. The storage used to
+	 * refuse them as a second guard against a sorter lifting an installed upgrade into the grid;
+	 * the column's fake flag is the guard that works, and the refusal cost players the one obvious
+	 * place to store them.
 	 *
-	 * <p>This is also what keeps an inventory sorter from shuffling an installed upgrade into the
-	 * grid — nothing in the container region will take it. A shift-clicked upgrade goes to the
-	 * upgrade column, as it always did.
+	 * <p>A shift-clicked upgrade still goes to the column first; a second of the same, which the
+	 * column refuses, goes into the grid.
 	 */
 	@GameTest
-	public void upgradesAreNotGoodsThroughEitherDoor(GameTestHelper helper) {
+	public void upgradesAreGoodsThroughEitherDoor(GameTestHelper helper) {
 		CrateBlockEntity crate = place(helper, CRATE, LodestoreBlocks.BASIC_CRATE);
 
-		if (insert(crate, LodestoreItems.LOCK_UPGRADE, 1) != 0) {
-			throw helper.assertionException("the storage accepted an upgrade as goods");
+		if (insert(crate, LodestoreItems.REPAIR_UPGRADE, 1) != 1 || !crate.contents().visible(0).is(LodestoreItems.REPAIR_UPGRADE)) {
+			throw helper.assertionException("the storage refused an upgrade as goods");
 		}
 
 		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
 		AbstractContainerMenu menu = open(helper, crate, player);
 
-		if (menu.getSlot(0).mayPlace(new ItemStack(LodestoreItems.LOCK_UPGRADE))) {
-			throw helper.assertionException("the menu's slot accepted an upgrade as goods");
+		if (!menu.getSlot(1).mayPlace(new ItemStack(LodestoreItems.VOID_UPGRADE))) {
+			throw helper.assertionException("the menu's slot refused an upgrade as goods");
 		}
 
-		if (!menu.getSlot(0).mayPlace(new ItemStack(Items.DIRT)) || insert(crate, Items.DIRT, 1) != 1) {
-			throw helper.assertionException("the crate refuses plain items; the test is measuring the wrong thing");
+		// Not a lock: a lock going in would claim the repair upgrade in the grid as the crate's
+		// kind and refuse everything else, which is the lock working rather than the thing under test.
+		if (shiftClickIn(helper, crate, new ItemStack(LodestoreItems.VOID_UPGRADE)) != 1
+				|| crate.upgrades().size() != 1 || total(crate, LodestoreItems.VOID_UPGRADE) != 0) {
+			throw helper.assertionException("a shift-clicked upgrade did not land in the upgrade column first: "
+					+ crate.upgrades().size() + " installed, " + total(crate, LodestoreItems.VOID_UPGRADE) + " in the grid");
 		}
 
-		if (shiftClickIn(helper, crate, new ItemStack(LodestoreItems.LOCK_UPGRADE)) != 1
-				|| crate.upgrades().size() != 1 || !crate.contents().visible(0).is(Items.DIRT)) {
-			throw helper.assertionException("a shift-clicked upgrade did not land in the upgrade column: "
-					+ crate.upgrades().size() + " installed, slot 0 holds " + describe(crate.contents().visible(0)));
+		if (shiftClickIn(helper, crate, new ItemStack(LodestoreItems.VOID_UPGRADE)) != 1
+				|| crate.upgrades().size() != 1 || total(crate, LodestoreItems.VOID_UPGRADE) != 1) {
+			throw helper.assertionException("a second shift-clicked void upgrade should have gone into the grid: "
+					+ crate.upgrades().size() + " installed, " + total(crate, LodestoreItems.VOID_UPGRADE) + " in the grid");
 		}
 
 		// The column is marked fake, which is the flag Inventory Profiles Next leaves out of every
@@ -1394,6 +1400,19 @@ public class StorageLayerGameTests {
 		DispenserBlockEntity dropper = helper.getBlockEntity(pos, DispenserBlockEntity.class);
 		dropper.setItem(0, load);
 		return dropper;
+	}
+
+	/** Counts an item across every slot, parked remainders included. */
+	private static long total(CrateBlockEntity crate, net.minecraft.world.item.Item item) {
+		long found = 0;
+
+		for (int slot = 0; slot < crate.storageSize(); slot++) {
+			if (crate.contents().visible(slot).is(item)) {
+				found += crate.contents().total(slot);
+			}
+		}
+
+		return found;
 	}
 
 	private static String describe(ItemStack stack) {

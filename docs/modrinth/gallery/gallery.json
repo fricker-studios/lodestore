@@ -1,0 +1,51 @@
+[
+  {
+    "file": "storage-room.png",
+    "title": "A storage room",
+    "description": "Two rows of crates showing what they hold on their faces, the eight upgrades framed above them, and the network's deposit box and interface box at the end of the row.",
+    "featured": true,
+    "ordering": 0
+  },
+  {
+    "file": "crates-close.png",
+    "title": "The three tiers",
+    "description": "Basic, sturdy and reinforced crates, each with its item on the label; told apart by the hardware bolted on.",
+    "featured": false,
+    "ordering": 1
+  },
+  {
+    "file": "crate-screen.png",
+    "title": "A crate with every upgrade",
+    "description": "A reinforced crate holding 1,024 cobblestone per slot under a stack upgrade, with its ingots compressed into blocks, its worn pickaxes repaired into one, and an enchanted sword's levels banked.",
+    "featured": false,
+    "ordering": 2
+  },
+  {
+    "file": "crate-screen-tooltip.png",
+    "title": "The disenchant upgrade",
+    "description": "Enchantments come off whatever goes in; the upgrade holds their worth in levels until you right-click to collect.",
+    "featured": false,
+    "ordering": 3
+  },
+  {
+    "file": "upgrades.png",
+    "title": "The upgrades",
+    "description": "Lock, void, three levels of stack, compress, disenchant and repair, each on the same iron plate.",
+    "featured": false,
+    "ordering": 4
+  },
+  {
+    "file": "network.png",
+    "title": "The network",
+    "description": "Connection blocks carry the network; the deposit box is a hopper for it, sorting what you drop in to the crate that already holds it, and the interface box shows everything at once.",
+    "featured": false,
+    "ordering": 5
+  },
+  {
+    "file": "interface-screen.png",
+    "title": "The interface box",
+    "description": "Every kind of item across every crate on the network, with its total, in one screen.",
+    "featured": false,
+    "ordering": 6
+  }
+]

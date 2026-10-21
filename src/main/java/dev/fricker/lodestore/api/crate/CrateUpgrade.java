@@ -17,6 +17,12 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  * <p>Every behaviour applies to the whole crate, so there is no reach to state. An entry written
  * when the lock was aimed at slots may still carry {@code slot_capacity}; the codec ignores it.
  *
+ * <p>Three of the flags make the crate <em>work on</em> what it holds rather than only decide what
+ * it accepts or how much. Together they are the one exception to "nothing in a crate ever lowers a
+ * count except a withdrawal": nine ingots become one block, two worn bows become one, and an
+ * enchanted sword becomes a plain one plus experience in the bank. Each is the player asking for
+ * exactly that by installing the upgrade.
+ *
  * @param locksContents      whether the crate accepts only what it held when the lock went on —
  *                           every kind of item in it, or the first one put in if it was empty
  * @param voidsOverflow      whether the crate accepts and destroys an item it already holds once
@@ -32,9 +38,20 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  *                           a slot holds. Kept apart from {@code stacks_per_slot} because four
  *                           times one is a poor upgrade; the shipped levels give eight, sixteen
  *                           and thirty-two.
+ * @param compresses         whether the crate crafts what it holds up to its densest form —
+ *                           nuggets into ingots, ingots into blocks — along pathways that can be
+ *                           crafted back the other way. A pathway that only goes one way, bones
+ *                           into bone meal or quartz into a block, is never followed: that is a
+ *                           choice to destroy something, and an upgrade must not make it alone.
+ * @param disenchants        whether the crate strips the enchantments off what is put in it and
+ *                           banks the experience they were worth, for the player to collect from
+ *                           the installed upgrade. Curses stay on, as they do at a grindstone.
+ * @param repairs            whether the crate combines worn tools and armour of the same kind
+ *                           into fewer, fuller ones, as a crafting grid does. Enchanted items are
+ *                           left alone, since combining them would strip the enchantments.
  */
 public record CrateUpgrade(boolean locksContents, boolean voidsOverflow, int stacksPerSlot,
-		int unstackablePerSlot) {
+		int unstackablePerSlot, boolean compresses, boolean disenchants, boolean repairs) {
 	/**
 	 * The ceiling on {@code stacks_per_slot}. A thousand stacks of 64 is 65,536 of one item in one
 	 * slot, comfortably inside an {@code int}, which is what the menu's slot arithmetic runs in.
@@ -51,7 +68,11 @@ public record CrateUpgrade(boolean locksContents, boolean voidsOverflow, int sta
 			Codec.intRange(1, MAX_STACKS_PER_SLOT).optionalFieldOf("stacks_per_slot", 1)
 					.forGetter(CrateUpgrade::stacksPerSlot),
 			Codec.intRange(1, MAX_STACKS_PER_SLOT).optionalFieldOf("unstackable_per_slot", 1)
-					.forGetter(CrateUpgrade::unstackablePerSlot)
+					.forGetter(CrateUpgrade::unstackablePerSlot),
+			// Each of these changes what the crate holds, so each defaults to leaving it alone.
+			Codec.BOOL.optionalFieldOf("compresses", false).forGetter(CrateUpgrade::compresses),
+			Codec.BOOL.optionalFieldOf("disenchants", false).forGetter(CrateUpgrade::disenchants),
+			Codec.BOOL.optionalFieldOf("repairs", false).forGetter(CrateUpgrade::repairs)
 	).apply(instance, CrateUpgrade::new));
 
 	/**
@@ -59,7 +80,7 @@ public record CrateUpgrade(boolean locksContents, boolean voidsOverflow, int sta
 	 * that silently locked a crate would strand its contents behind a filter nobody set — and one
 	 * that silently voided would destroy them outright.
 	 */
-	public static final CrateUpgrade FALLBACK = new CrateUpgrade(false, false, 1, 1);
+	public static final CrateUpgrade FALLBACK = new CrateUpgrade(false, false, 1, 1, false, false, false);
 
 	/** Whether this upgrade lets a slot hold more than it otherwise would. */
 	public boolean stacks() {

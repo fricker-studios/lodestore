@@ -551,6 +551,36 @@ public class CrateGameTests {
 				diamond, new ItemStack(LodestoreItems.STACK_UPGRADE_2), diamond,
 				ItemStack.EMPTY, diamond, ItemStack.EMPTY)), "stack_upgrade_3", LodestoreItems.STACK_UPGRADE_3);
 
+		// The three that work on the contents, each in the material that names what it does:
+		// pistons press, lapis is what enchanting costs, and a grindstone is what repairs.
+		ItemStack piston = new ItemStack(Items.PISTON);
+		ItemStack lapis = new ItemStack(Items.LAPIS_LAZULI);
+		ItemStack grindstone = new ItemStack(Items.GRINDSTONE);
+		assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				ItemStack.EMPTY, piston, ItemStack.EMPTY,
+				piston, iron, piston,
+				ItemStack.EMPTY, iron, ItemStack.EMPTY)), "compress_upgrade", LodestoreItems.COMPRESS_UPGRADE);
+		assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				ItemStack.EMPTY, lapis, ItemStack.EMPTY,
+				lapis, iron, lapis,
+				ItemStack.EMPTY, iron, ItemStack.EMPTY)), "disenchant_upgrade", LodestoreItems.DISENCHANT_UPGRADE);
+		assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				ItemStack.EMPTY, grindstone, ItemStack.EMPTY,
+				grindstone, iron, grindstone,
+				ItemStack.EMPTY, iron, ItemStack.EMPTY)), "repair_upgrade", LodestoreItems.REPAIR_UPGRADE);
+
+		// The connection block: planks and copper nuggets around redstone, eight at a time.
+		ItemStack copperNugget = new ItemStack(Items.COPPER_NUGGET);
+		ItemStack redstone = new ItemStack(Items.REDSTONE);
+		ItemStack connection = assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				planks, copperNugget, planks,
+				copperNugget, redstone, copperNugget,
+				planks, copperNugget, planks)), "connection_block", LodestoreBlocks.CONNECTION_BLOCK.asItem());
+
+		if (connection.getCount() != 8) {
+			throw helper.assertionException("the connection block recipe should make eight, made " + connection.getCount());
+		}
+
 		helper.succeed();
 	}
 
@@ -645,7 +675,10 @@ public class CrateGameTests {
 				Map.entry("void_upgrade", "misc"),
 				Map.entry("stack_upgrade", "misc"),
 				Map.entry("stack_upgrade_2", "misc"),
-				Map.entry("stack_upgrade_3", "misc"));
+				Map.entry("stack_upgrade_3", "misc"),
+				Map.entry("compress_upgrade", "misc"),
+				Map.entry("disenchant_upgrade", "misc"),
+				Map.entry("repair_upgrade", "misc"));
 
 		for (Map.Entry<String, String> entry : recipes.entrySet()) {
 			String recipe = entry.getKey();
@@ -1628,17 +1661,19 @@ public class CrateGameTests {
 	public void aCrateRefusesUpgradesPastItsTierCount(GameTestHelper helper) {
 		CrateBlockEntity crate = place(helper, new BlockPos(1, 1, 1), LodestoreBlocks.BASIC_CRATE);
 
-		if (crate.upgradeSlots() != 1) {
-			throw helper.assertionException("this test assumes a basic crate has one upgrade slot, it has "
+		if (crate.upgradeSlots() != 2) {
+			throw helper.assertionException("this test assumes a basic crate has two upgrade slots, it has "
 					+ crate.upgradeSlots());
 		}
 
 		expect(helper, crate.installUpgrade(new ItemStack(LodestoreItems.LOCK_UPGRADE)), true,
-				"the first upgrade should fill the basic crate's only slot");
-		expect(helper, crate.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE)), false,
-				"a second upgrade should be refused once the tier's slots are full");
+				"the first upgrade should fill the basic crate's first slot");
+		expect(helper, crate.installUpgrade(new ItemStack(LodestoreItems.VOID_UPGRADE)), true,
+				"the second upgrade should fill the basic crate's second slot");
+		expect(helper, crate.installUpgrade(new ItemStack(LodestoreItems.STACK_UPGRADE)), false,
+				"a third upgrade should be refused once the tier's slots are full");
 
-		if (crate.upgrades().size() != 1) {
+		if (crate.upgrades().size() != 2) {
 			throw helper.assertionException("basic crate ended up with " + crate.upgrades().size() + " upgrades");
 		}
 

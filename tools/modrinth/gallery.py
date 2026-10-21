@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Uploads the gallery images in docs/modrinth/gallery/ to the Modrinth project.
+
+    MODRINTH_TOKEN=... gallery.py [--dir docs/modrinth/gallery] [--project lodestore] [--dry-run]
+
+The directory's `gallery.json` lists the images in the order they should appear, each with the
+title and description Modrinth shows under it. Idempotent by title: an image whose title the
+project's gallery already has is skipped, so the whole set can be re-sent after adding one.
+With --replace, an entry whose title the manifest names is taken down first and the manifest's
+picture sent in its place — a gallery entry's image cannot be changed through the API, only its
+text, so a re-shot picture under the same title has to go up as a new entry.
+
+The images themselves come from the client screenshot test, MarketingScreenshotsClientTest,
+copied in from build/clientGametest/screenshots/ once they have been looked at.
+"""
+import argparse
+import json
+import os
+import pathlib
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+API = "https://api.modrinth.com/v2"
+USER_AGENT = "fricker-studios/lodestore (github.com/fricker-studios/lodestore)"
+
+
+def request(method, path, token, body=None, content_type=None):
+    headers = {"User-Agent": USER_AGENT, "Authorization": token}
+
+    if content_type:
+        headers["Content-Type"] = content_type
+
+    req = urllib.request.Request(API + path, data=body, method=method, headers=headers)
+
+    try:
+        with urllib.request.urlopen(req, timeout=120) as response:
+            raw = response.read()
+            return json.loads(raw) if raw else None
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", "replace")
+
+        if error.code == 404 and path.startswith("/project/"):
+            # Modrinth hides a draft project from anyone who may not read it, with a 404 rather
+            # than a 403, so this is as likely a token without the read scopes as a wrong slug.
+            sys.exit(f"{method} {path} -> 404. Either the project slug or id is wrong, or the token cannot "
+                     "see the draft project: it needs the 'Read projects' and 'Read versions' scopes as "
+                     "well as 'Create versions' (and 'Write projects' for the gallery). The project id "
+                     "from the Modrinth project settings page can be passed with --project, or set as "
+                     "the MODRINTH_PROJECT repository variable.")
+
+        sys.exit(f"{method} {path} -> {error.code}: {detail}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--dir", default="docs/modrinth/gallery", type=pathlib.Path)
+    parser.add_argument("--project", default=os.environ.get("MODRINTH_PROJECT") or "lodestore",
+                        help="the Modrinth project slug or id; defaults to $MODRINTH_PROJECT, then 'lodestore'")
+    parser.add_argument("--replace", action="store_true",
+                        help="remove a gallery entry whose title the manifest names before sending the manifest's picture")
+    parser.add_argument("--dry-run", action="store_true", help="print what would be sent and stop")
+    args = parser.parse_args()
+
+    manifest = json.loads((args.dir / "gallery.json").read_text(encoding="utf-8"))
+    token = os.environ.get("MODRINTH_TOKEN", "")
+
+    for entry in manifest:
+        image = args.dir / entry["file"]
+
+        if not image.is_file():
+            sys.exit(f"gallery.json names {entry['file']}, which is not in {args.dir}")
+
+    if args.dry_run:
+        print(json.dumps(manifest, indent=2))
+        return
+
+    if not token:
+        sys.exit("MODRINTH_TOKEN is not set")
+
+    project = request("GET", f"/project/{args.project}", token)
+    present = {item.get("title"): item.get("url") for item in project.get("gallery", [])}
+
+    for ordering, entry in enumerate(manifest):
+        if entry["title"] in present:
+            if not args.replace:
+                print(f"gallery already has '{entry['title']}'; skipped")
+                continue
+
+            # A gallery entry's picture cannot be changed in place, only its text, so a new
+            # picture under an old title means taking the old entry down first.
+            request("DELETE", f"/project/{project['id']}/gallery?{urllib.parse.urlencode({'url': present[entry['title']]})}", token)
+            print(f"removed the old '{entry['title']}'")
+
+        image = args.dir / entry["file"]
+        query = urllib.parse.urlencode({
+            "ext": image.suffix.lstrip("."),
+            "featured": "true" if entry.get("featured") else "false",
+            "title": entry["title"],
+            "description": entry.get("description", ""),
+            "ordering": entry.get("ordering", ordering),
+        })
+        request("POST", f"/project/{project['id']}/gallery?{query}", token, image.read_bytes(),
+                f"image/{'jpeg' if image.suffix.lower() in ('.jpg', '.jpeg') else image.suffix.lstrip('.')}")
+        print(f"uploaded '{entry['title']}' from {entry['file']}")
+
+
+if __name__ == "__main__":
+    main()

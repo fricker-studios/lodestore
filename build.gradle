@@ -147,6 +147,14 @@ jar {
 	from("LICENSE") {
 		rename { "${it}_$projectName" }
 	}
+
+	// A test build names its jar for the pull request and run that built it, as CI names the
+	// artifact around it, rather than for the nearest tag: two runs then never produce one
+	// name, and the file says where it came from. Only the file name — the version inside the
+	// jar is still the tag's, so Fabric sees a real version and a release build is untouched.
+	if (project.hasProperty('build_label')) {
+		archiveFileName = "${project.archives_base_name}-${project.build_label}.jar"
+	}
 }
 
 publishing {

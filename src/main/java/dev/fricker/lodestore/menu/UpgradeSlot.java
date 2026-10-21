@@ -24,9 +24,25 @@ public class UpgradeSlot extends Slot {
 		this.removable = removable;
 	}
 
+	/**
+	 * An upgrade, and not one already in the column. A second of the same would add nothing — an
+	 * upgrade is installed or it is not — and would only take a slot from one that does. Checked
+	 * against the column's own container, which both sides have, so the client predicts the
+	 * refusal rather than flickering.
+	 */
 	@Override
 	public boolean mayPlace(ItemStack stack) {
-		return stack.getItem() instanceof CrateUpgradeItem;
+		if (!(stack.getItem() instanceof CrateUpgradeItem)) {
+			return false;
+		}
+
+		for (int other = 0; other < container.getContainerSize(); other++) {
+			if (other != getContainerSlot() && container.getItem(other).is(stack.getItem())) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	@Override

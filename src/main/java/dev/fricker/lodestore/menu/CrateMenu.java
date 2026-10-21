@@ -38,15 +38,25 @@ public class CrateMenu extends AbstractContainerMenu {
 	/** Upgrade slots wrap at three, so the panel is never wider than it needs to be. */
 	public static final int UPGRADES_PER_ROW = 3;
 
-	/** What the client needs that slots cannot carry: whether a lock is installed, and which upgrades may be taken out. */
+	/**
+	 * What the client needs that slots cannot carry: whether a lock is installed, which upgrades
+	 * may be taken out, how much experience the disenchant upgrade holds, and whether the compress
+	 * upgrade follows one-way pathways.
+	 */
 	public static final int DATA_LOCKED = 0;
 	public static final int DATA_REMOVABLE = 1;
-	public static final int DATA_COUNT = 2;
+	public static final int DATA_EXPERIENCE = 2;
+	public static final int DATA_DESTRUCTIVE = 3;
+	public static final int DATA_COUNT = 4;
 
 	/** Button ids below this name a storage slot for the face to show; storage never exceeds 54. */
 	private static final int DISPLAY_BUTTONS = 256;
 	/** One id past the display range: sort the crate, as a right-click on the stack upgrade asks. */
 	public static final int SORT_BUTTON = DISPLAY_BUTTONS;
+	/** The next: hand over the banked experience, as a right-click on the disenchant upgrade asks. */
+	public static final int COLLECT_BUTTON = DISPLAY_BUTTONS + 1;
+	/** And the next: allow or forbid destructive compression, as one on the compress upgrade asks. */
+	public static final int DESTRUCTIVE_BUTTON = DISPLAY_BUTTONS + 2;
 
 	private final Container storage;
 	private final @Nullable CrateBlockEntity crate;
@@ -136,6 +146,16 @@ public class CrateMenu extends AbstractContainerMenu {
 		return (menuData.get(DATA_REMOVABLE) & (1 << upgradeSlot)) != 0;
 	}
 
+	/** Experience points the disenchant upgrade holds, from the synced menu data. */
+	public int storedExperience() {
+		return menuData.get(DATA_EXPERIENCE);
+	}
+
+	/** Whether the compress upgrade follows one-way pathways, from the synced menu data. */
+	public boolean destructiveCompression() {
+		return menuData.get(DATA_DESTRUCTIVE) != 0;
+	}
+
 	public int storageEnd() {
 		return rows * 9;
 	}
@@ -150,8 +170,9 @@ public class CrateMenu extends AbstractContainerMenu {
 	}
 
 	/**
-	 * Sorts the crate, as a right-click on the stack upgrade asks, or chooses the storage slot
-	 * whose item the front face shows, as a click after right-clicking the lock asks.
+	 * Sorts the crate, as a right-click on the stack upgrade asks; hands over the banked experience,
+	 * as one on the disenchant upgrade asks; or chooses the storage slot whose item the front face
+	 * shows, as a click after right-clicking the lock asks.
 	 *
 	 * <p>Rides vanilla's container-button packet rather than a payload of our own: that path is
 	 * already validated against the container the player actually has open, which is exactly the
@@ -165,6 +186,14 @@ public class CrateMenu extends AbstractContainerMenu {
 
 		if (id == SORT_BUTTON) {
 			return crate.sortContents();
+		}
+
+		if (id == COLLECT_BUTTON) {
+			return crate.collectExperience(player);
+		}
+
+		if (id == DESTRUCTIVE_BUTTON) {
+			return crate.toggleDestructiveCompression();
 		}
 
 		if (id >= storageEnd()) {
@@ -181,8 +210,9 @@ public class CrateMenu extends AbstractContainerMenu {
 
 	/**
 	 * Shift-clicking. An upgrade moved in from the player's inventory goes to the upgrade column
-	 * rather than into storage, which is the only sensible reading of the gesture — a crate full
-	 * of loose upgrade items is never what was meant.
+	 * first, which is the likelier reading of the gesture; only when the column will not take it —
+	 * full, or already holding one of the same — does it go into storage like any other item, so a
+	 * crate can keep spare upgrades.
 	 *
 	 * <p>Out of a storage slot, this moves one legal stack; vanilla then calls it again for as long
 	 * as the slot still holds the same item, so a slot with stacks parked behind the visible one
@@ -204,10 +234,9 @@ public class CrateMenu extends AbstractContainerMenu {
 			if (!moveItemStackTo(stack, upgradeEnd(), playerEnd, true)) {
 				return ItemStack.EMPTY;
 			}
-		} else if (stack.getItem() instanceof CrateUpgradeItem) {
-			if (!moveItemStackTo(stack, storageEnd(), upgradeEnd(), false)) {
-				return ItemStack.EMPTY;
-			}
+		} else if (stack.getItem() instanceof CrateUpgradeItem
+				&& moveItemStackTo(stack, storageEnd(), upgradeEnd(), false)) {
+			// Installed; nothing left to move.
 		} else if (!moveItemStackTo(stack, 0, storageEnd(), false)) {
 			return ItemStack.EMPTY;
 		}

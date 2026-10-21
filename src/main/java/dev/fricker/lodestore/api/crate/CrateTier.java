@@ -29,7 +29,7 @@ public record CrateTier(boolean keepsContents, int nestingRank, int upgradeSlots
 	 * The ceiling on {@code upgrade_slots}, and therefore on how wide the upgrade row in the
 	 * crate screen can ever be. A datapack cannot raise it: the screen is laid out in code.
 	 */
-	public static final int MAX_UPGRADE_SLOTS = 5;
+	public static final int MAX_UPGRADE_SLOTS = 6;
 
 	public static final Codec<CrateTier> CODEC = RecordCodecBuilder.create(instance -> instance.group(
 			Codec.BOOL.fieldOf("keeps_contents").forGetter(CrateTier::keepsContents),

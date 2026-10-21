@@ -1,7 +1,28 @@
 {
   "variants": {
-    "": {
+    "axis=y,lit=false": {
       "model": "lodestore:block/connection_block"
+    },
+    "axis=y,lit=true": {
+      "model": "lodestore:block/connection_block_lit"
+    },
+    "axis=x,lit=false": {
+      "model": "lodestore:block/connection_block",
+      "x": 90,
+      "y": 90
+    },
+    "axis=x,lit=true": {
+      "model": "lodestore:block/connection_block_lit",
+      "x": 90,
+      "y": 90
+    },
+    "axis=z,lit=false": {
+      "model": "lodestore:block/connection_block",
+      "x": 90
+    },
+    "axis=z,lit=true": {
+      "model": "lodestore:block/connection_block_lit",
+      "x": 90
     }
   }
 }

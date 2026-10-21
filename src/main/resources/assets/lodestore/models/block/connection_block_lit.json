@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "end": "lodestore:block/connection_block_end_lit",
+    "side": "lodestore:block/connection_block_side"
+  }
+}
