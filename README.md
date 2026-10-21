@@ -172,14 +172,24 @@ Donkeys, llamas, decorated pots and other mods' storage are not covered.
 
 ### Sprites
 
-Every tier has its own front, side and top texture. They are one family of oak separated by the
-hardware bolted to it, which is what the recipes describe: basic is plain, sturdy is a shade darker
-with black L-brackets over each corner, and reinforced is iron-banded with rivets. Tone alone would
-not survive being seen across a dark room, and hardware alone would not read at a glance.
+Every tier has its own front, side and top texture, told apart by the hardware bolted on, which is
+what the recipes describe. Basic is light oak: edge boards nailed round horizontal planks, the lid's
+boards running across. Sturdy is spruce, a shade darker, with a gunmetal L-bracket riveted over
+every corner — darker than the wood, so it reads as old steel rather than a lighter grade of the
+reinforced tier's iron — and a pale cross-brace on each side. Reinforced is near-black wood caged
+in iron straps, riveted and rust-stained where they cross. Tone alone would not survive being seen
+across a dark room, and hardware alone would not read at a glance.
 
-The middle of each front is a flat recessed panel on purpose. The renderer floats the stored item
-across roughly the middle half of the face and draws the count just below it, so anything busy there
-competes with the icon and anything light there swallows the count.
+Every front carries the same label: a ten-pixel terracotta panel, centred, framed in pale oak,
+gunmetal or iron by tier. The renderer draws the stored item centred on it, and nothing else — no
+count — so the label is flat and one warm tone on purpose: anything busy there competes with the
+icon, and terracotta is dark enough for the icon to stand off while warm enough that iron and
+diamonds still pop. The count went when the label came: a number across a panel the item sits on
+read as clutter at any distance, and the exact figure is in the screen and the interface box.
+
+A crate faces any of the six ways, as a barrel does: look down at the floor when placing one and
+its label faces up, look up at a ceiling and it faces down. The icon tips with it, its top toward
+north, rather than turning.
 
 Upgrades share a carrier: every one sits on the same bevelled iron plate, so they read as one
 family of hardware rather than a drawer of unrelated trinkets, and only the motif differs — a gold
@@ -385,8 +395,7 @@ The front face shows one item and holds it still, rather than cycling through th
 that is whatever the crate holds most of; with a slot chosen through the lock, it is that slot's
 item, counted across the whole crate. The face follows the slot rather than the item, so putting
 something else in that slot changes what it shows. Once the crate is emptied the face keeps naming
-the chosen item — or, with nothing chosen, the first one claimed — drawn smaller, and a locked
-crate's count is tinted in the lock's gold.
+the chosen item — or, with nothing chosen, the first one claimed — drawn smaller.
 
 A crate saved while the lock was aimed at slots carries the slots it covered and a claim per slot.
 The slots are dropped on load; the claims are kept, joined by whatever else the crate holds, which
@@ -785,8 +794,8 @@ A *more slots* upgrade. Container size is structural, decided before the level's
 reachable, so it cannot just be another flag in the registry the way stack depth is. The storage layer answers how much a slot holds, not how many slots there are.
 
 The front face shows whichever item the crate holds most of, counted across every slot holding it,
-unless a slot has been chosen through the lock. Choosing what a crate displays without a lock
-installed is not here.
+unless a slot has been chosen through the lock; the count decides which item, and is no longer
+drawn. Choosing what a crate displays without a lock installed is not here.
 
 That preview is synced on its own — one stack and a count — rather than by broadcasting the
 inventory, so the payload is the same whether the crate holds one item or fifty-four stacks, and a

@@ -69,10 +69,25 @@ public class CrateRenderClientTest implements FabricClientGameTest {
 				single(level, new BlockPos(-2, Y, 0), LodestoreBlocks.STURDY_CRATE, Items.DIAMOND, 128);
 				mixed(level, new BlockPos(0, Y, 0), LodestoreBlocks.REINFORCED_CRATE);
 
-				// The two lock states. Both draw their count in the lock's gold rather than white.
+				// The two lock states: one with stock, one emptied and still naming its item.
 				lockedWithContents(level, new BlockPos(2, Y, 0), LodestoreBlocks.STURDY_CRATE,
 						Items.REDSTONE, 192);
 				lockedAndEmptied(level, new BlockPos(4, Y, 0), LodestoreBlocks.BASIC_CRATE, Items.EMERALD);
+
+				// One set into the floor facing up, and one under a slab facing down, off to the
+				// side: the label and icon have to tip with the crate rather than turn.
+				level.setBlockAndUpdate(new BlockPos(7, Y - 1, 4), LodestoreBlocks.STURDY_CRATE.defaultBlockState()
+						.setValue(CrateBlock.FACING, Direction.UP));
+				if (level.getBlockEntity(new BlockPos(7, Y - 1, 4)) instanceof CrateBlockEntity up) {
+					up.contents().setItem(0, new ItemStack(Items.GOLD_INGOT, 40));
+					up.setChanged();
+				}
+				level.setBlockAndUpdate(new BlockPos(7, Y + 2, 6), LodestoreBlocks.REINFORCED_CRATE.defaultBlockState()
+						.setValue(CrateBlock.FACING, Direction.DOWN));
+				if (level.getBlockEntity(new BlockPos(7, Y + 2, 6)) instanceof CrateBlockEntity down) {
+					down.contents().setItem(0, new ItemStack(Items.DIAMOND, 12));
+					down.setChanged();
+				}
 			});
 
 			// Only now that there is a floor to stand on: a creative player teleported into
@@ -91,10 +106,15 @@ public class CrateRenderClientTest implements FabricClientGameTest {
 			context.waitTicks(60);
 			LOGGER.info("[lodestore] tier close-up -> {}", context.takeScreenshot("crate-tiers-close"));
 
-			// The pair that only the lock produces: gold count, and a filter on an empty face.
+			// The pair that only the lock produces: a filter still drawn on an empty face.
 			singleplayer.getServer().runCommand("tp @p 3.0 " + Y + " 5.0 180 13");
 			context.waitTicks(60);
 			LOGGER.info("[lodestore] lock close-up -> {}", context.takeScreenshot("crate-locks-close"));
+
+			// The vertical pair, from where both faces are in view.
+			singleplayer.getServer().runCommand("tp @p 7.5 " + (Y + 0.6) + " 2.0 0 35");
+			context.waitTicks(60);
+			LOGGER.info("[lodestore] vertical close-up -> {}", context.takeScreenshot("crate-vertical-close"));
 
 			// Back to creative: a spectator cannot be given a menu.
 			singleplayer.getServer().runCommand("gamemode creative @p");
@@ -180,7 +200,7 @@ public class CrateRenderClientTest implements FabricClientGameTest {
 		return crate;
 	}
 
-	/** A locked crate with stock in it: same icon as any other, but a gold count. */
+	/** A locked crate with stock in it: the same face as any other, since the count is no longer drawn. */
 	private static void lockedWithContents(ServerLevel level, BlockPos pos, Block block, Item item, int amount) {
 		CrateBlockEntity crate = single(level, pos, block, item, amount);
 
