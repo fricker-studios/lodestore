@@ -194,17 +194,21 @@ north, rather than turning.
 The network wears the crates' hardware in other metals. A connection block is spruce with a copper
 bracket over every corner, and on its front and back a small redstone indicator in a gunmetal
 bezel, dark until items pass through and bright while they do. The deposit box is
-a hopper for the network and is drawn as one: gunmetal, an iron rim round a bowl on top that steps
-down to the bore, and on each side the wide upper box narrowing to a neck — no wood and no brass,
-a machine among the crates. The interface box is an iron housing, plated and riveted,
+a hopper for the network and is built as one: a crate-like body half a block deep, oak in iron
+straps with its mouth on the back, and a gunmetal spout on its front — a funnel stepping down to a
+neck — pointing into the block it feeds. It is placed as a hopper is, the spout toward the block
+it was placed against, down, up or any of the four ways sideways, and it draws from the container
+at its back. The interface box is an iron housing, plated and riveted,
 with its screen let into the front behind a brass bezel: nine cells lit teal on dark glass, the grid
 its own screen draws, with a brass dial on each side and a brass plate across the top.
 
-Upgrades share a carrier: every one sits on the same bevelled iron plate, so they read as one
-family of hardware rather than a drawer of unrelated trinkets, and only the motif differs — a gold
-padlock, a dark aperture, a green pile, a copper arrow pressing on a slab, a lapis book, an anvil.
-The lock and the void are deliberately unlike at inventory size, which matters when one of them
-destroys things.
+Upgrades share a carrier: every one sits on the same iron hexagon, point up and point down with
+air in the corners, so in a slot an upgrade is a shape before it is a picture and not one more
+block among blocks. They read as one family of hardware rather than a drawer of unrelated
+trinkets, and only the motif differs — a gold padlock, a dark aperture, a green pile, a copper
+arrow pressing on a slab, a bottle o' enchanting, a pickaxe over a full durability bar. The lock
+and the void are deliberately unlike at inventory size, which matters when one of them destroys
+things.
 
 | Where | What |
 |---|---|
@@ -220,7 +224,7 @@ any duplicated key without complaint, so when copper and the void upgrade both c
 sprite was quietly repainted and nothing reported it. `pixels.py` now checks its own source for
 duplicate characters at import and fails loudly instead.
 
-The upgrade levels are told apart by the metal of their carrier plate — iron, copper, diamond —
+The upgrade levels are told apart by the metal of their carrier — iron, copper, diamond —
 rather than by a numeral, which at sixteen pixels would be four pixels tall and unreadable in a
 hotbar.
 
@@ -731,7 +735,7 @@ box**. Crates join it by touching a connection block, or a device.
 | Block | Made of | Does |
 |---|---|---|
 | Connection block | planks and copper nuggets around redstone, eight at a time | carries the network, and shows items passing through it |
-| Deposit box | a hopper over a basic crate | a hopper for the network: pulls from whatever sits on top of it into one row of plain slots, and what is in them flows to its home crate, one item a tick each way |
+| Deposit box | a hopper over a basic crate | a hopper for the network, placed like one with its spout into the block it feeds: pulls from whatever sits at its back into one row of plain slots, and what is in them flows to its home crate, one item a tick each way |
 | Interface box | a glass pane over a basic crate over redstone | opens a scrolling view of everything the crates hold, one cell per kind, and hands out what is clicked; nothing goes in through it |
 
 A network has no object of its own. Whichever device needs it walks from where it stands, breadth-
@@ -776,13 +780,15 @@ no cooldown any more, only a once-per-frame flag — and eight times a hopper bl
 redone every twenty ticks; the ticks between reuse the crates it found.
 
 **Pulling.** The deposit box is a hopper for the network. Like one, it draws from whatever
-container sits on top of it — a chest, a hopper, a hopper minecart whether or not it is on a rail —
-one item a tick, into its own slots, where the drain above takes over. The source is found the way
-a hopper finds its own: vanilla's `getContainerAt`, which sees container entities as well as
-blocks, wrapped as a storage; failing that, anything offering a `Storage<ItemVariant>` through its
-bottom face. So a hopper minecart parked on a deposit box empties into the network at its own rate,
-and what the network has no place for ends up in the box's slots, where the player can see it. A
-crate on top is not pulled from — crates are the network's storage, not its feeders, and a crate
+container sits at its back, the side away from its spout — a chest, a hopper, a hopper minecart
+whether or not it is on a rail — one item a tick, into its own slots, where the drain above takes
+over. A box pointing down looks up, as a hopper does; a box pointing into a wall of connection
+blocks has its chest behind it. The source is found the way a hopper finds its own: vanilla's
+`getContainerAt`, which sees container entities as well as blocks, wrapped as a storage; failing
+that, anything offering a `Storage<ItemVariant>` through the face it turns to the box. So a hopper
+minecart parked on a deposit box empties into the network at its own rate, and what the network
+has no place for ends up in the box's slots, where the player can see it. A
+crate at its back is not pulled from — crates are the network's storage, not its feeders, and a crate
 touching the box is already on its network, so pulling from it would carry an item into the box and
 straight back to the same crate.
 

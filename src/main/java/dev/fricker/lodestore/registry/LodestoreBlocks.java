@@ -49,7 +49,7 @@ public final class LodestoreBlocks {
 	public static final ResourceKey<Block> DEPOSIT_BOX_KEY = blockKey("deposit_box");
 	/** The network's inbox: what is put in flows to the crate that is its home, one item a tick. */
 	public static final DepositBoxBlock DEPOSIT_BOX = new DepositBoxBlock(
-			BlockBehaviour.Properties.of().setId(DEPOSIT_BOX_KEY).strength(2.5f).sound(SoundType.WOOD));
+			BlockBehaviour.Properties.of().setId(DEPOSIT_BOX_KEY).strength(2.5f).sound(SoundType.WOOD).noOcclusion());
 
 	public static final ResourceKey<Block> INTERFACE_BOX_KEY = blockKey("interface_box");
 	/** A window onto the network: one slot per kind of item it holds, with the count. */

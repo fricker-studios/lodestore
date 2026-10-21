@@ -47,16 +47,17 @@ import dev.fricker.lodestore.registry.LodestoreBlockEntities;
  * would make the box an ordinary chest with a delay.
  *
  * <p>It works like a hopper, at a hopper minecart's rate. Every tick it pulls one item from
- * whatever container sits on top of it — a chest, a hopper, a hopper minecart whether or not it is
- * on a rail — into its own slots, found the way a hopper finds its source, so container entities
- * count; and every tick one item leaves its slots for the network: a crate that is its home — one
+ * whatever container sits at its back, the side away from its spout — a chest, a hopper, a hopper
+ * minecart whether or not it is on a rail — into its own slots, found the way a hopper finds its
+ * source, so container entities count; and every tick one item leaves its slots for the network:
+ * a crate that is its home — one
  * already holding that item, or locked to it — nearest first, or else an unlocked crate, which is
  * the network's overflow. One a tick each way is the rate a hopper minecart pulls at, eight times a
  * hopper block. An item with nowhere to go stays in the box, and the box says so by not emptying;
  * the player decides what it is for. The order, and when a void upgrade destroys instead, is
  * {@link StorageNetwork#insertOne}'s.
  *
- * <p>A crate on top is not pulled from. Crates are the network's storage, not its feeders, and a
+ * <p>A crate at its back is not pulled from. Crates are the network's storage, not its feeders, and a
  * crate touching the box is already on its network: pulling from it would carry an item into the
  * box and straight back to the nearest home for it, which is the same crate.
  */
@@ -75,9 +76,9 @@ public class DepositBoxBlockEntity extends BaseContainerBlockEntity implements W
 		}
 	}
 
-	/** Pulls one item in from above, and sends one item out to the network. */
+	/** Pulls one item in from behind, and sends one item out to the network. */
 	public static void serverTick(Level level, BlockPos pos, BlockState state, DepositBoxBlockEntity box) {
-		box.pullFromAbove(level, pos);
+		box.pullFromBehind(level, pos, state.getValue(DepositBoxBlock.FACING).getOpposite());
 
 		if (box.isEmpty()) {
 			return;
@@ -110,39 +111,43 @@ public class DepositBoxBlockEntity extends BaseContainerBlockEntity implements W
 		}
 	}
 
-	/** Takes one item, of any kind, from the container on top into the first slot with room. */
-	private void pullFromAbove(Level level, BlockPos pos) {
-		Storage<ItemVariant> source = sourceAbove(level, pos);
+	/**
+	 * Takes one item, of any kind, from the container at the box's back — the side away from the
+	 * spout — into the first slot with room.
+	 */
+	private void pullFromBehind(Level level, BlockPos pos, Direction back) {
+		Storage<ItemVariant> source = sourceBehind(level, pos, back);
 
 		if (source == null) {
 			return;
 		}
 
 		try (Transaction transaction = Transaction.openOuter()) {
-			if (StorageUtil.move(source, ContainerStorage.of(this, Direction.UP), variant -> true, 1, transaction) == 1) {
+			if (StorageUtil.move(source, ContainerStorage.of(this, back), variant -> true, 1, transaction) == 1) {
 				transaction.commit();
 			}
 		}
 	}
 
 	/**
-	 * What sits on top, as a storage: a vanilla container or a container entity, found the way a
-	 * hopper finds its source, or else anything offering a storage through its bottom face.
+	 * What sits at the box's back, as a storage: a vanilla container or a container entity, found
+	 * the way a hopper finds its source, or else anything offering a storage through the face it
+	 * turns to the box. A box pointing down looks up, as a hopper does.
 	 */
-	private static @Nullable Storage<ItemVariant> sourceAbove(Level level, BlockPos pos) {
-		BlockPos above = pos.above();
+	private static @Nullable Storage<ItemVariant> sourceBehind(Level level, BlockPos pos, Direction back) {
+		BlockPos behind = pos.relative(back);
 
-		if (level.getBlockEntity(above) instanceof CrateBlockEntity) {
+		if (level.getBlockEntity(behind) instanceof CrateBlockEntity) {
 			return null;
 		}
 
-		Container container = HopperBlockEntity.getContainerAt(level, above);
+		Container container = HopperBlockEntity.getContainerAt(level, behind);
 
 		if (container != null) {
-			return ContainerStorage.of(container, Direction.DOWN);
+			return ContainerStorage.of(container, back.getOpposite());
 		}
 
-		return ItemStorage.SIDED.find(level, above, Direction.DOWN);
+		return ItemStorage.SIDED.find(level, behind, back.getOpposite());
 	}
 
 	// --- container ---------------------------------------------------------------

@@ -1,7 +1,10 @@
 {
   "variants": {
-    "": {
-      "model": "lodestore:block/deposit_box"
-    }
+    "facing=north": { "model": "lodestore:block/deposit_box" },
+    "facing=east": { "model": "lodestore:block/deposit_box", "y": 90 },
+    "facing=south": { "model": "lodestore:block/deposit_box", "y": 180 },
+    "facing=west": { "model": "lodestore:block/deposit_box", "y": 270 },
+    "facing=down": { "model": "lodestore:block/deposit_box", "x": 90 },
+    "facing=up": { "model": "lodestore:block/deposit_box", "x": 270 }
   }
 }

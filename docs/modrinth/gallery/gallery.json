@@ -30,7 +30,7 @@
   {
     "file": "upgrades.png",
     "title": "The upgrades",
-    "description": "Lock, void, three levels of stack, compress, disenchant and repair, each on the same iron plate.",
+    "description": "Lock, void, three levels of stack, compress, disenchant and repair, each on the same iron hexagon.",
     "featured": false,
     "ordering": 4
   },
