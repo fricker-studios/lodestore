@@ -7,12 +7,12 @@
         "recipe": "lodestore:connection_block"
       }
     },
-    "has_iron_nugget": {
+    "has_copper_nugget": {
       "trigger": "minecraft:inventory_changed",
       "conditions": {
         "items": [
           {
-            "items": "minecraft:iron_nugget"
+            "items": "minecraft:copper_nugget"
           }
         ]
       }
@@ -31,7 +31,7 @@
   "requirements": [
     [
       "has_the_recipe",
-      "has_iron_nugget",
+      "has_copper_nugget",
       "has_redstone"
     ]
   ],

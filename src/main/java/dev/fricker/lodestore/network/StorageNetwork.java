@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 
+import org.jspecify.annotations.Nullable;
+
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 
@@ -46,6 +48,23 @@ public final class StorageNetwork {
 	}
 
 	/**
+	 * What one walk found: the crates, nearest first, and for each the connection blocks an item
+	 * passes on its way there from the device — in order, the device's neighbour first — so the
+	 * indicators along that line can be lit when something moves.
+	 *
+	 * @param crates the crates, nearest first
+	 * @param paths  by crate position, the connection blocks between the device and it
+	 */
+	public record Walk(List<CrateBlockEntity> crates, Map<BlockPos, List<BlockPos>> paths) {
+		public static final Walk EMPTY = new Walk(List.of(), Map.of());
+
+		/** The connection blocks between the device and the crate at {@code crate}; none if it is not on the walk. */
+		public List<BlockPos> pathTo(BlockPos crate) {
+			return paths.getOrDefault(crate, List.of());
+		}
+	}
+
+	/**
 	 * The crates on the network a device at {@code origin} belongs to, nearest first.
 	 *
 	 * <p>Nearest first is a property of the walk, which is breadth-first: a crate touching the device
@@ -53,16 +72,26 @@ public final class StorageNetwork {
 	 * item has two homes, the one closer to the box gets it.
 	 */
 	public static List<CrateBlockEntity> crates(Level level, BlockPos origin) {
+		return walk(level, origin).crates();
+	}
+
+	/** The walk from {@code origin}, with the path to each crate kept. */
+	public static Walk walk(Level level, BlockPos origin) {
 		List<CrateBlockEntity> crates = new ArrayList<>();
+		Map<BlockPos, List<BlockPos>> paths = new HashMap<>();
 		LongSet seenCrates = new LongOpenHashSet();
 		LongSet seenConnections = new LongOpenHashSet();
+		// Each connection block's path from the device, the block itself last.
+		Map<BlockPos, List<BlockPos>> connectionPaths = new HashMap<>();
 		Queue<BlockPos> frontier = new ArrayDeque<>();
 
 		seenConnections.add(origin.asLong());
+		connectionPaths.put(origin, List.of());
 		frontier.add(origin);
 
 		while (!frontier.isEmpty()) {
 			BlockPos at = frontier.remove();
+			List<BlockPos> pathHere = connectionPaths.get(at);
 
 			for (Direction direction : Direction.values()) {
 				BlockPos next = at.relative(direction);
@@ -73,6 +102,9 @@ public final class StorageNetwork {
 
 				if (level.getBlockState(next).getBlock() instanceof ConnectionBlock) {
 					if (seenConnections.size() <= MAX_CONNECTIONS && seenConnections.add(next.asLong())) {
+						List<BlockPos> path = new ArrayList<>(pathHere);
+						path.add(next);
+						connectionPaths.put(next, List.copyOf(path));
 						frontier.add(next);
 					}
 
@@ -82,11 +114,12 @@ public final class StorageNetwork {
 				if (seenCrates.add(next.asLong()) && level.getBlockEntity(next) instanceof CrateBlockEntity crate
 						&& !crate.isRemoved()) {
 					crates.add(crate);
+					paths.put(next, pathHere);
 				}
 			}
 		}
 
-		return crates;
+		return new Walk(List.copyOf(crates), paths);
 	}
 
 	/** Where the crates on the network a device at {@code origin} belongs to are, for a cache. */
@@ -141,10 +174,11 @@ public final class StorageNetwork {
 	 * Step one comes before step two for every home, not crate by crate, so a full voiding crate
 	 * near the device cannot destroy what a crate further along had room for.
 	 *
-	 * @return whether it landed, or was destroyed; if not, nothing was changed and the item has
-	 *         nowhere to go
+	 * @return the crate it landed in, or was destroyed at — so the line to it can be lit — or null
+	 *         if nothing was changed and the item has nowhere to go
 	 */
-	public static boolean insertOne(Level level, List<BlockPos> crates, ItemVariant variant, TransactionContext transaction) {
+	public static @Nullable BlockPos insertOne(Level level, List<BlockPos> crates, ItemVariant variant,
+			TransactionContext transaction) {
 		ItemStack stack = variant.toStack();
 		List<CrateBlockEntity> live = new ArrayList<>(crates.size());
 
@@ -156,31 +190,31 @@ public final class StorageNetwork {
 
 		for (CrateBlockEntity crate : live) {
 			if (isHome(crate, stack) && crate.hasRoomFor(stack) && crate.storage().insert(variant, 1, transaction) == 1) {
-				return true;
+				return crate.getBlockPos();
 			}
 		}
 
 		for (CrateBlockEntity crate : live) {
 			// The storage accepts and destroys: the same path a hopper into a full voiding crate takes.
 			if (isHome(crate, stack) && crate.isVoiding(stack) && crate.storage().insert(variant, 1, transaction) == 1) {
-				return true;
+				return crate.getBlockPos();
 			}
 		}
 
 		for (CrateBlockEntity crate : live) {
 			if (isOverflow(crate) && crate.hasRoomFor(stack) && crate.storage().insert(variant, 1, transaction) == 1) {
-				return true;
+				return crate.getBlockPos();
 			}
 		}
 
 		for (CrateBlockEntity crate : live) {
 			// Nothing to insert into: the overflow is full, and its void upgrade says the rest goes.
 			if (isOverflow(crate) && crate.voidsOverflow()) {
-				return true;
+				return crate.getBlockPos();
 			}
 		}
 
-		return false;
+		return null;
 	}
 
 	/**
@@ -189,18 +223,24 @@ public final class StorageNetwork {
 	 * parked remainder before the stack it shows, so a pull never leaves a stacked slot looking
 	 * fuller than it is.
 	 *
+	 * @param drained every crate that gave something is added here, so the line to it can be lit
 	 * @return how many came out
 	 */
-	public static long extract(Level level, BlockPos origin, ItemVariant variant, long maxAmount,
-			TransactionContext transaction) {
+	public static long extract(Walk walk, ItemVariant variant, long maxAmount, TransactionContext transaction,
+			List<BlockPos> drained) {
 		long extracted = 0;
 
-		for (CrateBlockEntity crate : crates(level, origin)) {
+		for (CrateBlockEntity crate : walk.crates()) {
 			if (extracted >= maxAmount) {
 				break;
 			}
 
-			extracted += crate.storage().extract(variant, maxAmount - extracted, transaction);
+			long got = crate.storage().extract(variant, maxAmount - extracted, transaction);
+
+			if (got > 0) {
+				drained.add(crate.getBlockPos());
+				extracted += got;
+			}
 		}
 
 		return extracted;

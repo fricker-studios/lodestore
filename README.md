@@ -192,8 +192,8 @@ its label faces up, look up at a ceiling and it faces down. The icon tips with i
 north, rather than turning.
 
 The network wears the crates' hardware in other metals. A connection block is spruce with a copper
-bracket over every corner, the same on every face, since any face may be the one the next block
-joins, and nothing in the middle: it carries the network and does nothing else. The deposit box is
+bracket over every corner, and on its front and back a small redstone indicator in a gunmetal
+bezel, dark until items pass through and bright while they do. The deposit box is
 a hopper for the network and is drawn as one: gunmetal, an iron rim round a bowl on top that steps
 down to the bore, and on each side the wide upper box narrowing to a neck — no wood and no brass,
 a machine among the crates. The interface box is an iron housing, plated and riveted,
@@ -730,13 +730,14 @@ box**. Crates join it by touching a connection block, or a device.
 
 | Block | Made of | Does |
 |---|---|---|
-| Connection block | planks and iron nuggets around redstone, eight at a time | carries the network; nothing else |
+| Connection block | planks and copper nuggets around redstone, eight at a time | carries the network, and shows items passing through it |
 | Deposit box | a hopper over a basic crate | a hopper for the network: pulls from whatever sits on top of it into one row of plain slots, and what is in them flows to its home crate, one item a tick each way |
 | Interface box | a glass pane over a basic crate over redstone | opens a scrolling view of everything the crates hold, one cell per kind, and hands out what is clicked; nothing goes in through it |
 
 A network has no object of its own. Whichever device needs it walks from where it stands, breadth-
 first through the connection blocks it touches, and every crate touching any of those — or the
-device itself — is a member. Only connection blocks conduct: two devices side by side are not on one
+device itself — is a member. The walk keeps, for each crate, the connection blocks between the
+device and it, which is what the indicators below are lit along. Only connection blocks conduct: two devices side by side are not on one
 network, and neither is a crate on the far side of a device. The walk is capped at 4,096 connection
 blocks and stays inside loaded chunks. Walking afresh costs a few hundred block lookups a second
 per deposit box with something to move, and cannot go stale; a graph kept up to date as blocks are
@@ -759,6 +760,16 @@ overflow crate with a void upgrade means everything with no home is destroyed. H
 tried before any home voids, across the whole network, so a full voiding crate near the box cannot
 destroy what a crate further along had room for. The order is `StorageNetwork#insertOne`'s, and
 both devices feed through it.
+
+**The indicators.** A connection block's front and back carry a redstone indicator, facing toward
+and away from the player who placed it as an observer's do, never up or down. The indicator lights while items are passing through the
+block — down the line from the deposit box to the crate that took the item, or back from the crate
+that gave to the interface box — and goes out half a second after the last one. `ConnectionFlow`
+keeps, per level, the moment each lit block last saw an item: lighting is a block state change
+and costs a block update, so it happens once when the flow starts and once when it stops; a pulse
+on a block already lit only refreshes its moment, and the block's own scheduled tick asks whether
+to run on or go dark. It is a light only: it powers nothing, so a run of connection blocks never
+ticks redstone it happens to touch.
 
 **Rate.** One item a tick, which is what a hopper minecart pulls at in 26.x — `MinecartHopper` has
 no cooldown any more, only a once-per-frame flag — and eight times a hopper block. The walk is
@@ -929,7 +940,9 @@ fills the crate holding its item and not a connected crate holding something els
 unconnected crate holding the same thing; an item with nowhere to go stays, and a lock's claim on
 an empty crate counts as a home; an unlocked crate takes what has no home, a full home spills into
 it unless the home voids, and a full voiding overflow crate destroys everything homeless; the rate is one a tick, measured over thirty; the nearer home fills
-first and a full one is skipped; only connection blocks conduct, not a device or stone; a hopper
+first and a full one is skipped; only connection blocks conduct, not a device or stone; an item flowing from the box lights the
+connection blocks on its line and not a branch off it, and the line goes dark once the flow
+stops, as it does after a single pull through the interface; a hopper
 fills a deposit box and a hopper under it takes nothing; and the interface sums every crate it
 reaches, parked remainders included, and reports no crates rather than an empty network when it
 stands alone. Taking out through it: a click takes a stack onto the cursor and a right-click half,
