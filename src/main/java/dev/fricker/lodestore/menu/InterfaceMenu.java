@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
@@ -18,6 +19,7 @@ import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
 import dev.fricker.lodestore.block.InterfaceBoxBlockEntity;
+import dev.fricker.lodestore.network.ConnectionFlow;
 import dev.fricker.lodestore.network.NetworkEntry;
 import dev.fricker.lodestore.network.NetworkView;
 import dev.fricker.lodestore.network.NetworkViewPayload;
@@ -141,8 +143,11 @@ public class InterfaceMenu extends AbstractContainerMenu {
 			return false;
 		}
 
+		StorageNetwork.Walk walk = StorageNetwork.walk(box.getLevel(), pos);
+		List<BlockPos> drained = new ArrayList<>();
+
 		try (Transaction transaction = Transaction.openOuter()) {
-			long taken = StorageNetwork.extract(box.getLevel(), pos, kind, want, transaction);
+			long taken = StorageNetwork.extract(walk, kind, want, transaction, drained);
 
 			if (taken <= 0) {
 				transaction.abort();
@@ -165,6 +170,13 @@ public class InterfaceMenu extends AbstractContainerMenu {
 			}
 
 			transaction.commit();
+		}
+
+		// The lines it came along light up, from each crate that gave to the box.
+		if (box.getLevel() instanceof ServerLevel server) {
+			for (BlockPos crate : drained) {
+				ConnectionFlow.pulse(server, walk.pathTo(crate));
+			}
 		}
 
 		// Resend at once rather than at the next refresh.

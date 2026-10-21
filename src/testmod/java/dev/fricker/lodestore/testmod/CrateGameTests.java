@@ -569,6 +569,18 @@ public class CrateGameTests {
 				grindstone, iron, grindstone,
 				ItemStack.EMPTY, iron, ItemStack.EMPTY)), "repair_upgrade", LodestoreItems.REPAIR_UPGRADE);
 
+		// The connection block: planks and copper nuggets around redstone, eight at a time.
+		ItemStack copperNugget = new ItemStack(Items.COPPER_NUGGET);
+		ItemStack redstone = new ItemStack(Items.REDSTONE);
+		ItemStack connection = assertCrafts(helper, CraftingInput.of(3, 3, List.of(
+				planks, copperNugget, planks,
+				copperNugget, redstone, copperNugget,
+				planks, copperNugget, planks)), "connection_block", LodestoreBlocks.CONNECTION_BLOCK.asItem());
+
+		if (connection.getCount() != 8) {
+			throw helper.assertionException("the connection block recipe should make eight, made " + connection.getCount());
+		}
+
 		helper.succeed();
 	}
 

@@ -17,6 +17,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -25,6 +26,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
 import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
+import dev.fricker.lodestore.block.ConnectionBlock;
 import dev.fricker.lodestore.block.CrateBlock;
 import dev.fricker.lodestore.block.CrateBlockEntity;
 import dev.fricker.lodestore.block.InterfaceBoxBlock;
@@ -87,7 +89,7 @@ public class MarketingScreenshotsClientTest implements FabricClientGameTest {
 			shot(context, "modrinth-crates-close");
 
 			// The network end of the row: interface box, deposit box under its chest, connection blocks.
-			singleplayer.getServer().runCommand("tp @p 3.0 " + (Y + 1.0) + " 4.8 198 16");
+			singleplayer.getServer().runCommand("tp @p 3.4 " + (Y + 1.0) + " 4.8 200 16");
 			context.waitTicks(80);
 			shot(context, "modrinth-network");
 
@@ -190,21 +192,30 @@ public class MarketingScreenshotsClientTest implements FabricClientGameTest {
 		}
 
 		// The network runs inside the wall, behind both rows, and the devices continue the bottom
-		// row along it so both fronts face the room: the interface box, then the deposit box with
-		// a chest feeding it from above, then a connection block in the open to show what carries
-		// the network, with another over the interface box.
-		for (int x = -3; x <= 6; x++) {
+		// row along it so both fronts face the room: the interface box, then a connection block in
+		// the open — the only way from the deposit box beyond it into the wall, so its indicator
+		// lights while the chest above the box drains into the crates — then the deposit box. A
+		// second connection block over the interface box hangs off the line and stays dark.
+		for (int x = -3; x <= 5; x++) {
 			for (int y = Y; y <= Y + 1; y++) {
 				level.setBlockAndUpdate(new BlockPos(x, y, -1), LodestoreBlocks.CONNECTION_BLOCK.defaultBlockState());
 			}
 		}
 
+		BlockState facingRoom = LodestoreBlocks.CONNECTION_BLOCK.defaultBlockState()
+				.setValue(ConnectionBlock.AXIS, Direction.Axis.Z);
 		level.setBlockAndUpdate(new BlockPos(4, Y, 0), LodestoreBlocks.INTERFACE_BOX.defaultBlockState()
 				.setValue(InterfaceBoxBlock.FACING, Direction.SOUTH));
-		level.setBlockAndUpdate(new BlockPos(4, Y + 1, 0), LodestoreBlocks.CONNECTION_BLOCK.defaultBlockState());
-		level.setBlockAndUpdate(new BlockPos(5, Y, 0), LodestoreBlocks.DEPOSIT_BOX.defaultBlockState());
-		level.setBlockAndUpdate(new BlockPos(5, Y + 1, 0), Blocks.CHEST.defaultBlockState());
-		level.setBlockAndUpdate(new BlockPos(6, Y, 0), LodestoreBlocks.CONNECTION_BLOCK.defaultBlockState());
+		level.setBlockAndUpdate(new BlockPos(4, Y + 1, 0), facingRoom);
+		level.setBlockAndUpdate(new BlockPos(5, Y, 0), facingRoom);
+		level.setBlockAndUpdate(new BlockPos(6, Y, 0), LodestoreBlocks.DEPOSIT_BOX.defaultBlockState());
+		level.setBlockAndUpdate(new BlockPos(6, Y + 1, 0), Blocks.CHEST.defaultBlockState());
+
+		if (level.getBlockEntity(new BlockPos(6, Y + 1, 0)) instanceof ChestBlockEntity chest) {
+			for (int slot = 0; slot < chest.getContainerSize(); slot++) {
+				chest.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+			}
+		}
 
 		// Top row: the reinforced crate the screen opens in the middle.
 		stocked(level, new BlockPos(-3, Y + 1, 0), LodestoreBlocks.STURDY_CRATE, Items.GOLD_INGOT, 384, true);

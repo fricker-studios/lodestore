@@ -252,7 +252,22 @@ COPPER_BRACKET = [
     "jk~~",
     "ll~~",
 ]
-CONNECTION_BLOCK = corners(framed(SPRUCE_BOARDS, 'm', 'd', 's', 's'), COPPER_BRACKET)
+CONNECTION_BLOCK_SIDE = corners(framed(SPRUCE_BOARDS, 'm', 'd', 's', 's'), COPPER_BRACKET)
+
+# The front and back carry a redstone indicator the size of an observer's: a two-pixel lamp in a
+# gunmetal bezel, dark red until an item passes through the block, bright while items keep passing.
+CONNECTION_BLOCK_END = overlay(CONNECTION_BLOCK_SIDE, 6, 6, [
+    "xxxx",
+    "xffx",
+    "xffx",
+    "xxxx",
+])
+CONNECTION_BLOCK_END_LIT = overlay(CONNECTION_BLOCK_SIDE, 6, 6, [
+    "xxxx",
+    "xEEx",
+    "xEEx",
+    "xxxx",
+])
 
 # The deposit box is a hopper for the network and is drawn as one: gunmetal, an iron rim round a
 # bowl on top that steps down to the bore, and on each side the wide upper box narrowing to a
@@ -441,7 +456,9 @@ BLOCKS = {
     "reinforced_crate_front": REINFORCED_FRONT,
     "reinforced_crate_side": REINFORCED_SIDE,
     "reinforced_crate_top": REINFORCED_TOP,
-    "connection_block": CONNECTION_BLOCK,
+    "connection_block_side": CONNECTION_BLOCK_SIDE,
+    "connection_block_end": CONNECTION_BLOCK_END,
+    "connection_block_end_lit": CONNECTION_BLOCK_END_LIT,
     "deposit_box_top": DEPOSIT_BOX_TOP,
     "deposit_box_side": DEPOSIT_BOX_SIDE,
     "deposit_box_bottom": DEPOSIT_BOX_BOTTOM,

@@ -18,6 +18,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
+import dev.fricker.lodestore.block.ConnectionBlock;
 import dev.fricker.lodestore.block.CrateBlockEntity;
 import dev.fricker.lodestore.block.DepositBoxBlockEntity;
 import dev.fricker.lodestore.block.InterfaceBoxBlockEntity;
@@ -595,6 +596,55 @@ public class StorageNetworkGameTests {
 		}
 
 		helper.succeed();
+	}
+
+	// --- the indicators ------------------------------------------------------------------
+
+	/**
+	 * An item flowing from the deposit box to a crate lights every connection block on its way and
+	 * none off it, and the light goes out once the flow has stopped. The pair is the branch: a
+	 * connection block hanging off the line that leads nowhere stays dark.
+	 */
+	@GameTest(maxTicks = 200)
+	public void aFlowingItemLightsTheConnectionBlocksItPasses(GameTestHelper helper) {
+		BlockPos branch = LINK_A.south();
+		crate(helper, CRATE, Items.COBBLESTONE, 1);
+		link(helper, LINK_A, LINK_B, branch);
+		depositBox(helper, BOX, new ItemStack(Items.COBBLESTONE, 40));
+
+		helper.runAtTickTime(30, () -> {
+			expect(helper, lit(helper, LINK_A) && lit(helper, LINK_B), true,
+					"the line from the box to the crate should be lit while items flow: "
+							+ lit(helper, LINK_A) + ", " + lit(helper, LINK_B));
+			expect(helper, lit(helper, branch), false, "a branch off the line should stay dark");
+		});
+
+		// Forty items at one a tick are gone by tick 40; the glow lasts half a second after that.
+		helper.runAtTickTime(80, () -> {
+			expect(helper, lit(helper, LINK_A) || lit(helper, LINK_B), false,
+					"the line should go dark once the flow has stopped");
+			helper.succeed();
+		});
+	}
+
+	/** A pull through the interface lights the line from the crate that gave back to the box. */
+	@GameTest(maxTicks = 100)
+	public void aPullThroughTheInterfaceLightsTheLine(GameTestHelper helper) {
+		crate(helper, CRATE, Items.COBBLESTONE, 10);
+		ServerPlayer player = (ServerPlayer) helper.makeMockServerPlayer(GameType.SURVIVAL);
+		InterfaceMenu menu = openInterface(helper, player);
+
+		expect(helper, menu.pull(player, ItemVariant.of(Items.COBBLESTONE), PullMode.STACK), true, "the pull should work");
+		expect(helper, lit(helper, LINK_A) && lit(helper, LINK_B), true, "a pull should light the line it came along");
+
+		helper.runAtTickTime(40, () -> {
+			expect(helper, lit(helper, LINK_A), false, "the line should go dark after a single pull");
+			helper.succeed();
+		});
+	}
+
+	private static boolean lit(GameTestHelper helper, BlockPos pos) {
+		return helper.getBlockState(pos).getValue(ConnectionBlock.LIT);
 	}
 
 	// --- taking out through the interface -----------------------------------------------

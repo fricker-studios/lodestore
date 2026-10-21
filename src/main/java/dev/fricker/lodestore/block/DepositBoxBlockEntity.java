@@ -5,6 +5,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.List;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
 import net.minecraft.network.chat.Component;
@@ -30,6 +31,7 @@ import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
 import net.fabricmc.fabric.api.transfer.v1.storage.StorageUtil;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 
+import dev.fricker.lodestore.network.ConnectionFlow;
 import dev.fricker.lodestore.network.NetworkCrateCache;
 import dev.fricker.lodestore.network.StorageNetwork;
 import dev.fricker.lodestore.registry.LodestoreBlockEntities;
@@ -91,9 +93,17 @@ public class DepositBoxBlockEntity extends BaseContainerBlockEntity implements W
 			}
 
 			try (Transaction transaction = Transaction.openOuter()) {
-				if (StorageNetwork.insertOne(level, crates, ItemVariant.of(stack), transaction)) {
+				BlockPos target = StorageNetwork.insertOne(level, crates, ItemVariant.of(stack), transaction);
+
+				if (target != null) {
 					transaction.commit();
 					box.removeItem(slot, 1);
+
+					// The line it went down lights up, from the box to the crate that took it.
+					if (level instanceof ServerLevel server) {
+						ConnectionFlow.pulse(server, box.crates.pathTo(target));
+					}
+
 					return;
 				}
 			}
