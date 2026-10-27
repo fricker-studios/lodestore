@@ -74,7 +74,7 @@ jobs:
       # idempotent, and .github/workflows/modrinth.yml re-sends any release this step missed.
       - name: Set up Python
         if: ${{ env.MODRINTH_TOKEN != '' }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
