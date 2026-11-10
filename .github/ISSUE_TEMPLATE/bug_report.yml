@@ -16,7 +16,7 @@ body:
       options:
         - label: I searched the [open and closed issues](https://github.com/fricker-studios/lodestore/issues?q=is%3Aissue) and this is not already reported.
           required: true
-        - label: I am on the [latest release](https://github.com/fricker-studios/lodestore/releases/latest) or a build from `main`.
+        - label: I am on the [latest release](https://modrinth.com/mod/lodestore/versions).
           required: true
         - label: I can reproduce this with only Lodestore and Fabric API installed, or I have described which other mod is involved below.
           required: true
