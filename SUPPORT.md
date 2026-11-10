@@ -10,7 +10,6 @@
 - **A player can exploit it on a server** → see [SECURITY.md](SECURITY.md). Do not post it publicly.
 
 Installation: drop the jar from the
-[latest release](https://github.com/fricker-studios/lodestore/releases/latest) into
-`.minecraft/mods` next to Fabric API. The README's
-[Toolchain](README.md#toolchain-verified-2026-08-29-against-live-sources) table lists the
-Minecraft, Fabric Loader, and Fabric API versions it is built against.
+[latest release on Modrinth](https://modrinth.com/mod/lodestore/versions) into
+`.minecraft/mods` next to Fabric API. Each version's page lists the Minecraft and Fabric
+Loader versions it is built for.

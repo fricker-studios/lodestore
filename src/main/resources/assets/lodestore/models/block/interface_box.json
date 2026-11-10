@@ -1,8 +1,0 @@
-{
-  "parent": "minecraft:block/orientable",
-  "textures": {
-    "front": "lodestore:block/interface_box_front",
-    "side": "lodestore:block/interface_box_side",
-    "top": "lodestore:block/interface_box_top"
-  }
-}

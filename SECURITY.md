@@ -7,7 +7,7 @@ corrupting another player's data.
 
 ## Supported versions
 
-Only the latest release on the [releases page](https://github.com/fricker-studios/lodestore/releases)
+Only the latest release on [Modrinth](https://modrinth.com/mod/lodestore/versions)
 receives fixes. There are no long-term support branches.
 
 ## Reporting a vulnerability
